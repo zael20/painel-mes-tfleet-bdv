@@ -172,6 +172,10 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 .evbar .fill { height: 100%; border-radius: 6px; min-width: 3px; }
 .evbar .c { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 @media (max-width: 560px) { .evbar { grid-template-columns: 104px 1fr 34px; } }
+.evsummary .tile { cursor: pointer; }
+.evsummary .tile:hover, .evsummary .tile.sel { border-color: var(--accent); }
+.evbar { cursor: pointer; }
+.evbar:hover > span:first-child, .evbar.sel > span:first-child { color: var(--accent); font-weight: 600; }
 
 /* aba configurações */
 .cfgcard { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 16px 18px; max-width: 760px; }
@@ -298,7 +302,7 @@ const EVENT_INFO = {
   bateria_baixa: ["warn", "Bateria baixa"], servico_parado: ["crit", "Monitor parado"],
   bluetooth_desligado: ["warn", "Bluetooth desligado"], bluetooth_ligado: ["info", "Bluetooth ligado"],
   bt_conectado: ["warn", "Bluetooth conectado"], bt_desconectado: ["info", "Bluetooth desconectado"],
-  bt_pareado: ["crit", "Novo pareamento"], bt_despareado: ["warn", "Pareamento removido"], bt_pareados_lista: ["info", "Lista de pareados"],
+  bt_pareado: ["crit", "Novo dispositivo Bluetooth"], bt_despareado: ["warn", "Dispositivo Bluetooth removido"], bt_pareados_lista: ["info", "Lista de pareados"],
   volume_alterado: ["warn", "Volume alterado"], volume_corrigido: ["info", "Volume devolvido"], modo_som: ["warn", "Modo de som"],
   modo_aviao_ligado: ["crit", "Modo avião"], modo_aviao_desligado: ["info", "Modo avião desligado"],
   wifi_ligado: ["info", "Wi-Fi ligado"], wifi_desligado: ["warn", "Wi-Fi desligado"],
@@ -699,7 +703,7 @@ function switchView(v) {
 }
 
 // ------------------------------------------------------------------ aba eventos (contagem + drill-down)
-let evData = [], evSelected = null, evType = "", evVeh = "";
+let evData = [], evDrill = null, evType = "", evVeh = "";
 function evFiltered() {
   return evData.filter(e => (!evType || e.type === evType) && (!evVeh || (e.device_name || e.device_id) === evVeh));
 }
@@ -751,18 +755,19 @@ function renderEvChart(list) {
   const top = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 8);
   const max = Math.max(...top.map(t => counts[t]), 1);
   const col = s => s === "crit" ? "var(--crit)" : s === "warn" ? "var(--warn)" : "var(--accent)";
+  const selS = evDrill && evDrill.s;
   const bars = top.map(t => {
     const [s, label] = EVENT_INFO[t] || ["info", t];
-    return `<div class="evbar"><span>${esc(label)}</span>
+    return `<div class="evbar ${evDrill && evDrill.t === t ? "sel" : ""}" data-type="${esc(t)}" role="button" tabindex="0"><span>${esc(label)}</span>
       <span class="track"><span class="fill" style="width:${Math.max(3, counts[t] / max * 100)}%;background:${col(s)}"></span></span>
       <span class="c">${counts[t]}</span></div>`;
   }).join("");
   el.innerHTML = `<div class="evsummary">
-      <div class="tile crit"><span class="n">${sev.crit}</span><span class="lbl">Críticos</span></div>
-      <div class="tile warn"><span class="n">${sev.warn}</span><span class="lbl">Atenção</span></div>
-      <div class="tile info"><span class="n">${sev.info}</span><span class="lbl">Informativos</span></div>
+      <div class="tile crit ${selS === "crit" ? "sel" : ""}" data-sev="crit" role="button" tabindex="0"><span class="n">${sev.crit}</span><span class="lbl">Críticos</span></div>
+      <div class="tile warn ${selS === "warn" ? "sel" : ""}" data-sev="warn" role="button" tabindex="0"><span class="n">${sev.warn}</span><span class="lbl">Atenção</span></div>
+      <div class="tile info ${selS === "info" ? "sel" : ""}" data-sev="info" role="button" tabindex="0"><span class="n">${sev.info}</span><span class="lbl">Informativos</span></div>
     </div>
-    <div class="evbars"><span class="label">Eventos por tipo (mais frequentes)</span>${bars}</div>`;
+    <div class="evbars"><span class="label">Eventos por tipo (mais frequentes) — clique para ver os detalhes</span>${bars}</div>`;
 }
 function renderEvCounts() {
   const list = evFiltered();
@@ -778,15 +783,27 @@ function renderEvCounts() {
       <span class="lbl">${esc(label)}</span>
       <span class="sub">${veh} veículo(s)</span></button>`;
   }).join("") : `<div class="empty">Nenhum evento neste período/filtro.</div>`;
-  const auto = evSelected && counts[evSelected] ? evSelected : (evType && counts[evType] ? evType : null);
-  if (auto) renderEvDetail(auto);
-  else { $("#evDetail").hidden = true; evSelected = null; }
+  // reabre o detalhe que estava aberto; se o tipo/severidade sumiu com o filtro, fecha
+  if (evDrill) renderEvDrill(evDrill);
+  else if (evType) renderEvDrill({ t: evType });
+  else $("#evDetail").hidden = true;
 }
-function renderEvDetail(type) {
-  evSelected = type;
-  document.querySelectorAll(".evcard").forEach(c => c.classList.toggle("sel", c.dataset.type === type));
-  const rows = evFiltered().filter(e => e.type === type);
-  const [, label] = EVENT_INFO[type] || ["info", type];
+function evRowsFor(drill) {
+  const base = evFiltered();
+  if (drill.t) return base.filter(e => e.type === drill.t);
+  if (drill.s) return base.filter(e => (EVENT_INFO[e.type] || ["info"])[0] === drill.s);
+  return [];
+}
+function renderEvDrill(drill) {
+  evDrill = drill;
+  const rows = evRowsFor(drill);
+  if (!rows.length) { evDrill = null; $("#evDetail").hidden = true; renderEvChart(evFiltered()); return; }
+  const showType = !!drill.s; // visão por severidade: mostra a coluna Tipo
+  const title = drill.t ? (EVENT_INFO[drill.t] || ["", drill.t])[1]
+    : ({ crit: "Eventos críticos", warn: "Eventos de atenção", info: "Eventos informativos" }[drill.s] || "Eventos");
+  // destaca o cartão e o gráfico
+  document.querySelectorAll(".evcard").forEach(c => c.classList.toggle("sel", !!drill.t && c.dataset.type === drill.t));
+  renderEvChart(evFiltered());
   const byVeh = {};
   for (const e of rows) { const k = e.device_name || e.device_id; byVeh[k] = (byVeh[k] || 0) + 1; }
   const chips = Object.keys(byVeh).sort((a, b) => byVeh[b] - byVeh[a])
@@ -794,14 +811,15 @@ function renderEvDetail(type) {
   const body = rows.slice(0, 500).map(e => `<tr>
       <td>${esc(e.device_name || e.device_id)}</td>
       <td class="num">${fmtTime(e.ts)}</td>
+      ${showType ? `<td>${esc((EVENT_INFO[e.type] || ["", e.type])[1])}</td>` : ""}
       <td>${esc(e.message || "")}</td></tr>`).join("");
   const box = $("#evDetail");
   box.hidden = false;
-  box.innerHTML = `<div class="dhead"><h2>${esc(label)} · ${rows.length}</h2>
+  box.innerHTML = `<div class="dhead"><h2>${esc(title)} · ${rows.length}</h2>
       <button class="btn" type="button" id="evClose">Fechar</button></div>
     <span class="label">Por veículo</span><div class="byveh">${chips}</div>
     <span class="label">Ocorrências${rows.length > 500 ? " (mostrando as 500 mais recentes)" : ""}</span>
-    <table><thead><tr><th>Veículo</th><th>Dia e hora</th><th>Descrição</th></tr></thead><tbody>${body}</tbody></table>`;
+    <table><thead><tr><th>Veículo</th><th>Dia e hora</th>${showType ? "<th>Tipo</th>" : ""}<th>Descrição</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
 // ------------------------------------------------------------------ aba configurações (limites globais)
@@ -850,10 +868,14 @@ async function saveConfig() {
 // ------------------------------------------------------------------ interacoes
 document.querySelectorAll("#tabs .tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
 $("#evPeriod").addEventListener("change", loadEventos);
-$("#evType").addEventListener("change", e => { evType = e.target.value; evSelected = evType || null; renderEvCounts(); });
+$("#evType").addEventListener("change", e => { evType = e.target.value; evDrill = evType ? { t: evType } : null; renderEvCounts(); });
 $("#evVeh").addEventListener("change", e => { evVeh = e.target.value; renderEvCounts(); });
-$("#evCounts").addEventListener("click", e => { const c = e.target.closest(".evcard"); if (c) renderEvDetail(c.dataset.type); });
-$("#evDetail").addEventListener("click", e => { if (e.target.id === "evClose") { evSelected = null; $("#evDetail").hidden = true; renderEvCounts(); } });
+$("#evCounts").addEventListener("click", e => { const c = e.target.closest(".evcard"); if (c) renderEvDrill({ t: c.dataset.type }); });
+$("#evChart").addEventListener("click", e => {
+  const bar = e.target.closest(".evbar"); if (bar) { renderEvDrill({ t: bar.dataset.type }); return; }
+  const tile = e.target.closest(".tile[data-sev]"); if (tile) renderEvDrill({ s: tile.dataset.sev });
+});
+$("#evDetail").addEventListener("click", e => { if (e.target.id === "evClose") { evDrill = null; $("#evDetail").hidden = true; renderEvCounts(); } });
 $("#grid").addEventListener("click", e => { const c = e.target.closest(".card"); if (c) openDetail(c.dataset.id); });
 $("#detail").addEventListener("change", e => { if (e.target.id === "dDay") openDetail(selected, e.target.value); });
 $("#detail").addEventListener("click", e => { if (e.target.id === "dClose") { selected = null; $("#detail").hidden = true; render(); } });
