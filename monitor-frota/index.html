@@ -161,6 +161,11 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 .evdetail .byveh span { font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 3px 10px; }
 
 /* gráfico de eventos */
+.evchartbox { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 18px; margin-bottom: 16px; }
+.evchartbox .donut { flex: 0 0 auto; line-height: 0; }
+.evchartbox .evsummary { flex: 1; min-width: 220px; margin: 0; }
+.seg { cursor: pointer; transition: opacity .15s; }
+.seg:hover { opacity: .82; }
 .evsummary { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .evsummary .tile { flex: 1; min-width: 110px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 14px; }
 .evsummary .tile .n { font: 600 28px/1 "IBM Plex Sans Condensed", sans-serif; }
@@ -744,30 +749,43 @@ async function loadEventos() {
     $("#evMeta").textContent = "Erro ao carregar: " + (e.message || e);
   }
 }
+function donutSvg(parts) {
+  const total = parts.reduce((a, p) => a + p.v, 0) || 1;
+  const r = 52, C = 2 * Math.PI * r, cx = 70, cy = 70;
+  let off = 0;
+  const segs = parts.filter(p => p.v > 0).map(p => {
+    const len = p.v / total * C;
+    const s = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${p.color}" stroke-width="20"
+        stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"
+        transform="rotate(-90 ${cx} ${cy})" class="seg" data-sev="${p.key}"></circle>`;
+    off += len;
+    return s;
+  }).join("");
+  return `<svg viewBox="0 0 140 140" width="132" height="132" role="img" aria-label="Eventos por gravidade">
+      ${segs || `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--line)" stroke-width="20"/>`}
+      <text x="${cx}" y="${cy - 1}" text-anchor="middle" style="font:600 24px 'IBM Plex Sans Condensed',sans-serif;fill:var(--ink)">${total}</text>
+      <text x="${cx}" y="${cy + 16}" text-anchor="middle" style="font-size:10px;fill:var(--muted)">eventos</text>
+    </svg>`;
+}
 function renderEvChart(list) {
   const el = $("#evChart");
   if (!list.length) { el.innerHTML = ""; return; }
-  const sev = { crit: 0, warn: 0, info: 0 }, counts = {};
-  for (const e of list) {
-    counts[e.type] = (counts[e.type] || 0) + 1;
-    sev[(EVENT_INFO[e.type] || ["info"])[0]]++;
-  }
-  const top = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 8);
-  const max = Math.max(...top.map(t => counts[t]), 1);
-  const col = s => s === "crit" ? "var(--crit)" : s === "warn" ? "var(--warn)" : "var(--accent)";
+  const sev = { crit: 0, warn: 0, info: 0 };
+  for (const e of list) sev[(EVENT_INFO[e.type] || ["info"])[0]]++;
   const selS = evDrill && evDrill.s;
-  const bars = top.map(t => {
-    const [s, label] = EVENT_INFO[t] || ["info", t];
-    return `<div class="evbar ${evDrill && evDrill.t === t ? "sel" : ""}" data-type="${esc(t)}" role="button" tabindex="0"><span>${esc(label)}</span>
-      <span class="track"><span class="fill" style="width:${Math.max(3, counts[t] / max * 100)}%;background:${col(s)}"></span></span>
-      <span class="c">${counts[t]}</span></div>`;
-  }).join("");
-  el.innerHTML = `<div class="evsummary">
-      <div class="tile crit ${selS === "crit" ? "sel" : ""}" data-sev="crit" role="button" tabindex="0"><span class="n">${sev.crit}</span><span class="lbl">Críticos</span></div>
-      <div class="tile warn ${selS === "warn" ? "sel" : ""}" data-sev="warn" role="button" tabindex="0"><span class="n">${sev.warn}</span><span class="lbl">Atenção</span></div>
-      <div class="tile info ${selS === "info" ? "sel" : ""}" data-sev="info" role="button" tabindex="0"><span class="n">${sev.info}</span><span class="lbl">Informativos</span></div>
-    </div>
-    <div class="evbars"><span class="label">Eventos por tipo (mais frequentes) — clique para ver os detalhes</span>${bars}</div>`;
+  const parts = [
+    { key: "crit", v: sev.crit, color: "var(--crit)" },
+    { key: "warn", v: sev.warn, color: "var(--warn)" },
+    { key: "info", v: sev.info, color: "var(--muted)" }
+  ];
+  el.innerHTML = `<div class="evchartbox">
+      <div class="donut">${donutSvg(parts)}</div>
+      <div class="evsummary">
+        <div class="tile crit ${selS === "crit" ? "sel" : ""}" data-sev="crit" role="button" tabindex="0"><span class="n">${sev.crit}</span><span class="lbl">Críticos</span></div>
+        <div class="tile warn ${selS === "warn" ? "sel" : ""}" data-sev="warn" role="button" tabindex="0"><span class="n">${sev.warn}</span><span class="lbl">Atenção</span></div>
+        <div class="tile info ${selS === "info" ? "sel" : ""}" data-sev="info" role="button" tabindex="0"><span class="n">${sev.info}</span><span class="lbl">Informativos</span></div>
+      </div>
+    </div>`;
 }
 function renderEvCounts() {
   const list = evFiltered();
@@ -872,8 +890,7 @@ $("#evType").addEventListener("change", e => { evType = e.target.value; evDrill 
 $("#evVeh").addEventListener("change", e => { evVeh = e.target.value; renderEvCounts(); });
 $("#evCounts").addEventListener("click", e => { const c = e.target.closest(".evcard"); if (c) renderEvDrill({ t: c.dataset.type }); });
 $("#evChart").addEventListener("click", e => {
-  const bar = e.target.closest(".evbar"); if (bar) { renderEvDrill({ t: bar.dataset.type }); return; }
-  const tile = e.target.closest(".tile[data-sev]"); if (tile) renderEvDrill({ s: tile.dataset.sev });
+  const sevEl = e.target.closest("[data-sev]"); if (sevEl) renderEvDrill({ s: sevEl.dataset.sev });
 });
 $("#evDetail").addEventListener("click", e => { if (e.target.id === "evClose") { evDrill = null; $("#evDetail").hidden = true; renderEvCounts(); } });
 $("#grid").addEventListener("click", e => { const c = e.target.closest(".card"); if (c) openDetail(c.dataset.id); });
