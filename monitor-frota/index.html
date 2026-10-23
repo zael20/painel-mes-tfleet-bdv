@@ -366,6 +366,7 @@ const EVENT_INFO = {
   bt_conectado: ["warn", "Bluetooth conectado"], bt_desconectado: ["info", "Bluetooth desconectado"],
   bt_pareado: ["crit", "Novo dispositivo Bluetooth"], bt_despareado: ["warn", "Dispositivo Bluetooth removido"], bt_pareados_lista: ["info", "Lista de pareados"],
   volume_alterado: ["warn", "Volume alterado"], volume_corrigido: ["info", "Volume devolvido"], modo_som: ["warn", "Modo de som"],
+  musica_tocando: ["crit", "Música/mídia tocando"],
   modo_aviao_ligado: ["crit", "Modo avião"], modo_aviao_desligado: ["info", "Modo avião desligado"],
   wifi_ligado: ["info", "Wi-Fi ligado"], wifi_desligado: ["warn", "Wi-Fi desligado"],
   dados_moveis_ligado: ["info", "Dados móveis ligados"], dados_moveis_desligado: ["crit", "Dados móveis desligados"],
@@ -582,6 +583,7 @@ async function openDetail(id, day) {
           <dt>Temperatura</dt><dd class="num">${s.temp_c ?? "–"} °C</dd>
           <dt>Tela</dt><dd>${s.screen_on ? "ligada" : "desligada"}</dd>
           <dt>Modo de som</dt><dd>${esc(s.ringer_mode || "–")}</dd>
+          <dt>Som/mídia</dt><dd class="${s.music_on ? "bad" : ""}">${s.music_on == null ? "–" : s.music_on ? "TOCANDO" : "parado"}</dd>
           <dt>Wi-Fi</dt><dd>${s.wifi_on == null ? "–" : s.wifi_on ? "ligado" : "desligado"}</dd>
           <dt>Localização</dt><dd>${s.location_on == null ? "–" : s.location_on ? "ligada" : "desligada"}</dd>
           <dt>Pareados</dt><dd class="${s.bt_bonded_count != null && s.bt_bonded_count !== 1 ? "bad" : ""}">${esc(s.bt_bonded || "–")}</dd>
