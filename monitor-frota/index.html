@@ -219,8 +219,12 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
       <select id="evPeriod">
         <option value="1">Hoje (24 h)</option>
         <option value="7" selected>7 dias</option>
+        <option value="15">15 dias</option>
         <option value="30">30 dias</option>
+        <option value="90">90 dias</option>
       </select>
+      <select id="evType"><option value="">Todos os tipos</option></select>
+      <select id="evVeh"><option value="">Todos os veículos</option></select>
       <span class="meta" id="evMeta"></span>
     </div>
     <div class="evgrid" id="evCounts"></div>
@@ -300,7 +304,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 };
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const fmtTime = d => new Date(d).toLocaleString("pt-BR", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const fmtTime = d => new Date(d).toLocaleString("pt-BR", { timeZone: TZ, day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 const fmtHour = d => new Date(d).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
 const mb = b => b == null ? "–" : (b / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " MB";
 const minsAgo = d => (Date.now() - new Date(d).getTime()) / 60000;
@@ -681,7 +685,19 @@ function switchView(v) {
 }
 
 // ------------------------------------------------------------------ aba eventos (contagem + drill-down)
-let evData = [], evSelected = null;
+let evData = [], evSelected = null, evType = "", evVeh = "";
+function evFiltered() {
+  return evData.filter(e => (!evType || e.type === evType) && (!evVeh || (e.device_name || e.device_id) === evVeh));
+}
+function fillEvFilters() {
+  const labelOf = t => (EVENT_INFO[t] || ["", t])[1];
+  const types = [...new Set(evData.map(e => e.type))].sort((a, b) => labelOf(a).localeCompare(labelOf(b)));
+  const vehs = [...new Set(evData.map(e => e.device_name || e.device_id))].sort();
+  $("#evType").innerHTML = `<option value="">Todos os tipos</option>` +
+    types.map(t => `<option value="${esc(t)}" ${evType === t ? "selected" : ""}>${esc(labelOf(t))}</option>`).join("");
+  $("#evVeh").innerHTML = `<option value="">Todos os veículos</option>` +
+    vehs.map(v => `<option value="${esc(v)}" ${evVeh === v ? "selected" : ""}>${esc(v)}</option>`).join("");
+}
 async function loadEventos() {
   const days = parseInt($("#evPeriod").value, 10) || 7;
   $("#evMeta").textContent = "carregando…";
@@ -700,6 +716,10 @@ async function loadEventos() {
     } else {
       evData = demo.alerts();
     }
+    // mantém os filtros só se ainda existirem nos dados novos
+    if (evType && !evData.some(e => e.type === evType)) evType = "";
+    if (evVeh && !evData.some(e => (e.device_name || e.device_id) === evVeh)) evVeh = "";
+    fillEvFilters();
     $("#evMeta").textContent = `${evData.length} eventos nos últimos ${days} dia(s)`;
     renderEvCounts();
   } catch (e) {
@@ -707,24 +727,26 @@ async function loadEventos() {
   }
 }
 function renderEvCounts() {
+  const list = evFiltered();
   const counts = {};
-  for (const e of evData) counts[e.type] = (counts[e.type] || 0) + 1;
+  for (const e of list) counts[e.type] = (counts[e.type] || 0) + 1;
   const order = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
   $("#evCounts").innerHTML = order.length ? order.map(type => {
     const [sev, label] = EVENT_INFO[type] || ["info", type];
-    const veh = new Set(evData.filter(e => e.type === type).map(e => e.device_id)).size;
+    const veh = new Set(list.filter(e => e.type === type).map(e => e.device_id)).size;
     return `<button type="button" class="evcard ${evSelected === type ? "sel" : ""}" data-type="${esc(type)}">
       <span class="n ${sev}">${counts[type]}</span>
       <span class="lbl">${esc(label)}</span>
       <span class="sub">${veh} veículo(s)</span></button>`;
-  }).join("") : `<div class="empty">Nenhum evento no período.</div>`;
-  if (evSelected && counts[evSelected]) renderEvDetail(evSelected);
+  }).join("") : `<div class="empty">Nenhum evento neste período/filtro.</div>`;
+  const auto = evSelected && counts[evSelected] ? evSelected : (evType && counts[evType] ? evType : null);
+  if (auto) renderEvDetail(auto);
   else { $("#evDetail").hidden = true; evSelected = null; }
 }
 function renderEvDetail(type) {
   evSelected = type;
   document.querySelectorAll(".evcard").forEach(c => c.classList.toggle("sel", c.dataset.type === type));
-  const rows = evData.filter(e => e.type === type);
+  const rows = evFiltered().filter(e => e.type === type);
   const [, label] = EVENT_INFO[type] || ["info", type];
   const byVeh = {};
   for (const e of rows) { const k = e.device_name || e.device_id; byVeh[k] = (byVeh[k] || 0) + 1; }
@@ -789,6 +811,8 @@ async function saveConfig() {
 // ------------------------------------------------------------------ interacoes
 document.querySelectorAll("#tabs .tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
 $("#evPeriod").addEventListener("change", loadEventos);
+$("#evType").addEventListener("change", e => { evType = e.target.value; evSelected = evType || null; renderEvCounts(); });
+$("#evVeh").addEventListener("change", e => { evVeh = e.target.value; renderEvCounts(); });
 $("#evCounts").addEventListener("click", e => { const c = e.target.closest(".evcard"); if (c) renderEvDetail(c.dataset.type); });
 $("#evDetail").addEventListener("click", e => { if (e.target.id === "evClose") { evSelected = null; $("#evDetail").hidden = true; renderEvCounts(); } });
 $("#grid").addEventListener("click", e => { const c = e.target.closest(".card"); if (c) openDetail(c.dataset.id); });
