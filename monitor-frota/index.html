@@ -213,6 +213,15 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 .diag-detail li { margin: 2px 0; }
 .diag-ok { font-size: 13px; color: var(--muted); margin-top: 4px; }
 .diag-ok b { color: var(--good); }
+
+/* aba aparelhos */
+.aptable { width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.aptable th, .aptable td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.aptable th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; background: var(--bg); }
+.aptable tr:last-child td { border-bottom: 0; }
+.aptable .ver { font-family: var(--f-mono); }
+.aptable .old { color: var(--warn); font-weight: 600; }
+.aptable .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 </style>
 
 <div class="wrap">
@@ -230,6 +239,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 
   <nav class="tabs" id="tabs">
     <button class="tab" type="button" data-view="frota" aria-pressed="true">Frota</button>
+    <button class="tab" type="button" data-view="aparelhos" aria-pressed="false">Aparelhos</button>
     <button class="tab" type="button" data-view="eventos" aria-pressed="false">Eventos</button>
     <button class="tab" type="button" data-view="diag" aria-pressed="false">Diagnóstico</button>
     <button class="tab" type="button" data-view="config" aria-pressed="false">Configurações</button>
@@ -278,6 +288,14 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
     <div id="evChart"></div>
     <div class="evgrid" id="evCounts"></div>
     <section class="evdetail" id="evDetail" hidden></section>
+  </section>
+
+  <section id="viewAparelhos" hidden>
+    <div class="toolbar">
+      <span class="meta" id="apMeta"></span>
+      <span class="meta" id="apLatest"></span>
+    </div>
+    <div id="apBody"><div class="empty">Carregando…</div></div>
   </section>
 
   <section id="viewDiag" hidden>
@@ -420,6 +438,7 @@ async function refresh() {
     }
     $("#meta").textContent = `${fleet.length} celulares · atualizado às ${fmtHour(new Date())} (horário de Paragominas)`;
     render();
+    if (curView === "aparelhos") renderAparelhos();
     if (selected) openDetail(selected, $("#dDay")?.value);
   } catch (e) {
     $("#meta").textContent = "Erro ao ler os dados: " + (e.message || e) + ". Confira a conexão e se o usuário tem acesso.";
@@ -765,12 +784,54 @@ function switchView(v) {
   curView = v;
   document.querySelectorAll("#tabs .tab").forEach(t => t.setAttribute("aria-pressed", String(t.dataset.view === v)));
   $("#viewFrota").hidden = v !== "frota";
+  $("#viewAparelhos").hidden = v !== "aparelhos";
   $("#viewEventos").hidden = v !== "eventos";
   $("#viewDiag").hidden = v !== "diag";
   $("#viewConfig").hidden = v !== "config";
+  if (v === "aparelhos") loadAparelhos();
   if (v === "eventos") loadEventos();
   if (v === "diag") loadDiag();
   if (v === "config") renderConfig();
+}
+
+// ------------------------------------------------------------------ aba aparelhos (roster: versão + última comunicação)
+let latestCode = null, latestName = null;
+async function fetchLatest() {
+  if (latestCode !== null) return;
+  try {
+    const r = await fetch("app/latest.json", { cache: "no-store" });
+    if (r.ok) { const j = await r.json(); latestCode = j.versionCode ?? null; latestName = j.versionName ?? null; }
+  } catch (e) { /* servido fora do Render (artifact/local): segue sem comparar versão */ }
+}
+async function loadAparelhos() {
+  await fetchLatest();
+  if (mode === "live" && !fleet.length) { try { await refresh(); } catch (e) {} }
+  renderAparelhos();
+}
+function renderAparelhos() {
+  const el = $("#apBody");
+  if (!el) return;
+  $("#apMeta").textContent = `${fleet.length} aparelho(s) cadastrado(s)`;
+  $("#apLatest").textContent = latestName ? `· versão mais recente: ${latestName}` : "";
+  if (!fleet.length) { el.innerHTML = `<div class="empty">Nenhum aparelho ainda. Eles aparecem aqui assim que o app enviar o primeiro dado.</div>`; return; }
+  const rows = fleet.map(s => {
+    const m = minsAgo(s.ts);
+    const sig = m <= ONLINE_MIN ? ["good", "online"] : m <= LATE_MIN ? ["warn", "atrasado"] : ["crit", "sem sinal"];
+    const ver = s.app_version || "–";
+    // versionName do manifesto vem como "0.5.0"; comparamos texto (suficiente para avisar)
+    const old = latestName && ver !== "–" && ver !== latestName;
+    return { s, sig, ver, old, m };
+  }).sort((a, b) => ({ crit: 0, warn: 1, good: 2 }[a.sig[0]] - { crit: 0, warn: 1, good: 2 }[b.sig[0]]) || String(a.s.device_name).localeCompare(b.s.device_name));
+  const body = rows.map(({ s, sig, ver, old }) => `<tr>
+      <td>${esc(s.device_name || s.device_id)}</td>
+      <td class="ver ${old ? "old" : ""}">${esc(ver)}${old ? " · desatualizado" : ""}</td>
+      <td class="mono">${fmtTime(s.ts)}</td>
+      <td class="mono">${ago(s.ts)}</td>
+      <td><span class="pill ${sig[0]}">${sig[1]}</span></td>
+    </tr>`).join("");
+  el.innerHTML = `<table class="aptable">
+      <thead><tr><th>Carro</th><th>Versão do app</th><th>Última comunicação</th><th>Há</th><th>Sinal</th></tr></thead>
+      <tbody>${body}</tbody></table>`;
 }
 
 // ------------------------------------------------------------------ aba eventos (contagem + drill-down)
