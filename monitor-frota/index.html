@@ -137,6 +137,35 @@ dialog input { border: 1px solid var(--line); background: var(--bg); border-radi
 dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
 .err { color: var(--crit); font-size: 13px; min-height: 1em; }
 @media (prefers-reduced-motion: no-preference) { .card, .btn, .chip { transition: border-color .15s, background .15s; } }
+
+/* abas */
+.tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin: 4px 0 14px; }
+.tab { border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 9px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:hover { color: var(--ink); }
+
+/* aba eventos */
+.evgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.evcard { text-align: left; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 12px 14px; cursor: pointer; }
+.evcard:hover { border-color: var(--accent); }
+.evcard.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.evcard .n { font: 600 26px/1 "IBM Plex Sans Condensed", sans-serif; }
+.evcard .n.crit { color: var(--crit); } .evcard .n.warn { color: var(--warn); } .evcard .n.info { color: var(--muted); }
+.evcard .lbl { display: block; margin-top: 4px; font-size: 13px; }
+.evcard .sub { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+.evdetail { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 16px; }
+.evdetail table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.evdetail th, .evdetail td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.evdetail th { color: var(--muted); font-weight: 600; }
+.evdetail .byveh { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+.evdetail .byveh span { font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 3px 10px; }
+
+/* aba configurações */
+.cfgcard { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 16px 18px; max-width: 760px; }
+.cfggrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; margin-top: 10px; }
+.cfggrid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.cfggrid input, .cfggrid select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 8px 10px; font: inherit; }
+.cfg-hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
 </style>
 
 <div class="wrap">
@@ -152,6 +181,13 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
     </div>
   </header>
 
+  <nav class="tabs" id="tabs">
+    <button class="tab" type="button" data-view="frota" aria-pressed="true">Frota</button>
+    <button class="tab" type="button" data-view="eventos" aria-pressed="false">Eventos</button>
+    <button class="tab" type="button" data-view="config" aria-pressed="false">Configurações</button>
+  </nav>
+
+  <section id="viewFrota">
   <div class="banner" id="demoBanner" hidden>
     <strong>Demonstração.</strong> Os ônibus e números abaixo são exemplos gerados para mostrar o painel. Para ver os dados reais, clique em <em>Conexão</em> e informe a URL e a chave do seu Supabase.
   </div>
@@ -175,6 +211,25 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
       <ul class="events" id="feed"></ul>
     </aside>
   </div>
+  </section>
+
+  <section id="viewEventos" hidden>
+    <div class="toolbar">
+      <span class="label">Período</span>
+      <select id="evPeriod">
+        <option value="1">Hoje (24 h)</option>
+        <option value="7" selected>7 dias</option>
+        <option value="30">30 dias</option>
+      </select>
+      <span class="meta" id="evMeta"></span>
+    </div>
+    <div class="evgrid" id="evCounts"></div>
+    <section class="evdetail" id="evDetail" hidden></section>
+  </section>
+
+  <section id="viewConfig" hidden>
+    <div id="cfgGlobal"></div>
+  </section>
 </div>
 
 <dialog id="dlgConfig">
@@ -229,6 +284,7 @@ const EVENT_INFO = {
   volume_alterado: ["warn", "Volume alterado"], volume_corrigido: ["info", "Volume devolvido"], modo_som: ["warn", "Modo de som"],
   modo_aviao_ligado: ["crit", "Modo avião"], modo_aviao_desligado: ["info", "Modo avião desligado"],
   wifi_ligado: ["info", "Wi-Fi ligado"], wifi_desligado: ["warn", "Wi-Fi desligado"],
+  dados_moveis_ligado: ["info", "Dados móveis ligados"], dados_moveis_desligado: ["crit", "Dados móveis desligados"],
   localizacao_ligada: ["info", "Localização ligada"], localizacao_desligada: ["warn", "Localização desligada"],
   protecao_tentativa: ["crit", "Tentaram remover o monitor"], protecao_desativada: ["crit", "Proteção desativada"],
   protecao_liberada: ["warn", "Remoção liberada (admin)"], protecao_ativada: ["info", "Proteção ativada"],
@@ -324,14 +380,30 @@ async function loadDay(deviceId, day) {
 }
 
 // ------------------------------------------------------------------ estado de cada celular
+// limites globais (device_config '*'), com padrões; usados nos cartões e nos alertas
+function glimits() {
+  const g = (deviceConfig && deviceConfig["*"]) || {};
+  return {
+    minCur: g.min_current_ma ?? 300, minPower: g.min_power_mw ?? 0, minVolt: g.min_voltage_mv ?? 0,
+    warnPct: g.batt_warn_pct ?? 20, critPct: g.batt_crit_pct ?? 10
+  };
+}
+function chargeWeak(s, L) {
+  L = L || glimits();
+  if (!s.plugged || s.battery_pct >= 95) return false;
+  return (s.current_ma != null && s.current_ma < L.minCur)
+    || (L.minPower > 0 && s.power_mw != null && s.power_mw < L.minPower)
+    || (L.minVolt > 0 && s.voltage_mv > 0 && s.voltage_mv < L.minVolt);
+}
 function assess(s) {
+  const L = glimits();
   const m = minsAgo(s.ts);
   const issues = [];
   let signal = m <= ONLINE_MIN ? "online" : m <= LATE_MIN ? "atrasado" : "semsinal";
   if (signal === "semsinal") issues.push("crit");
   if (s.hotspot_on) issues.push("crit");
-  if (s.plugged && s.current_ma != null && s.current_ma < 300 && s.battery_pct < 95) issues.push("crit");
-  if (!s.plugged && s.battery_pct != null && s.battery_pct <= 20) issues.push("warn");
+  if (chargeWeak(s, L)) issues.push("crit");
+  if (!s.plugged && s.battery_pct != null && s.battery_pct <= L.warnPct) issues.push(s.battery_pct <= L.critPct ? "crit" : "warn");
   if (s.bt_on === false) issues.push("warn");
   const level = issues.includes("crit") ? "crit" : issues.length ? "warn" : "good";
   return { signal, level };
@@ -370,7 +442,7 @@ function card(s, a) {
   const sig = { online: ["good", "online"], atrasado: ["warn", "atrasado"], semsinal: ["crit", "sem sinal"] }[a.signal];
   const pct = s.battery_pct ?? 0;
   const bcol = pct <= 15 ? "var(--crit)" : pct <= 30 ? "var(--warn)" : "var(--good)";
-  const weak = s.plugged && s.current_ma != null && s.current_ma < 300 && s.battery_pct < 95;
+  const weak = chargeWeak(s);
   const charge = !s.plugged ? "fora da tomada"
     : s.current_ma == null ? `na tomada (${s.plug_type})`
     : `${s.current_ma} mA${s.power_mw != null ? " · " + (s.power_mw / 1000).toFixed(1) + " W" : ""}`;
@@ -384,7 +456,7 @@ function card(s, a) {
       <dt>Hotspot</dt><dd class="${s.hotspot_on ? "bad" : ""}">${esc(hs)}</dd>
       <dt>Bluetooth</dt><dd class="${s.bt_on === false ? "attn" : ""}">${esc(bt)}</dd>
       <dt>Pareados</dt><dd class="${s.bt_bonded_count != null && s.bt_bonded_count !== 1 ? "bad" : ""}">${s.bt_bonded_count == null ? "–" : s.bt_bonded_count + (s.bt_bonded_count === 1 ? " (ok)" : " — verificar!")}</dd>
-      <dt>Dados hoje</dt><dd class="num">${mb(s.mobile_bytes_today)}${s.tether_bytes_today ? " · hotspot " + mb(s.tether_bytes_today) : ""}</dd>
+      <dt>Dados hoje</dt><dd class="num">${mb(s.mobile_bytes_today)}${s.tether_bytes_today ? " · hotspot " + mb(s.tether_bytes_today) : ""}${s.wifi_bytes_today ? " · Wi-Fi " + mb(s.wifi_bytes_today) : ""}${s.usage_access === false ? ' <span class="attn">(sem Acesso ao uso)</span>' : ""}</dd>
       <dt>Volume</dt><dd class="num ${s.vol_media === 0 || s.vol_ring === 0 ? "attn" : ""}">mídia ${s.vol_media ?? "–"}% · toque ${s.vol_ring ?? "–"}%</dd>
     </dl>
     <span class="seen">Último dado ${fmtTime(s.ts)} (${ago(s.ts)})</span>
@@ -596,7 +668,129 @@ const demo = (() => {
   return { fleet, alerts, day };
 })();
 
+// ------------------------------------------------------------------ abas
+let curView = "frota";
+function switchView(v) {
+  curView = v;
+  document.querySelectorAll("#tabs .tab").forEach(t => t.setAttribute("aria-pressed", String(t.dataset.view === v)));
+  $("#viewFrota").hidden = v !== "frota";
+  $("#viewEventos").hidden = v !== "eventos";
+  $("#viewConfig").hidden = v !== "config";
+  if (v === "eventos") loadEventos();
+  if (v === "config") renderConfig();
+}
+
+// ------------------------------------------------------------------ aba eventos (contagem + drill-down)
+let evData = [], evSelected = null;
+async function loadEventos() {
+  const days = parseInt($("#evPeriod").value, 10) || 7;
+  $("#evMeta").textContent = "carregando…";
+  try {
+    if (mode === "live") {
+      const since = new Date(Date.now() - days * 864e5).toISOString();
+      const rows = [];
+      for (let from = 0; from < 20000; from += 1000) {
+        const { data, error } = await sb.from("events").select("device_id,device_name,ts,type,message,battery_pct")
+          .gte("ts", since).order("ts", { ascending: false }).range(from, from + 999);
+        if (error) throw error;
+        rows.push(...data);
+        if (data.length < 1000) break;
+      }
+      evData = rows;
+    } else {
+      evData = demo.alerts();
+    }
+    $("#evMeta").textContent = `${evData.length} eventos nos últimos ${days} dia(s)`;
+    renderEvCounts();
+  } catch (e) {
+    $("#evMeta").textContent = "Erro ao carregar: " + (e.message || e);
+  }
+}
+function renderEvCounts() {
+  const counts = {};
+  for (const e of evData) counts[e.type] = (counts[e.type] || 0) + 1;
+  const order = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  $("#evCounts").innerHTML = order.length ? order.map(type => {
+    const [sev, label] = EVENT_INFO[type] || ["info", type];
+    const veh = new Set(evData.filter(e => e.type === type).map(e => e.device_id)).size;
+    return `<button type="button" class="evcard ${evSelected === type ? "sel" : ""}" data-type="${esc(type)}">
+      <span class="n ${sev}">${counts[type]}</span>
+      <span class="lbl">${esc(label)}</span>
+      <span class="sub">${veh} veículo(s)</span></button>`;
+  }).join("") : `<div class="empty">Nenhum evento no período.</div>`;
+  if (evSelected && counts[evSelected]) renderEvDetail(evSelected);
+  else { $("#evDetail").hidden = true; evSelected = null; }
+}
+function renderEvDetail(type) {
+  evSelected = type;
+  document.querySelectorAll(".evcard").forEach(c => c.classList.toggle("sel", c.dataset.type === type));
+  const rows = evData.filter(e => e.type === type);
+  const [, label] = EVENT_INFO[type] || ["info", type];
+  const byVeh = {};
+  for (const e of rows) { const k = e.device_name || e.device_id; byVeh[k] = (byVeh[k] || 0) + 1; }
+  const chips = Object.keys(byVeh).sort((a, b) => byVeh[b] - byVeh[a])
+    .map(k => `<span>${esc(k)}: <strong>${byVeh[k]}</strong></span>`).join("");
+  const body = rows.slice(0, 500).map(e => `<tr>
+      <td>${esc(e.device_name || e.device_id)}</td>
+      <td class="num">${fmtTime(e.ts)}</td>
+      <td>${esc(e.message || "")}</td></tr>`).join("");
+  const box = $("#evDetail");
+  box.hidden = false;
+  box.innerHTML = `<div class="dhead"><h2>${esc(label)} · ${rows.length}</h2>
+      <button class="btn" type="button" id="evClose">Fechar</button></div>
+    <span class="label">Por veículo</span><div class="byveh">${chips}</div>
+    <span class="label">Ocorrências${rows.length > 500 ? " (mostrando as 500 mais recentes)" : ""}</span>
+    <table><thead><tr><th>Veículo</th><th>Dia e hora</th><th>Descrição</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// ------------------------------------------------------------------ aba configurações (limites globais)
+function renderConfig() {
+  const g = (deviceConfig && deviceConfig["*"]) || {};
+  const dis = mode !== "live" ? "disabled" : "";
+  const num = (k, def) => g[k] ?? def;
+  $("#cfgGlobal").innerHTML = `<div class="cfgcard">
+    <span class="label">Limites padrão da frota (valem para todos os ônibus)</span>
+    <p class="cfg-hint">Definem quando um celular "chama a atenção". Cada ônibus pode ter ajuste próprio na aba Frota, abrindo o detalhe dele. O celular aplica em até 30 min ou ao reiniciar.</p>
+    <div class="cfggrid">
+      <label>Bateria — atenção (%)<input type="number" id="gWarn" value="${num("batt_warn_pct", 20)}" ${dis}></label>
+      <label>Bateria — crítico (%)<input type="number" id="gCrit" value="${num("batt_crit_pct", 10)}" ${dis}></label>
+      <label>Corrente mínima (mA)<input type="number" id="gCur" value="${num("min_current_ma", 300)}" ${dis}></label>
+      <label>Potência mínima (W)<input type="number" step="0.1" id="gPow" value="${(num("min_power_mw", 0) / 1000) || 0}" ${dis}></label>
+      <label>Tensão mínima bateria (mV)<input type="number" id="gVolt" value="${num("min_voltage_mv", 0)}" ${dis}></label>
+      <label>Volume alvo (%)<input type="number" id="gVolT" value="${num("volume_target_pct", 100)}" ${dis}></label>
+      <label>Forçar volume alto<select id="gVolF" ${dis}><option value="0" ${g.force_volume ? "" : "selected"}>não</option><option value="1" ${g.force_volume ? "selected" : ""}>sim</option></select></label>
+      <label>Religar Bluetooth (Android ≤12)<select id="gBt" ${dis}><option value="0" ${g.force_bluetooth ? "" : "selected"}>não</option><option value="1" ${g.force_bluetooth ? "selected" : ""}>sim</option></select></label>
+    </div>
+    <div class="cfg-hint">Potência e tensão em 0 = não verifica. Corrente abaixo do mínimo (ou potência/tensão abaixo, se definidas) marca "carregador fraco".</div>
+    <div style="margin-top:12px"><button class="btn primary" type="button" id="gSave" ${dis}>Salvar limites</button>
+      <span class="calib-note" id="gMsg">${mode === "live" ? "" : "Disponível ao conectar o Supabase."}</span></div>
+  </div>`;
+  const btn = $("#gSave");
+  if (btn) btn.addEventListener("click", saveConfig);
+}
+async function saveConfig() {
+  const g = Object.assign({}, deviceConfig["*"] || {}, {
+    batt_warn_pct: parseInt($("#gWarn").value, 10) || 20,
+    batt_crit_pct: parseInt($("#gCrit").value, 10) || 10,
+    min_current_ma: parseInt($("#gCur").value, 10) || 0,
+    min_power_mw: Math.round((parseFloat($("#gPow").value) || 0) * 1000),
+    min_voltage_mv: parseInt($("#gVolt").value, 10) || 0,
+    volume_target_pct: parseInt($("#gVolT").value, 10) || 100,
+    force_volume: $("#gVolF").value === "1",
+    force_bluetooth: $("#gBt").value === "1"
+  });
+  $("#gMsg").textContent = "Salvando…";
+  const { error } = await sb.from("device_config").upsert({ device_id: "*", label: "Padrão da frota", config: g, updated_at: new Date().toISOString() });
+  if (error) { $("#gMsg").textContent = "Erro: " + error.message; return; }
+  deviceConfig["*"] = g;
+  $("#gMsg").textContent = "Salvo. Os celulares aplicam em até 30 min ou ao reiniciar.";
+}
+
 // ------------------------------------------------------------------ interacoes
+document.querySelectorAll("#tabs .tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
+$("#evPeriod").addEventListener("change", loadEventos);
+$("#evCounts").addEventListener("click", e => { const c = e.target.closest(".evcard"); if (c) renderEvDetail(c.dataset.type); });
+$("#evDetail").addEventListener("click", e => { if (e.target.id === "evClose") { evSelected = null; $("#evDetail").hidden = true; renderEvCounts(); } });
 $("#grid").addEventListener("click", e => { const c = e.target.closest(".card"); if (c) openDetail(c.dataset.id); });
 $("#detail").addEventListener("change", e => { if (e.target.id === "dDay") openDetail(selected, e.target.value); });
 $("#detail").addEventListener("click", e => { if (e.target.id === "dClose") { selected = null; $("#detail").hidden = true; render(); } });
