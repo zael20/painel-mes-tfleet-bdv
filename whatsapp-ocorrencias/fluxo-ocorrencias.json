@@ -1,0 +1,545 @@
+{
+ "id": "ocorrWhatsapp001",
+ "name": "Ocorrencias do WhatsApp",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "whatsapp-ocorrencias",
+    "options": {}
+   },
+   "name": "Mensagem do WhatsApp",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    300
+   ],
+   "webhookId": "7d1f0c52-0d55-4f4b-9a1e-5a0c1c0d0a01"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Le a mensagem que a Evolution API mandou e decide o que fazer com ela.\n// ====== CONFIGURACAO (preenchida pelo configurar.sh) ======\nconst CFG = {\n  grupos: '__GRUPOS__'.split(',').map(s => s.trim()).filter(Boolean),   // ids dos grupos lidos\n  supabase: '__SUPABASE_URL__',\n  evolution: '__EVOLUTION_URL__',\n  gemini: '__GEMINI_URL__',\n};\n// Mensagens curtas sem informacao nao gastam a cota do Gemini (ficam registradas como \"ignorar\").\nconst TRIVIAL = /^(ok+|okay|blz|beleza|bom dia|boa tarde|boa noite|obrigad[oa]s?|obg|vlw|valeu|show|certo|sim|n[aã]o|t[aá]|ta bom|entendi|kk+|rs+|haha+|[\\u{1F300}-\\u{1FAFF}☀-➿\\s]+)[\\s!.,]*$/iu;\n\nconst out = [];\nfor (const item of $input.all()) {\n  const b = item.json.body || item.json;\n  const evento = String(b.event || '').toLowerCase().replace('_', '.');\n  if (evento !== 'messages.upsert') continue;\n  const lista = Array.isArray(b.data) ? b.data : [b.data];\n  for (const d of lista) {\n    if (!d || !d.key) continue;\n    const jid = d.key.remoteJid || '';\n    if (!jid.endsWith('@g.us')) continue;                         // so grupos\n    if (CFG.grupos.length && !CFG.grupos.includes(jid)) continue; // so o(s) grupo(s) escolhido(s)\n    if (d.key.fromMe) continue;\n    const raw = d.message || {};\n    const m = raw.ephemeralMessage?.message || raw.viewOnceMessageV2?.message || raw.viewOnceMessage?.message || raw;\n    let tipo = 'outro', texto = '', mime = '', tamanho = 0, tem_midia = false;\n    if (m.conversation) { tipo = 'texto'; texto = m.conversation; }\n    else if (m.extendedTextMessage) { tipo = 'texto'; texto = m.extendedTextMessage.text || ''; }\n    else if (m.audioMessage) { tipo = 'audio'; mime = m.audioMessage.mimetype; tamanho = +m.audioMessage.fileLength || 0; tem_midia = true; }\n    else if (m.videoMessage) { tipo = 'video'; texto = m.videoMessage.caption || ''; mime = m.videoMessage.mimetype; tamanho = +m.videoMessage.fileLength || 0; tem_midia = true; }\n    else if (m.imageMessage) { tipo = 'imagem'; texto = m.imageMessage.caption || ''; mime = m.imageMessage.mimetype; tamanho = +m.imageMessage.fileLength || 0; tem_midia = true; }\n    else if (m.documentMessage || m.documentWithCaptionMessage) {\n      const doc = m.documentMessage || m.documentWithCaptionMessage?.message?.documentMessage || {};\n      tipo = 'documento'; texto = doc.caption || doc.fileName || '';\n    }\n    else continue; // reacao, figurinha, enquete, mensagem apagada, etc.\n\n    if (tem_midia && tamanho > 15 * 1024 * 1024) { // grande demais para o Gemini gratis e para o Storage\n      tem_midia = false;\n      texto = (texto ? texto + ' ' : '') + `[${tipo} de ${(tamanho / 1048576).toFixed(0)} MB nao analisado]`;\n    }\n    const ts = d.messageTimestamp ? new Date(Number(d.messageTimestamp) * 1000) : new Date();\n    out.push({ json: {\n      cfg: CFG,\n      instancia: b.instance || '',\n      key: d.key,\n      precisa_ia: tem_midia || !TRIVIAL.test(texto.trim()),\n      tem_midia,\n      msg: {\n        msg_id: d.key.id,\n        ts: ts.toISOString(),\n        grupo_jid: jid,\n        autor_nome: d.pushName || '',\n        autor_jid: d.key.participantPn || d.key.participantAlt || d.key.participant || d.participant || '',\n        tipo,\n        texto: texto.slice(0, 4000),\n        midia_tipo: (mime || '').split(';')[0],\n      },\n    }});\n  }\n}\nreturn out;\n"
+   },
+   "name": "Preparar mensagem",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "PrecisadaIA?",
+       "leftValue": "={{ $json.precisa_ia }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "name": "Precisa da IA?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    440,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "// Mensagem curta sem informacao (ok, bom dia...): registra sem gastar a IA.\nreturn { json: { supabase: $json.cfg.supabase, p: { ...$json.msg, midia_path: null, ia: { acao: 'ignorar', motivo: 'mensagem curta' } } } };\n",
+    "mode": "runOnceForEachItem"
+   },
+   "name": "Sem IA",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    460
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $json.cfg.supabase }}/rest/v1/rpc/contexto_ia",
+    "options": {
+     "timeout": 60000
+    },
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ p_grupo: $json.msg.grupo_jid, p_msg_id: $json.msg.msg_id }) }}"
+   },
+   "name": "Contexto do grupo",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    200
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 5000
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "Mensagemnova",
+       "leftValue": "={{ !$json.duplicada }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "name": "Mensagem nova?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    880,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "Temmidia?",
+       "leftValue": "={{ $('Preparar mensagem').item.json.tem_midia }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "name": "Tem midia?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1100,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('Preparar mensagem').item.json.cfg.evolution }}/chat/getBase64FromMediaMessage/{{ $('Preparar mensagem').item.json.instancia }}",
+    "options": {
+     "timeout": 120000
+    },
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ message: { key: $('Preparar mensagem').item.json.key }, convertToMp4: false }) }}"
+   },
+   "name": "Baixar midia",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1320,
+    80
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credEvolution001",
+     "name": "Evolution API"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Transforma a midia baixada em arquivo (para guardar no Supabase) e guarda o base64 para o Gemini.\nconst prep = $('Preparar mensagem').item.json;\nconst b64 = $json.base64 || '';\nconst mime = String($json.mimetype || prep.msg.midia_tipo || 'application/octet-stream').split(';')[0];\nconst bytes = Math.floor(b64.length * 3 / 4);\nconst ext = { 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/aac': 'aac', 'video/mp4': 'mp4',\n  'video/3gpp': '3gp', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[mime] || 'bin';\nconst codigo = Math.random().toString(36).slice(2, 12);\nconst caminho = `${prep.msg.ts.slice(0, 7)}/${prep.msg.msg_id}-${codigo}.${ext}`;\nconst item = { json: { midia: { ok: !!b64, mime, bytes, caminho, b64 } } };\nif (b64) item.binary = { data: { data: b64, mimeType: mime, fileName: caminho.split('/').pop() } };\nreturn item;\n",
+    "mode": "runOnceForEachItem"
+   },
+   "name": "Anexar midia",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1540,
+    80
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('Preparar mensagem').item.json.cfg.supabase }}/storage/v1/object/whatsapp-midia/{{ $json.midia.caminho }}",
+    "options": {
+     "timeout": 120000
+    },
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-upsert",
+       "value": "true"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "binaryData",
+    "inputDataFieldName": "data"
+   },
+   "name": "Guardar midia",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1760,
+    80
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('Preparar mensagem').item.json.cfg.supabase }}/storage/v1/object/sign/whatsapp-midia/{{ $('Anexar midia').item.json.midia.caminho }}",
+    "options": {
+     "timeout": 60000
+    },
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\"expiresIn\": 31536000}"
+   },
+   "name": "Link da midia",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1980,
+    80
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Junta a mensagem nova, o contexto do grupo e a midia num pedido para o Gemini.\nconst prep = $('Preparar mensagem').item.json;\nlet midia = null, link = '';\nif ($('Anexar midia').isExecuted) { try { midia = $('Anexar midia').item.json.midia; } catch (e) {} }\nif ($('Link da midia').isExecuted) {\n  try { const s = $('Link da midia').item.json.signedURL; if (s) link = prep.cfg.supabase + '/storage/v1' + s; } catch (e) {}\n}\nconst ctx = $('Contexto do grupo').item.json || {};\nconst hora = iso => new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Belem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });\nconst anteriores = (ctx.mensagens || []).filter(x => x.texto).map(x => `[${hora(x.ts)}] ${x.autor_nome || '?'}: ${x.texto}${x.ocorrencia_id ? ` (ocorrencia ${x.ocorrencia_id})` : ''}`).join('\\n') || '(nenhuma)';\nconst abertas = (ctx.abertas || []).map(o => `#${o.id} | onibus ${o.tag || '?'} | ${o.categoria} | ${o.problema} | ${o.status}`).join('\\n') || '(nenhuma)';\nconst nova = `[${hora(prep.msg.ts)}] ${prep.msg.autor_nome || '?'} (${prep.msg.tipo}): ${prep.msg.texto || '(sem texto)'}`;\n\nconst parts = [{ text: `OCORRENCIAS ABERTAS:\\n${abertas}\\n\\nMENSAGENS ANTERIORES DO GRUPO (ultimas 2 horas):\\n${anteriores}\\n\\nMENSAGEM NOVA:\\n${nova}${midia && midia.b64 ? '\\n(a midia desta mensagem vai anexada)' : ''}` }];\nif (midia && midia.b64 && midia.bytes <= 18 * 1024 * 1024) parts.push({ inline_data: { mime_type: midia.mime, data: midia.b64 } });\n\nconst SYS = \"Voce analisa mensagens de um grupo de WhatsApp onde motoristas e a equipe relatam problemas nos CELULARES instalados nos onibus da frota. Nesses celulares rodam o aplicativo BDV (abrir/encerrar viagem) e um leitor RFID por Bluetooth que conta passageiros; o celular fica no suporte, ligado no carregador, com chip de internet.\\n\\nPara a MENSAGEM NOVA, devolva uma lista 'acoes' (normalmente 1 item; varios so se citar varios onibus ou problemas):\\n- acao 'nova': relata um problema que NAO esta na lista de ocorrencias abertas.\\n- acao 'atualiza': repete ou complementa uma ocorrencia aberta (mesmo onibus e mesmo problema). Informe ocorrencia_id.\\n- acao 'resolve': alguem diz que um problema foi resolvido/consertado/trocado. Informe ocorrencia_id e a solucao.\\n- acao 'ignorar': conversa sem problema tecnico de celular (cumprimentos, escalas, perguntas gerais, avisos).\\n\\ntag = numero do onibus, so digitos ('carro 65', 'o 065', 'onibus 7' -> '65', '65', '7'). Se a mensagem nova nao citar o onibus, use o que o MESMO autor citou nas mensagens anteriores dos ultimos minutos; se ainda assim nao souber, deixe vazio.\\ncategoria: carregamento (nao carrega, carrega devagar, cabo, carregador, tomada, bateria descarregando) | abrir_viagem (app BDV nao abre/inicia/encerra viagem, login, app travado) | contagem_passageiros (nao conta passageiro, leitor RFID, cartao nao le, Bluetooth do leitor) | internet_chip (sem internet, sem sinal, chip, dados) | celular_defeito (tela quebrada, travando, desligando, nao liga, sumiu) | suporte (suporte solto ou quebrado) | som_musica (som, musica, volume, radio) | outro.\\nurgencia: alta = onibus rodando sem abrir viagem, sem contar passageiros ou com celular inoperante; media = funciona com falha; baixa = informativo.\\nproblema = frase curta e objetiva em portugues (ate 120 caracteres), sem nome de pessoa.\\nconfianca = 0 a 1, o quanto voce tem certeza da acao e do onibus.\\ntranscricao = se houver audio, video ou imagem, transcreva ou descreva o conteudo em ate 500 caracteres; senao vazio.\\nResponda somente o JSON pedido.\";\nconst ACAO = { type: 'OBJECT', properties: {\n  acao: { type: 'STRING', enum: ['nova', 'atualiza', 'resolve', 'ignorar'] },\n  tag: { type: 'STRING' },\n  categoria: { type: 'STRING', enum: ['carregamento', 'abrir_viagem', 'contagem_passageiros', 'internet_chip', 'celular_defeito', 'suporte', 'som_musica', 'outro'] },\n  problema: { type: 'STRING' },\n  urgencia: { type: 'STRING', enum: ['baixa', 'media', 'alta'] },\n  ocorrencia_id: { type: 'INTEGER', nullable: true },\n  solucao: { type: 'STRING' },\n  confianca: { type: 'NUMBER' } }, required: ['acao', 'confianca'] };\n\nreturn { json: {\n  gemini_url: prep.cfg.gemini,\n  supabase: prep.cfg.supabase,\n  modelo: (prep.cfg.gemini.match(/models\\/([^:]+)/) || [])[1] || '',\n  registro: { ...prep.msg, midia_path: link || null },\n  pedido: {\n    system_instruction: { parts: [{ text: SYS }] },\n    contents: [{ role: 'user', parts }],\n    generationConfig: { temperature: 0.1, responseMimeType: 'application/json',\n      responseSchema: { type: 'OBJECT', properties: { transcricao: { type: 'STRING' }, acoes: { type: 'ARRAY', items: ACAO } }, required: ['acoes'] } },\n  },\n}};\n",
+    "mode": "runOnceForEachItem"
+   },
+   "name": "Montar pedido IA",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2200,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $json.gemini_url }}",
+    "options": {
+     "timeout": 180000
+    },
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.pedido) }}"
+   },
+   "name": "Gemini",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    2420,
+    300
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credGeminiKey001",
+     "name": "Gemini"
+    }
+   },
+   "onError": "continueRegularOutput",
+   "retryOnFail": true,
+   "maxTries": 2,
+   "waitBetweenTries": 5000
+  },
+  {
+   "parameters": {
+    "jsCode": "// Le a resposta do Gemini e monta 1 registro por acao. Se a IA falhar (cota, erro), a mensagem e guardada como \"erro\".\nconst saida = [];\nconst pedidos = $('Montar pedido IA').all();\n$input.all().forEach((it, i) => {\n  const base = pedidos[i].json;\n  let r = null, erro = '';\n  try {\n    if (it.json.error) throw new Error(typeof it.json.error === 'string' ? it.json.error : (it.json.error.message || JSON.stringify(it.json.error)));\n    const txt = (it.json.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');\n    r = JSON.parse(txt);\n  } catch (e) { erro = String(e.message || e).slice(0, 300); }\n  const acoes = r && Array.isArray(r.acoes) && r.acoes.length ? r.acoes : [{ acao: erro ? 'erro' : 'ignorar', confianca: 0 }];\n  acoes.slice(0, 5).forEach((a, j) => {\n    saida.push({ json: { supabase: base.supabase, p: {\n      ...base.registro,\n      msg_id: base.registro.msg_id + (j ? '#' + j : ''),\n      transcricao: (r && r.transcricao) || '',\n      ia: { ...a, modelo: base.modelo, ...(erro ? { erro } : {}) },\n    } } });\n  });\n});\nreturn saida;\n"
+   },
+   "name": "Ler resposta IA",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2640,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $json.supabase }}/rest/v1/rpc/registrar_mensagem",
+    "options": {
+     "timeout": 60000
+    },
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ p: $json.p }) }}"
+   },
+   "name": "Registrar no Supabase",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    2860,
+    420
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 5000
+  }
+ ],
+ "connections": {
+  "Mensagem do WhatsApp": {
+   "main": [
+    [
+     {
+      "node": "Preparar mensagem",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Preparar mensagem": {
+   "main": [
+    [
+     {
+      "node": "Precisa da IA?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Precisa da IA?": {
+   "main": [
+    [
+     {
+      "node": "Contexto do grupo",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Sem IA",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Contexto do grupo": {
+   "main": [
+    [
+     {
+      "node": "Mensagem nova?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Mensagem nova?": {
+   "main": [
+    [
+     {
+      "node": "Tem midia?",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    []
+   ]
+  },
+  "Tem midia?": {
+   "main": [
+    [
+     {
+      "node": "Baixar midia",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Montar pedido IA",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Baixar midia": {
+   "main": [
+    [
+     {
+      "node": "Anexar midia",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Anexar midia": {
+   "main": [
+    [
+     {
+      "node": "Guardar midia",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Guardar midia": {
+   "main": [
+    [
+     {
+      "node": "Link da midia",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Link da midia": {
+   "main": [
+    [
+     {
+      "node": "Montar pedido IA",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Montar pedido IA": {
+   "main": [
+    [
+     {
+      "node": "Gemini",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Gemini": {
+   "main": [
+    [
+     {
+      "node": "Ler resposta IA",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ler resposta IA": {
+   "main": [
+    [
+     {
+      "node": "Registrar no Supabase",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Sem IA": {
+   "main": [
+    [
+     {
+      "node": "Registrar no Supabase",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "all",
+  "saveDataErrorExecution": "all"
+ },
+ "pinData": {}
+}

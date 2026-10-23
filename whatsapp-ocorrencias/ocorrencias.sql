@@ -1,0 +1,256 @@
+-- Ocorrencias do WhatsApp: o que o motorista RELATA no grupo, organizado por onibus.
+-- Fica no MESMO Supabase do Monitor Frota e da Vistoria, para cruzar as tres fontes.
+-- Como usar: Supabase > SQL Editor > New query > colar tudo > Run.
+-- Pode rodar de novo sem perder dados. Nao mexe em samples, events, device_config nem vistorias.
+--
+-- Quem grava: o n8n (no servidor), com a chave SECRETA service_role, chamando a funcao
+-- public.registrar_mensagem(). A chave service_role fica so na credencial do n8n, nunca no painel.
+-- Quem le e muda status: o painel (chave publica + codigo 8015), igual ao device_config.
+
+-- ---------------------------------------------------------------- numero do onibus padronizado
+-- So digitos, sem zeros a esquerda, minimo 2 digitos: "carro 7" -> '07', "065" -> '65'. Igual a vistorias.tag.
+create or replace function public.normaliza_tag(t text) returns text
+language sql immutable as $$
+  select case when coalesce(regexp_replace(coalesce(t,''), '\D', '', 'g'), '') = '' then null
+              else lpad(coalesce(nullif(ltrim(regexp_replace(t, '\D', '', 'g'), '0'), ''), '0'), 2, '0') end;
+$$;
+
+-- ---------------------------------------------------------------- ocorrencias (1 linha por problema de um onibus)
+create table if not exists public.ocorrencias (
+  id             bigserial primary key,
+  criado_em      timestamptz not null default now(),
+  atualizado_em  timestamptz not null default now(),
+  tag            text check (length(tag) between 1 and 12),        -- numero do onibus (mesmo da vistoria); null = IA nao identificou
+  categoria      text not null default 'outro' check (categoria in (
+                   'carregamento',          -- nao carrega / carrega devagar      -> vistoria item_cabo  / monitor: corrente
+                   'abrir_viagem',          -- app BDV nao abre viagem             -> vistoria item_app
+                   'contagem_passageiros',  -- nao conta / leitor RFID             -> vistoria item_leitor / monitor: Bluetooth
+                   'internet_chip',         -- sem internet, chip                  -> vistoria item_chip  / monitor: dados moveis
+                   'celular_defeito',       -- tela, travando, desligando, sumiu   -> vistoria item_celular
+                   'suporte',               -- suporte solto/quebrado              -> vistoria item_suporte
+                   'som_musica',            -- volume, musica                      -> monitor: eventos de midia/volume
+                   'outro')),
+  problema       text not null check (length(problema) <= 300),   -- descricao curta feita pela IA
+  urgencia       text not null default 'media' check (urgencia in ('baixa','media','alta')),
+  status         text not null default 'aberta' check (status in ('aberta','em_andamento','resolvida','descartada')),
+  relatado_por   text check (length(relatado_por) <= 80),
+  primeira_msg_em timestamptz,
+  ultima_msg_em  timestamptz,
+  reincidencias  integer not null default 0,                       -- quantas vezes foi relatado de novo enquanto aberta
+  solucao        text check (length(solucao) <= 1000),
+  resolvido_em   timestamptz,
+  resolvido_por  text check (length(resolvido_por) <= 80),
+  origem         text not null default 'whatsapp' check (origem in ('whatsapp','manual')),
+  confianca      numeric(3,2)                                       -- 0 a 1, o quanto a IA teve certeza
+);
+create index if not exists ocorrencias_tag     on public.ocorrencias (tag, criado_em desc);
+create index if not exists ocorrencias_status  on public.ocorrencias (status, ultima_msg_em desc);
+-- Nao deixa existir duas ocorrencias ABERTAS do mesmo onibus e mesma categoria (anti-duplicata).
+create unique index if not exists ocorrencias_uma_aberta
+  on public.ocorrencias (tag, categoria) where status in ('aberta','em_andamento') and tag is not null;
+
+-- ---------------------------------------------------------------- mensagens do grupo (registro bruto, nada se perde)
+create table if not exists public.whatsapp_msgs (
+  msg_id         text primary key,                                  -- id da mensagem no WhatsApp: reenvio do webhook nao duplica
+  recebido_em    timestamptz not null default now(),
+  ts             timestamptz not null,                              -- hora da mensagem
+  grupo_jid      text,
+  autor_nome     text check (length(autor_nome) <= 80),
+  autor_jid      text check (length(autor_jid) <= 80),
+  tipo           text not null default 'texto' check (tipo in ('texto','audio','video','imagem','documento','outro')),
+  texto          text check (length(texto) <= 4000),                -- texto ou legenda
+  transcricao    text check (length(transcricao) <= 4000),          -- o que a IA ouviu/viu no audio/video/imagem
+  midia_path     text,                                              -- link assinado (1 ano) do arquivo no Storage
+  midia_tipo     text,                                              -- mimetype, ex.: audio/ogg
+  acao_ia        text check (acao_ia in ('nova','atualiza','resolve','ignorar','erro')),
+  ia             jsonb,                                             -- resposta completa da IA, para conferencia
+  ocorrencia_id  bigint references public.ocorrencias(id) on delete set null
+);
+alter table public.whatsapp_msgs add column if not exists midia_tipo text;
+create index if not exists whatsapp_msgs_ts  on public.whatsapp_msgs (ts desc);
+create index if not exists whatsapp_msgs_oc  on public.whatsapp_msgs (ocorrencia_id, ts);
+
+-- ---------------------------------------------------------------- historico de status (quem mudou, quando)
+create table if not exists public.ocorrencia_status_log (
+  id             bigserial primary key,
+  ocorrencia_id  bigint not null references public.ocorrencias(id) on delete cascade,
+  em             timestamptz not null default now(),
+  de             text,
+  para           text,
+  por            text
+);
+
+create or replace function public.ocorrencias_ao_mudar() returns trigger
+language plpgsql security definer set search_path = public as $$  -- definer: o painel (anon) nao grava direto no log
+begin
+  new.atualizado_em := now();
+  if new.status is distinct from old.status then
+    if new.status = 'resolvida' and new.resolvido_em is null then new.resolvido_em := now(); end if;
+    if new.status in ('aberta','em_andamento') then new.resolvido_em := null; end if;
+    insert into public.ocorrencia_status_log (ocorrencia_id, de, para, por)
+    values (new.id, old.status, new.status, coalesce(new.resolvido_por, 'painel'));
+  end if;
+  return new;
+end $$;
+drop trigger if exists ocorrencias_ao_mudar on public.ocorrencias;
+create trigger ocorrencias_ao_mudar before update on public.ocorrencias
+  for each row execute function public.ocorrencias_ao_mudar();
+
+-- ---------------------------------------------------------------- funcao chamada pelo n8n (1 chamada por mensagem)
+-- Entrada (jsonb): msg_id, ts, grupo_jid, autor_nome, autor_jid, tipo, texto, transcricao, midia_path,
+--   ia: { acao: nova|atualiza|resolve|ignorar, tag, categoria, problema, urgencia, ocorrencia_id, solucao, confianca }
+-- Regras: mensagem repetida e ignorada; "nova"/"atualiza" junta na ocorrencia ABERTA do mesmo onibus+categoria
+-- (soma reincidencia) ou cria uma; "resolve" so fecha se a IA tiver confianca >= 0.8.
+create or replace function public.registrar_mensagem(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  ia      jsonb := coalesce(p->'ia', '{}'::jsonb);
+  v_acao  text  := coalesce(ia->>'acao', 'ignorar');
+  v_tag   text  := public.normaliza_tag(ia->>'tag');
+  v_cat   text  := coalesce(nullif(ia->>'categoria',''), 'outro');
+  v_urg   text  := coalesce(nullif(ia->>'urgencia',''), 'media');
+  v_conf  numeric := nullif(ia->>'confianca','')::numeric;
+  v_ts    timestamptz := coalesce((p->>'ts')::timestamptz, now());
+  v_id    bigint;
+begin
+  if v_cat not in ('carregamento','abrir_viagem','contagem_passageiros','internet_chip','celular_defeito','suporte','som_musica','outro') then v_cat := 'outro'; end if;
+  if v_urg not in ('baixa','media','alta') then v_urg := 'media'; end if;
+
+  insert into whatsapp_msgs (msg_id, ts, grupo_jid, autor_nome, autor_jid, tipo, texto, transcricao, midia_path, midia_tipo, acao_ia, ia)
+  values (p->>'msg_id', v_ts, p->>'grupo_jid', left(p->>'autor_nome',80), left(p->>'autor_jid',80),
+          coalesce(nullif(p->>'tipo',''),'texto'), left(p->>'texto',4000), left(p->>'transcricao',4000),
+          p->>'midia_path', p->>'midia_tipo', v_acao, ia)
+  on conflict (msg_id) do nothing;
+  if not found then return jsonb_build_object('ok', true, 'duplicada', true); end if;
+
+  if v_acao = 'ignorar' or v_acao = 'erro' then
+    return jsonb_build_object('ok', true, 'acao', v_acao);
+  end if;
+
+  -- acha a ocorrencia aberta: pelo id que a IA indicou, senao por onibus + categoria
+  select id into v_id from ocorrencias
+   where status in ('aberta','em_andamento')
+     and (id = nullif(ia->>'ocorrencia_id','')::bigint or (v_tag is not null and tag = v_tag and categoria = v_cat))
+   order by (id = nullif(ia->>'ocorrencia_id','')::bigint) desc nulls last, ultima_msg_em desc
+   limit 1;
+
+  if v_acao = 'resolve' then
+    if v_id is not null and coalesce(v_conf, 0) >= 0.8 then
+      update ocorrencias set status = 'resolvida', resolvido_por = left(p->>'autor_nome',80),
+             solucao = coalesce(nullif(ia->>'solucao',''), solucao), ultima_msg_em = v_ts
+       where id = v_id;
+    end if;
+    update whatsapp_msgs set ocorrencia_id = v_id where msg_id = p->>'msg_id';
+    return jsonb_build_object('ok', true, 'acao', 'resolve', 'ocorrencia_id', v_id, 'fechou', v_id is not null and coalesce(v_conf,0) >= 0.8);
+  end if;
+
+  if v_id is not null then
+    update ocorrencias set reincidencias = reincidencias + 1, ultima_msg_em = v_ts,
+           urgencia = case when v_urg = 'alta' or urgencia = 'alta' then 'alta'
+                           when v_urg = 'media' or urgencia = 'media' then 'media' else 'baixa' end
+     where id = v_id;
+  else
+    insert into ocorrencias (tag, categoria, problema, urgencia, relatado_por, primeira_msg_em, ultima_msg_em, confianca)
+    values (v_tag, v_cat, left(coalesce(nullif(ia->>'problema',''), left(p->>'texto',300), 'sem descricao'),300),
+            v_urg, left(p->>'autor_nome',80), v_ts, v_ts, v_conf)
+    returning id into v_id;
+  end if;
+  update whatsapp_msgs set ocorrencia_id = v_id where msg_id = p->>'msg_id';
+  return jsonb_build_object('ok', true, 'acao', v_acao, 'ocorrencia_id', v_id);
+end $$;
+revoke all on function public.registrar_mensagem(jsonb) from public, anon, authenticated;
+grant execute on function public.registrar_mensagem(jsonb) to service_role;
+
+-- ---------------------------------------------------------------- permissoes
+alter table public.ocorrencias           enable row level security;
+alter table public.whatsapp_msgs         enable row level security;
+alter table public.ocorrencia_status_log enable row level security;
+
+drop policy if exists "painel le ocorrencias" on public.ocorrencias;
+create policy "painel le ocorrencias" on public.ocorrencias for select to anon, authenticated using (true);
+drop policy if exists "painel muda ocorrencias" on public.ocorrencias;
+create policy "painel muda ocorrencias" on public.ocorrencias for update to anon, authenticated using (true) with check (true);
+drop policy if exists "painel cria ocorrencia manual" on public.ocorrencias;
+create policy "painel cria ocorrencia manual" on public.ocorrencias for insert to anon, authenticated with check (origem = 'manual');
+drop policy if exists "painel le mensagens" on public.whatsapp_msgs;
+create policy "painel le mensagens" on public.whatsapp_msgs for select to anon, authenticated using (true);
+drop policy if exists "painel le historico" on public.ocorrencia_status_log;
+create policy "painel le historico" on public.ocorrencia_status_log for select to anon, authenticated using (true);
+
+revoke all on public.ocorrencias, public.whatsapp_msgs, public.ocorrencia_status_log from anon;
+grant select, insert, update on public.ocorrencias to anon, authenticated;
+grant usage, select on sequence public.ocorrencias_id_seq to anon, authenticated;
+grant select on public.whatsapp_msgs, public.ocorrencia_status_log to anon, authenticated;
+
+-- ---------------------------------------------------------------- midia (audios, videos, imagens do grupo)
+-- Bucket PRIVADO: so o n8n (chave secreta) grava. Ao gravar, o n8n gera um link assinado valido por 1 ano,
+-- que fica em whatsapp_msgs.midia_path para o painel abrir o audio/video.
+-- Limite 16 MB por arquivo (o plano gratis tem 1 GB de Storage no total).
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('whatsapp-midia', 'whatsapp-midia', false, 16777216)
+on conflict (id) do update set public = false, file_size_limit = 16777216;
+
+-- ---------------------------------------------------------------- contexto para a IA (chamado pelo n8n antes do Gemini)
+-- Ultimas mensagens do grupo (2 horas) + ocorrencias abertas, para a IA juntar mensagens picadas
+-- ("carro 65" + audio) e saber se e caso novo, repeticao ou resolucao. Avisa se a mensagem ja foi registrada.
+drop function if exists public.contexto_ia(text);
+create or replace function public.contexto_ia(p_grupo text, p_msg_id text default null) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'duplicada', exists (select 1 from whatsapp_msgs where msg_id = p_msg_id),  -- reenvio: nao gasta a IA de novo
+    'mensagens', coalesce((select jsonb_agg(m order by m.ts) from (
+        select ts, autor_nome, tipo, left(coalesce(nullif(texto,''), transcricao, ''), 300) as texto, ocorrencia_id
+        from whatsapp_msgs where grupo_jid = p_grupo and ts > now() - interval '2 hours' and msg_id not like '%#%'
+        order by ts desc limit 12) m), '[]'::jsonb),
+    'abertas', coalesce((select jsonb_agg(o order by o.ultima_msg_em desc) from (
+        select id, tag, categoria, problema, relatado_por, status, ultima_msg_em
+        from ocorrencias where status in ('aberta','em_andamento')
+        order by ultima_msg_em desc nulls last limit 60) o), '[]'::jsonb));
+$$;
+revoke all on function public.contexto_ia(text, text) from public, anon, authenticated;
+grant execute on function public.contexto_ia(text, text) to service_role;
+
+-- ---------------------------------------------------------------- cruzamento: RELATO x MONITOR x VISTORIA
+-- Para cada ocorrencia: ultimo sinal do monitor daquele onibus e ultima vistoria (com o item ligado a categoria).
+-- O monitor identifica o onibus por device_name (numero digitado no admin); comparamos pela tag padronizada.
+-- Se a tabela vistorias ainda nao existir, a view sai sem as colunas de vistoria; rode este arquivo de novo depois.
+do $$
+declare v_vist boolean := to_regclass('public.vistorias') is not null;
+begin
+  execute 'drop view if exists public.v_ocorrencias_cruzadas';
+  execute format($v$
+    create view public.v_ocorrencias_cruzadas with (security_invoker = on) as
+    select o.*,
+           m.device_id        as mon_device_id,
+           m.ts               as mon_ultimo_sinal,
+           m.battery_pct      as mon_bateria,
+           m.plugged          as mon_na_tomada,
+           m.current_ma       as mon_corrente_ma,
+           m.bt_connected     as mon_bt_conectado,
+           m.mobile_data_on   as mon_dados_moveis,
+           m.app_version      as mon_versao_app
+           %s
+    from public.ocorrencias o
+    left join lateral (
+      select s.* from public.v_last_sample s
+      where o.tag is not null and public.normaliza_tag(s.device_name) = o.tag
+      order by s.ts desc limit 1) m on true
+    %s
+  $v$,
+  case when v_vist then $c$,
+           v.data_vistoria    as vist_data,
+           v.status           as vist_status,
+           v.resultado        as vist_resultado,
+           case o.categoria when 'carregamento' then v.item_cabo when 'abrir_viagem' then v.item_app
+                            when 'contagem_passageiros' then v.item_leitor when 'internet_chip' then v.item_chip
+                            when 'celular_defeito' then v.item_celular when 'suporte' then v.item_suporte end as vist_item,
+           v.acao             as vist_acao,
+           v.ocorrencias      as vist_ocorrencias,
+           v.ts               as vist_ts,
+           -- regra do usuario: acao preenchida = resolvido na hora, exceto lembrete (TROCAR/PEDIR/TEM QUE/PRECISA)
+           (coalesce(trim(v.acao),'') <> '' and v.acao !~* '^\s*(TROCAR|PEDIR|TEM QUE|PRECISA)') as vist_resolveu$c$ else '' end,
+  case when v_vist then $j$left join lateral (
+      select x.* from public.vistorias x
+      where x.tag = o.tag order by x.data_vistoria desc, x.ts desc limit 1) v on true$j$ else '' end);
+  execute 'grant select on public.v_ocorrencias_cruzadas to anon, authenticated';
+end $$;
