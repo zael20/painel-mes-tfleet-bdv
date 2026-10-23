@@ -188,6 +188,31 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 .cfggrid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .cfggrid input, .cfggrid select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 8px 10px; font: inherit; }
 .cfg-hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* aba diagnóstico */
+.diag-head { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.diag-head .tile { flex: 1; min-width: 150px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 14px; }
+.diag-head .tile .n { font: 600 28px/1 "IBM Plex Sans Condensed", sans-serif; }
+.diag-head .tile.crit .n { color: var(--crit); } .diag-head .tile.warn .n { color: var(--warn); } .diag-head .tile.good .n { color: var(--good); }
+.diag-head .tile .lbl { display: block; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+.diagcard { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 16px; margin-bottom: 12px; }
+.diagcard.crit { border-left: 4px solid var(--crit); }
+.diagcard.warn { border-left: 4px solid var(--warn); }
+.diagcard .dhead { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
+.diagcard .dname { font-family: var(--f-display); font-weight: 600; font-size: 16px; }
+.diag-reason { font-size: 14px; margin: 8px 0 4px; }
+.daystrip { display: flex; gap: 4px; flex-wrap: wrap; margin: 10px 0 6px; }
+.daystrip .d { flex: 0 0 auto; min-width: 48px; text-align: center; border: 1px solid var(--line); border-radius: 6px; padding: 5px 4px; font-size: 11px; line-height: 1.3; }
+.daystrip .d .dd { font-family: var(--f-mono); font-weight: 500; display: block; }
+.daystrip .d .tag { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; }
+.daystrip .d.good { background: var(--good-soft); color: var(--good); border-color: var(--good); }
+.daystrip .d.warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+.daystrip .d.crit { background: var(--crit-soft); color: var(--crit); border-color: var(--crit); }
+.daystrip .d.muted { opacity: .5; }
+.diag-detail { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; padding-left: 16px; }
+.diag-detail li { margin: 2px 0; }
+.diag-ok { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.diag-ok b { color: var(--good); }
 </style>
 
 <div class="wrap">
@@ -206,6 +231,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
   <nav class="tabs" id="tabs">
     <button class="tab" type="button" data-view="frota" aria-pressed="true">Frota</button>
     <button class="tab" type="button" data-view="eventos" aria-pressed="false">Eventos</button>
+    <button class="tab" type="button" data-view="diag" aria-pressed="false">Diagnóstico</button>
     <button class="tab" type="button" data-view="config" aria-pressed="false">Configurações</button>
   </nav>
 
@@ -252,6 +278,19 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
     <div id="evChart"></div>
     <div class="evgrid" id="evCounts"></div>
     <section class="evdetail" id="evDetail" hidden></section>
+  </section>
+
+  <section id="viewDiag" hidden>
+    <div class="toolbar">
+      <span class="label">Janela</span>
+      <select id="diagPeriod">
+        <option value="7">Últimos 7 dias</option>
+        <option value="14">Últimos 14 dias</option>
+        <option value="30">Últimos 30 dias</option>
+      </select>
+      <span class="meta" id="diagMeta"></span>
+    </div>
+    <div id="diagBody"><div class="empty">Abra a aba para analisar.</div></div>
   </section>
 
   <section id="viewConfig" hidden>
@@ -692,7 +731,32 @@ const demo = (() => {
     }
     return { samples, events: all().filter(e => e.device_id === f.device_id), start, end: new Date(start.getTime() + 864e5) };
   }
-  return { fleet, alerts, day };
+  // perfis de carga por ônibus para a aba Diagnóstico (gera amostras e usa a mesma análise real)
+  function diag(D) {
+    const plan = i => dayOff => {
+      if (i === 0 || i === 3 || i === 5) return { cur: 1300, rise: 0.3 };      // sempre ok
+      if (i === 1) return { cur: 150, rise: 0.05 };                             // sempre lenta -> revisar
+      if (i === 2) return (dayOff === 1 || dayOff === 3) ? { cur: 180, rise: 0.06 } : { cur: 1250, rise: 0.3 }; // 2 dias lentos -> atenção
+      if (i === 4) return dayOff < 2 ? { cur: 30, rise: 0 } : { cur: 1300, rise: 0.3 };  // 2 dias recentes sem carregar
+      return { cur: 1300, rise: 0.3 };
+    };
+    return fleet().map((s, i) => {
+      const samples = [];
+      for (let dayOff = 0; dayOff < D.windowDays; dayOff++) {
+        const p = plan(i)(dayOff);
+        if (!p) continue;
+        const dateStr = dayKey(Date.now() - dayOff * 864e5);
+        const t0 = new Date(dateStr + "T06:00:00-03:00").getTime();
+        let pct = 40;
+        for (let mm = 0; mm < 300; mm++) {
+          pct = Math.min(100, pct + p.rise);
+          samples.push({ ts: new Date(t0 + mm * 60000).toISOString(), current_ma: Math.round(p.cur + (mm % 7) * 3 - 9), battery_pct: Math.round(pct), plugged: true });
+        }
+      }
+      return analyze(s.device_id, s.device_name, samples, D);
+    });
+  }
+  return { fleet, alerts, day, diag };
 })();
 
 // ------------------------------------------------------------------ abas
@@ -702,8 +766,10 @@ function switchView(v) {
   document.querySelectorAll("#tabs .tab").forEach(t => t.setAttribute("aria-pressed", String(t.dataset.view === v)));
   $("#viewFrota").hidden = v !== "frota";
   $("#viewEventos").hidden = v !== "eventos";
+  $("#viewDiag").hidden = v !== "diag";
   $("#viewConfig").hidden = v !== "config";
   if (v === "eventos") loadEventos();
+  if (v === "diag") loadDiag();
   if (v === "config") renderConfig();
 }
 
@@ -840,6 +906,146 @@ function renderEvDrill(drill) {
     <table><thead><tr><th>Veículo</th><th>Dia e hora</th>${showType ? "<th>Tipo</th>" : ""}<th>Descrição</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
+// ------------------------------------------------------------------ aba diagnóstico (carga lenta por período)
+// Regra: um "dia de carga lenta" = o carro ficou >= diag_min_plug_min minutos na tomada
+// e, na maior parte desse tempo (>= diag_weak_frac), a corrente ficou abaixo do mínimo.
+// "Dia sem carregar" = ficou na tomada o tempo mínimo e a bateria praticamente não subiu (<=2%).
+// Alerta: carga lenta em >= diag_crit_days dias = revisar; >= diag_attn_days = atenção;
+// OU >= diag_nocharge_consec dias seguidos sem carregar = urgente.
+function dlimits() {
+  const g = (deviceConfig && deviceConfig["*"]) || {};
+  return {
+    windowDays: parseInt($("#diagPeriod") && $("#diagPeriod").value, 10) || g.diag_window_days || 7,
+    minPlugMin: g.diag_min_plug_min ?? 30,
+    weakFrac: g.diag_weak_frac ?? 0.6,
+    attnDays: g.diag_attn_days ?? 2,
+    critDays: g.diag_crit_days ?? 3,
+    noChargeConsec: g.diag_nocharge_consec ?? 2,
+    minCur: g.min_current_ma ?? 300
+  };
+}
+const dayKey = d => new Date(d).toLocaleDateString("en-CA", { timeZone: TZ });
+function fmtDay(key) { const p = String(key).split("-"); return p.length === 3 ? `${p[2]}/${p[1]}` : key; }
+
+function analyze(id, name, samples, D) {
+  const byDay = {};
+  for (const p of samples) { const k = dayKey(p.ts); (byDay[k] = byDay[k] || []).push(p); }
+  const dates = [];
+  for (let i = D.windowDays - 1; i >= 0; i--) dates.push(dayKey(Date.now() - i * 864e5));
+  const days = dates.map(date => {
+    const ps = (byDay[date] || []).slice().sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    const plugMin = ps.length; // ~1 amostra por minuto enquanto na tomada
+    let weakMin = 0;
+    for (const p of ps) if (p.current_ma != null && p.current_ma < D.minCur) weakMin++;
+    // melhor ganho de bateria entre as sessões do dia (corta sessão em buraco > 5 min)
+    let gain = 0, sStart = null, prev = null;
+    for (const p of ps) {
+      if (!prev || (new Date(p.ts) - new Date(prev.ts)) > 5 * 60000) sStart = p.battery_pct;
+      if (sStart != null && p.battery_pct != null) gain = Math.max(gain, p.battery_pct - sStart);
+      prev = p;
+    }
+    const hadData = plugMin >= D.minPlugMin;
+    const weakFrac = plugMin ? weakMin / plugMin : 0;
+    const slow = hadData && weakFrac >= D.weakFrac;
+    const noCharge = hadData && gain <= 2;
+    return { date, plugMin, weakMin, weakFrac, gain, hadData, slow, noCharge };
+  });
+  const slowCount = days.filter(d => d.slow).length;
+  let streak = 0, best = 0;
+  for (const d of days) { if (d.noCharge) { streak++; best = Math.max(best, streak); } else streak = 0; }
+  const noDates = days.filter(d => d.noCharge).map(d => fmtDay(d.date));
+  let level = "ok", reason;
+  if (best >= D.noChargeConsec) { level = "crit"; reason = `Não carregou em ${best} dias seguidos (${noDates.slice(-best).join(", ")}). Revisar o carregador/cabo urgente.`; }
+  else if (slowCount >= D.critDays) { level = "crit"; reason = `Carga lenta em ${slowCount} dos últimos ${D.windowDays} dias. Revisar o carro.`; }
+  else if (slowCount >= D.attnDays) { level = "warn"; reason = `Carga lenta em ${slowCount} dos últimos ${D.windowDays} dias. Vale acompanhar.`; }
+  else if (slowCount >= 1) { level = "ok"; reason = `Carga lenta em ${slowCount} dia. Dentro do normal por enquanto.`; }
+  else reason = `Carregamento ok nos últimos ${D.windowDays} dias.`;
+  return { id, name, days, slowCount, noChargeStreak: best, level, reason };
+}
+
+async function fetchPlugged(id, D) {
+  const since = new Date(Date.now() - D.windowDays * 864e5).toISOString();
+  const rows = [];
+  for (let from = 0; from < 15000; from += 1000) {
+    const { data, error } = await sb.from("samples")
+      .select("ts,current_ma,battery_pct,plugged")
+      .eq("device_id", id).eq("plugged", true).gte("ts", since)
+      .order("ts").range(from, from + 999);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < 1000) break;
+  }
+  return rows;
+}
+
+async function loadDiag() {
+  const D = dlimits();
+  $("#diagMeta").textContent = "analisando…";
+  try {
+    let results;
+    if (mode === "live") {
+      results = await Promise.all(fleet.map(async s => {
+        const samples = await fetchPlugged(s.device_id, D);
+        return analyze(s.device_id, s.device_name || s.device_id, samples, D);
+      }));
+    } else {
+      results = demo.diag(D);
+    }
+    $("#diagMeta").textContent = `${results.length} carro(s) · janela de ${D.windowDays} dias`;
+    renderDiag(results, D);
+  } catch (e) {
+    $("#diagMeta").textContent = "Erro ao analisar: " + (e.message || e);
+  }
+}
+
+function renderDiag(results, D) {
+  const rank = { crit: 0, warn: 1, ok: 2 };
+  results.sort((a, b) => rank[a.level] - rank[b.level] || b.slowCount - a.slowCount || String(a.name).localeCompare(b.name));
+  const crit = results.filter(r => r.level === "crit");
+  const warn = results.filter(r => r.level === "warn");
+  const ok = results.filter(r => r.level === "ok");
+  const head = `<div class="diag-head">
+    <div class="tile crit"><span class="n">${crit.length}</span><span class="lbl">Revisar o carro</span></div>
+    <div class="tile warn"><span class="n">${warn.length}</span><span class="lbl">Acompanhar</span></div>
+    <div class="tile good"><span class="n">${ok.length}</span><span class="lbl">Sem problema de carga</span></div>
+  </div>`;
+  const affected = crit.concat(warn);
+  let cards;
+  if (affected.length) {
+    cards = affected.map(r => diagCard(r, D)).join("");
+  } else {
+    cards = `<div class="diagcard"><div class="diag-ok"><b>Nenhum carro precisa de revisão</b> pela carga nos últimos ${D.windowDays} dias. ✅</div></div>`;
+  }
+  const okLine = ok.length
+    ? `<div class="diag-ok" style="margin-top:4px">Sem alerta: ${ok.map(r => esc(r.name)).join(", ")}.</div>`
+    : "";
+  $("#diagBody").innerHTML = head + cards + okLine;
+}
+
+function diagCard(r, D) {
+  const pill = r.level === "crit"
+    ? `<span class="pill crit">Revisar o carro</span>`
+    : `<span class="pill warn">Acompanhar</span>`;
+  const strip = r.days.map(d => {
+    let cls = "muted", tag = "sem tomada";
+    if (d.noCharge) { cls = "crit"; tag = "não carregou"; }
+    else if (d.slow) { cls = "warn"; tag = "lenta"; }
+    else if (d.hadData) { cls = "good"; tag = "ok"; }
+    return `<span class="d ${cls}"><span class="dd">${fmtDay(d.date)}</span><span class="tag">${tag}</span></span>`;
+  }).join("");
+  const probDays = r.days.filter(d => d.slow || d.noCharge);
+  const detail = probDays.length ? `<ul class="diag-detail">${probDays.map(d => {
+    const mins = Math.round(d.plugMin);
+    const pctWeak = Math.round(d.weakFrac * 100);
+    return `<li>${fmtDay(d.date)}: ${mins} min na tomada, ${pctWeak}% do tempo abaixo de ${D.minCur} mA, bateria subiu ${d.gain}%${d.noCharge ? " (praticamente não carregou)" : ""}.</li>`;
+  }).join("")}</ul>` : "";
+  return `<div class="diagcard ${r.level}">
+    <div class="dhead"><span class="dname">${esc(r.name)}</span>${pill}</div>
+    <div class="diag-reason">${esc(r.reason)}</div>
+    <div class="daystrip">${strip}</div>
+    ${detail}</div>`;
+}
+
 // ------------------------------------------------------------------ aba configurações (limites globais)
 function renderConfig() {
   const g = (deviceConfig && deviceConfig["*"]) || {};
@@ -859,6 +1065,15 @@ function renderConfig() {
       <label>Religar Bluetooth (Android ≤12)<select id="gBt" ${dis}><option value="0" ${g.force_bluetooth ? "" : "selected"}>não</option><option value="1" ${g.force_bluetooth ? "selected" : ""}>sim</option></select></label>
     </div>
     <div class="cfg-hint">Potência e tensão em 0 = não verifica. Corrente abaixo do mínimo (ou potência/tensão abaixo, se definidas) marca "carregador fraco".</div>
+    <span class="label" style="display:block;margin-top:18px">Diagnóstico de carga lenta (aba Diagnóstico)</span>
+    <p class="cfg-hint">Quando um carro vira alerta de revisão. Um "dia de carga lenta" = ficou o tempo mínimo na tomada e, na maior parte desse tempo, a corrente ficou abaixo do mínimo acima.</p>
+    <div class="cfggrid">
+      <label>Dias de carga lenta → acompanhar<input type="number" id="dAttn" value="${num("diag_attn_days", 2)}" ${dis}></label>
+      <label>Dias de carga lenta → revisar o carro<input type="number" id="dCrit" value="${num("diag_crit_days", 3)}" ${dis}></label>
+      <label>Dias seguidos sem carregar → urgente<input type="number" id="dNo" value="${num("diag_nocharge_consec", 2)}" ${dis}></label>
+      <label>Mínimo na tomada p/ contar o dia (min)<input type="number" id="dPlug" value="${num("diag_min_plug_min", 30)}" ${dis}></label>
+      <label>% do tempo abaixo do mínimo p/ "lenta"<input type="number" id="dFrac" value="${Math.round(num("diag_weak_frac", 0.6) * 100)}" ${dis}></label>
+    </div>
     <div style="margin-top:12px"><button class="btn primary" type="button" id="gSave" ${dis}>Salvar limites</button>
       <span class="calib-note" id="gMsg">${mode === "live" ? "" : "Disponível ao conectar o Supabase."}</span></div>
   </div>`;
@@ -874,7 +1089,12 @@ async function saveConfig() {
     min_voltage_mv: parseInt($("#gVolt").value, 10) || 0,
     volume_target_pct: parseInt($("#gVolT").value, 10) || 100,
     force_volume: $("#gVolF").value === "1",
-    force_bluetooth: $("#gBt").value === "1"
+    force_bluetooth: $("#gBt").value === "1",
+    diag_attn_days: parseInt($("#dAttn").value, 10) || 2,
+    diag_crit_days: parseInt($("#dCrit").value, 10) || 3,
+    diag_nocharge_consec: parseInt($("#dNo").value, 10) || 2,
+    diag_min_plug_min: parseInt($("#dPlug").value, 10) || 30,
+    diag_weak_frac: Math.min(1, Math.max(0.1, (parseFloat($("#dFrac").value) || 60) / 100))
   });
   $("#gMsg").textContent = "Salvando…";
   const { error } = await sb.from("device_config").upsert({ device_id: "*", label: "Padrão da frota", config: g, updated_at: new Date().toISOString() });
@@ -886,6 +1106,7 @@ async function saveConfig() {
 // ------------------------------------------------------------------ interacoes
 document.querySelectorAll("#tabs .tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
 $("#evPeriod").addEventListener("change", loadEventos);
+$("#diagPeriod").addEventListener("change", loadDiag);
 $("#evType").addEventListener("change", e => { evType = e.target.value; evDrill = evType ? { t: evType } : null; renderEvCounts(); });
 $("#evVeh").addEventListener("change", e => { evVeh = e.target.value; renderEvCounts(); });
 $("#evCounts").addEventListener("click", e => { const c = e.target.closest(".evcard"); if (c) renderEvDrill({ t: c.dataset.type }); });
