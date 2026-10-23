@@ -796,7 +796,7 @@ function renderEvCounts() {
   $("#evCounts").innerHTML = order.length ? order.map(type => {
     const [sev, label] = EVENT_INFO[type] || ["info", type];
     const veh = new Set(list.filter(e => e.type === type).map(e => e.device_id)).size;
-    return `<button type="button" class="evcard ${evSelected === type ? "sel" : ""}" data-type="${esc(type)}">
+    return `<button type="button" class="evcard ${evDrill && evDrill.t === type ? "sel" : ""}" data-type="${esc(type)}">
       <span class="n ${sev}">${counts[type]}</span>
       <span class="lbl">${esc(label)}</span>
       <span class="sub">${veh} veículo(s)</span></button>`;
