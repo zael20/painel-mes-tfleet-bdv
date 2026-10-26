@@ -379,6 +379,25 @@ const EVENT_INFO = {
 };
 const ALERT_TYPES = Object.keys(EVENT_INFO).filter(t => EVENT_INFO[t][0] !== "info");
 
+// Ruído que não deve poluir a aba Eventos nem o feed de alertas. O histórico de
+// tomada/carregador continua visível no detalhe do carro (Frota). "resumo_dados"
+// some porque o consumo do dia já aparece no cartão da Frota.
+const NOISE_TYPES = new Set(["carregador_conectado", "carregador_desconectado", "leitura_carregador", "resumo_dados"]);
+// Leitores RFID do carro (SGBT_... e 7T...) NÃO são música. "Música tocando" só
+// vale quando há um aparelho de som conectado que NÃO é um leitor.
+const READER_RE = /sgbt|(?:^|[^a-z0-9])7t/i;
+function musicIsReaderOnly(msg) {
+  const m = /Bluetooth:\s*(.+)\)\s*$/i.exec(msg || "");
+  if (!m) return false;                       // sem info de Bluetooth: trata como música real
+  const devs = m[1].split(/\),\s*/);          // cada item "Nome (MAC"
+  return devs.length > 0 && devs.every(d => READER_RE.test(d));
+}
+function isNoiseEvent(e) {
+  if (NOISE_TYPES.has(e.type)) return true;
+  if (e.type === "musica_tocando" && musicIsReaderOnly(e.message)) return true;  // só o leitor = falso positivo
+  return false;
+}
+
 const $ = s => document.querySelector(s);
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -431,7 +450,7 @@ async function refresh() {
       ]);
       if (f.error) throw f.error;
       if (a.error) throw a.error;
-      fleet = f.data; alerts = a.data;
+      fleet = f.data; alerts = a.data.filter(e => !isNoiseEvent(e));
       deviceConfig = {};
       if (!cfg.error) for (const r of cfg.data) deviceConfig[r.device_id] = r.config || {};
     } else {
@@ -868,6 +887,7 @@ async function loadEventos() {
     } else {
       evData = demo.alerts();
     }
+    evData = evData.filter(e => !isNoiseEvent(e));   // tira o ruído da aba Eventos
     // mantém os filtros só se ainda existirem nos dados novos
     if (evType && !evData.some(e => e.type === evType)) evType = "";
     if (evVeh && !evData.some(e => (e.device_name || e.device_id) === evVeh)) evVeh = "";
