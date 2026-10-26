@@ -1,6 +1,6 @@
 {
-  "versionCode": 12,
-  "versionName": "0.5.2",
+  "versionCode": 13,
+  "versionName": "0.6.0",
   "url": "https://raw.githubusercontent.com/zael20/painel-mes-tfleet-bdv/main/monitor-frota/app/monitor-frota.apk",
-  "notes": "Menos poluicao de eventos (sem na tomada/fora da tomada/leitura do carregador); musica so avisa se nao for o leitor RFID; Wi-Fi nao conta ligado no boot; resumo de dados vira fechamento do dia (celular X MB / roteador Y MB)."
+  "notes": "Gravacao de ROTA por movimento (GPS o tempo todo); grava lat/lon e estado da carga em cada ponto. RODAR atualizacao-rota.sql ANTES de instalar."
 }
