@@ -1,6 +1,6 @@
 {
-  "versionCode": 14,
-  "versionName": "0.6.1",
+  "versionCode": 15,
+  "versionName": "0.6.2",
   "url": "https://raw.githubusercontent.com/zael20/painel-mes-tfleet-bdv/main/monitor-frota/app/monitor-frota.apk",
-  "notes": "Grava a ultima posicao mesmo parado (localizacao em tempo real no painel), alem da rota por movimento. Usa as mesmas colunas de atualizacao-rota.sql."
+  "notes": "Corrige o envio (PGRST102): manda ?columns= com a uniao das chaves do lote, para misturar amostras normais e de rota. Usa atualizacao-rota.sql."
 }
