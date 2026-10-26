@@ -11,6 +11,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 /* Layout: faixa de resumo da frota no topo, grade de celulares, e o detalhe do celular abre abaixo com grafico do dia + linha do tempo. */
 :root {
@@ -222,6 +224,21 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 .aptable .ver { font-family: var(--f-mono); }
 .aptable .old { color: var(--warn); font-weight: 600; }
 .aptable .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* visualizador de rota (mapa) */
+.routeov { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: flex; flex-direction: column; }
+.routebar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.routebar h3 { margin: 0; font-size: 15px; flex: 0 0 auto; }
+.routebar .grow { flex: 1 1 120px; }
+.routebar select, .routebar .btn { font-size: 13px; }
+.routebar label.tog { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+#routeMap { flex: 1 1 auto; min-height: 0; background: #d7dde3; }
+.routemsg { padding: 16px; color: var(--muted); }
+.routelegend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 14px; background: var(--panel); border-top: 1px solid var(--line); font-size: 12.5px; }
+.routelegend span { display: inline-flex; align-items: center; gap: 5px; }
+.routelegend i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+.routeinfo { color: var(--muted); font-size: 12.5px; }
+.leaflet-popup-content { font-size: 12.5px; line-height: 1.4; }
 </style>
 
 <div class="wrap">
@@ -346,6 +363,9 @@ const CONFIG = {
 };
 // sha256("8015") — mesmo codigo admin do aplicativo.
 const ADMIN_PIN_SHA256 = "0eadf1d576bd3ec3f0e6d305a44136b198701bf1f369a001a848c4c561b3c0e6";
+// Chave do MapTiler (mapa de satelite da rota). Como o repo e publico, convem restringir a chave
+// ao dominio do painel no painel do MapTiler (Account -> Keys -> Allowed origins).
+const MAPTILER_KEY = "G2MUHW7Q8hatR3VYbHUz";
 async function codeOk(code) {
   if (window.crypto && crypto.subtle) {
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
@@ -486,6 +506,156 @@ async function loadDay(deviceId, day) {
   return { samples, events: ev.data, start, end };
 }
 
+// ------------------------------------------------------------------ rota (mapa de satélite)
+// Classifica o estado de carga num ponto, para pintar o trajeto:
+//   off = sem carregador · unknown = na tomada mas o celular não informa corrente
+//   weak = na tomada porém abaixo do mínimo (problema do carregador) · good = carregando bem
+const CHARGE_COLORS = { good: "#2e9b5b", weak: "#e8962b", off: "#d84a4a", unknown: "#3b7fd4" };
+const CHARGE_LABEL = { good: "Carregando bem", weak: "Carregando fraco", off: "Sem carregador", unknown: "Na tomada (sem leitura de corrente)" };
+function chargeClass(p) {
+  if (!p.plugged) return "off";
+  const L = glimits();
+  if (p.current_ma == null) return "unknown";
+  const okCur = p.current_ma >= (L.minCur || 300);
+  const okPow = !L.minPower || p.power_mw == null || p.power_mw >= L.minPower;
+  const okVolt = !L.minVolt || !p.voltage_mv || p.voltage_mv >= L.minVolt;
+  return (okCur && okPow && okVolt) ? "good" : "weak";
+}
+
+function haversine(a, b) {
+  const R = 6371000, toRad = x => x * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+let routeMap = null, routeLayers = null, routeShowCharge = true, routeGroups = [];
+
+async function loadRoutePoints(id, start, end) {
+  const pts = [];
+  for (let from = 0; from < 20000; from += 1000) {
+    const { data, error } = await sb.from("samples")
+      .select("ts,lat,lon,speed_kmh,route_id,plugged,current_ma,power_mw,voltage_mv,battery_pct")
+      .eq("device_id", id).not("route_id", "is", null)
+      .gte("ts", start.toISOString()).lt("ts", end.toISOString())
+      .order("ts").range(from, from + 999);
+    if (error) throw error;
+    pts.push(...data.filter(p => p.lat != null && p.lon != null));
+    if (data.length < 1000) break;
+  }
+  return pts;
+}
+
+function groupRoutes(points) {
+  const by = new Map();
+  for (const p of points) {
+    if (!by.has(p.route_id)) by.set(p.route_id, []);
+    by.get(p.route_id).push(p);
+  }
+  const out = [];
+  for (const [rid, pts] of by) {
+    let dist = 0;
+    for (let i = 1; i < pts.length; i++) dist += haversine(pts[i - 1], pts[i]);
+    out.push({ id: rid, points: pts, start: pts[0].ts, end: pts[pts.length - 1].ts, distKm: dist / 1000 });
+  }
+  out.sort((a, b) => new Date(a.start) - new Date(b.start));
+  return out;
+}
+
+function ensureRouteOverlay() {
+  let ov = document.getElementById("routeOverlay");
+  if (ov) return ov;
+  ov = document.createElement("div");
+  ov.id = "routeOverlay";
+  ov.className = "routeov";
+  ov.hidden = true;
+  ov.innerHTML = `
+    <div class="routebar">
+      <h3 id="routeTitle">Rota</h3>
+      <select id="routeSel" class="grow" aria-label="Escolher rota"></select>
+      <label class="tog"><input type="checkbox" id="routeCharge" checked> mostrar carga</label>
+      <span class="routeinfo" id="routeInfo"></span>
+      <button class="btn" type="button" id="routeClose">Fechar</button>
+    </div>
+    <div id="routeMap"></div>
+    <div class="routelegend" id="routeLegend"></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector("#routeClose").addEventListener("click", () => { ov.hidden = true; });
+  ov.querySelector("#routeSel").addEventListener("change", e => drawRoute(e.target.value));
+  ov.querySelector("#routeCharge").addEventListener("change", e => { routeShowCharge = e.target.checked; drawRoute($("#routeSel").value); renderLegend(); });
+  return ov;
+}
+
+async function openRoute(id, day) {
+  if (!id) return;
+  const ov = ensureRouteOverlay();
+  const s = fleet.find(x => x.device_id === id);
+  day = day || new Date().toLocaleDateString("en-CA", { timeZone: TZ });
+  ov.querySelector("#routeTitle").textContent = `Rota · ${(s && s.device_name) || id} · ${day.split("-").reverse().join("/")}`;
+  ov.hidden = false;
+  const sel = ov.querySelector("#routeSel"), info = ov.querySelector("#routeInfo");
+  sel.innerHTML = ""; info.textContent = "Carregando…";
+  document.getElementById("routeLegend").innerHTML = "";
+  if (mode !== "live") { info.textContent = "Conecte o Supabase para ver a rota."; return; }
+  try {
+    const start = new Date(day + "T00:00:00-03:00"), end = new Date(start.getTime() + 864e5);
+    routeGroups = groupRoutes(await loadRoutePoints(id, start, end));
+    if (!routeGroups.length) { info.textContent = "Nenhuma rota gravada neste dia (o celular precisa estar na versão 0.6.0 com a localização liberada)."; return; }
+    sel.innerHTML = routeGroups.map((r, i) =>
+      `<option value="${r.id}">${fmtHour(r.start)}–${fmtHour(r.end)} · ${r.distKm.toFixed(1)} km · ${r.points.length} pts</option>`).join("");
+    sel.value = routeGroups[routeGroups.length - 1].id;   // abre na rota mais recente do dia
+    initRouteMap();
+    drawRoute(sel.value);
+    renderLegend();
+  } catch (e) {
+    info.textContent = "Erro ao carregar a rota: " + (e.message || e);
+  }
+}
+
+function initRouteMap() {
+  if (!routeMap) {
+    routeMap = L.map("routeMap", { zoomControl: true, attributionControl: true });
+    L.tileLayer(`https://api.maptiler.com/maps/hybrid/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`, {
+      tileSize: 512, zoomOffset: -1, minZoom: 2, maxZoom: 20, crossOrigin: true,
+      attribution: '© MapTiler © OpenStreetMap'
+    }).addTo(routeMap);
+    routeLayers = L.layerGroup().addTo(routeMap);
+  }
+  setTimeout(() => routeMap.invalidateSize(), 60);   // o mapa só mede certo depois de visível
+}
+
+function drawRoute(routeId) {
+  const r = routeGroups.find(x => x.id === routeId);
+  if (!r || !routeMap) return;
+  routeLayers.clearLayers();
+  const pts = r.points, latlngs = pts.map(p => [p.lat, p.lon]);
+  if (routeShowCharge) {
+    for (let i = 1; i < pts.length; i++) {
+      L.polyline([latlngs[i - 1], latlngs[i]], { color: CHARGE_COLORS[chargeClass(pts[i - 1])], weight: 5, opacity: .9 }).addTo(routeLayers);
+    }
+  } else {
+    L.polyline(latlngs, { color: "#3b7fd4", weight: 5, opacity: .9 }).addTo(routeLayers);
+  }
+  const a = pts[0], b = pts[pts.length - 1];
+  L.circleMarker([a.lat, a.lon], { radius: 7, color: "#fff", weight: 2, fillColor: "#2e9b5b", fillOpacity: 1 })
+    .bindPopup(`<b>Início</b><br>${fmtHour(a.ts)} · ${a.battery_pct ?? "–"}%`).addTo(routeLayers);
+  L.circleMarker([b.lat, b.lon], { radius: 7, color: "#fff", weight: 2, fillColor: "#d84a4a", fillOpacity: 1 })
+    .bindPopup(`<b>Fim</b><br>${fmtHour(b.ts)} · ${b.battery_pct ?? "–"}%`).addTo(routeLayers);
+  routeMap.fitBounds(L.latLngBounds(latlngs).pad(0.15));
+  // resumo: duração, % na tomada, % carregando bem
+  const dur = Math.round((new Date(b.ts) - new Date(a.ts)) / 60000);
+  const plugged = pts.filter(p => p.plugged).length;
+  const good = pts.filter(p => chargeClass(p) === "good").length;
+  $("#routeInfo").textContent = `${r.distKm.toFixed(1)} km · ${dur} min · ${Math.round(plugged / pts.length * 100)}% na tomada · ${Math.round(good / pts.length * 100)}% carregando bem`;
+}
+
+function renderLegend() {
+  const items = routeShowCharge
+    ? ["good", "weak", "off", "unknown"].map(k => `<span><i style="background:${CHARGE_COLORS[k]}"></i>${CHARGE_LABEL[k]}</span>`).join("")
+    : `<span><i style="background:#3b7fd4"></i>Trajeto</span>`;
+  document.getElementById("routeLegend").innerHTML = items + `<span class="routeinfo">Verde→bem · laranja→carregador fraco · vermelho→sem carregador</span>`;
+}
+
 // ------------------------------------------------------------------ estado de cada celular
 // limites globais (device_config '*'), com padrões; usados nos cartões e nos alertas
 function glimits() {
@@ -593,7 +763,7 @@ async function openDetail(id, day) {
   try {
     const d = await loadDay(id, day);
     box.innerHTML = `<div class="dhead"><div><span class="label">Detalhe · ${esc(s.device_id)}</span><h2>${esc(s.device_name || id)}</h2></div>
-      <div class="toolbar"><input type="date" id="dDay" value="${day}" aria-label="Dia"><button class="btn" type="button" id="dClose">Fechar</button></div></div>
+      <div class="toolbar"><input type="date" id="dDay" value="${day}" aria-label="Dia"><button class="btn" type="button" id="dRoute">Ver rota</button><button class="btn" type="button" id="dClose">Fechar</button></div></div>
       <div><span class="label">Bateria (%) e corrente na bateria (mA) no dia · faixas em branco = sem dados</span>
       <div class="chartbox">${dayChart(d, Math.max(560, Math.round(box.clientWidth - 34)))}</div></div>
       <div class="cols">
@@ -1201,7 +1371,10 @@ $("#evChart").addEventListener("click", e => {
 $("#evDetail").addEventListener("click", e => { if (e.target.id === "evClose") { evDrill = null; $("#evDetail").hidden = true; renderEvCounts(); } });
 $("#grid").addEventListener("click", e => { const c = e.target.closest(".card"); if (c) openDetail(c.dataset.id); });
 $("#detail").addEventListener("change", e => { if (e.target.id === "dDay") openDetail(selected, e.target.value); });
-$("#detail").addEventListener("click", e => { if (e.target.id === "dClose") { selected = null; $("#detail").hidden = true; render(); } });
+$("#detail").addEventListener("click", e => {
+  if (e.target.id === "dClose") { selected = null; $("#detail").hidden = true; render(); }
+  if (e.target.id === "dRoute") openRoute(selected, $("#dDay")?.value);
+});
 $("#q").addEventListener("input", render);
 document.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => {
   filter = b.dataset.f;
