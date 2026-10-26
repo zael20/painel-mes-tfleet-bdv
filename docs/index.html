@@ -224,6 +224,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 .aptable .ver { font-family: var(--f-mono); }
 .aptable .old { color: var(--warn); font-weight: 600; }
 .aptable .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.buildtag { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; vertical-align: middle; margin-left: 6px; }
 
 /* visualizador de rota (mapa) */
 .routeov { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: flex; flex-direction: column; }
@@ -244,7 +245,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Monitor Frota</h1>
+      <h1>Monitor Frota <span class="buildtag">painel v0.6.2</span></h1>
       <div class="meta" id="meta">Carregando…</div>
     </div>
     <div class="actions">
