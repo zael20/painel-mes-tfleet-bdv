@@ -1378,9 +1378,36 @@ function renderConfig() {
     </div>
     <div style="margin-top:12px"><button class="btn primary" type="button" id="gSave" ${dis}>Salvar limites</button>
       <span class="calib-note" id="gMsg">${mode === "live" ? "" : "Disponível ao conectar o Supabase."}</span></div>
+  </div>
+  <div class="cfgcard" style="margin-top:16px">
+    <span class="label">Alerta de uso de roteador por e-mail</span>
+    <p class="cfg-hint">Quando um carro liga o roteador (hotspot) e depois desliga, envia um e-mail com o carro, a data/hora, o total de MB usados, o trajeto feito enquanto o roteador esteve ligado e a leitura do momento. O envio é feito por um serviço de apoio (ver observação abaixo); aqui você define para quem e a partir de quanto avisar.</p>
+    <div class="cfggrid">
+      <label>Enviar e-mail de alerta<select id="eOn" ${dis}><option value="0" ${g.email_alert_on ? "" : "selected"}>não</option><option value="1" ${g.email_alert_on ? "selected" : ""}>sim</option></select></label>
+      <label>Avisar a partir de (MB)<input type="number" step="0.1" id="eMin" value="${num("email_alert_min_mb", 0)}" ${dis}></label>
+      <label style="grid-column:1/-1">Destinatários (e-mails separados por vírgula)<input type="text" id="eTo" value="${esc(g.email_alert_to || "")}" placeholder="fulano@empresa.com, outro@empresa.com" ${dis}></label>
+    </div>
+    <div class="cfg-hint">Consumo mínimo 0 = avisa qualquer uso do roteador. A página do painel só guarda esta configuração; quem dispara o e-mail é o serviço de apoio ligado ao Supabase (combinar comigo qual: n8n de vocês ou função do Supabase).</div>
+    <div style="margin-top:12px"><button class="btn primary" type="button" id="eSave" ${dis}>Salvar alerta de e-mail</button>
+      <span class="calib-note" id="eMsg">${mode === "live" ? "" : "Disponível ao conectar o Supabase."}</span></div>
   </div>`;
   const btn = $("#gSave");
   if (btn) btn.addEventListener("click", saveConfig);
+  const be = $("#eSave");
+  if (be) be.addEventListener("click", saveEmailAlert);
+}
+
+async function saveEmailAlert() {
+  const g = Object.assign({}, deviceConfig["*"] || {}, {
+    email_alert_on: $("#eOn").value === "1",
+    email_alert_min_mb: parseFloat($("#eMin").value) || 0,
+    email_alert_to: $("#eTo").value.trim()
+  });
+  $("#eMsg").textContent = "Salvando…";
+  const { error } = await sb.from("device_config").upsert({ device_id: "*", label: "Padrão da frota", config: g, updated_at: new Date().toISOString() });
+  if (error) { $("#eMsg").textContent = "Erro: " + error.message; return; }
+  deviceConfig["*"] = g;
+  $("#eMsg").textContent = "Salvo. Falta ligar o serviço que dispara o e-mail (combinar comigo).";
 }
 async function saveConfig() {
   const g = Object.assign({}, deviceConfig["*"] || {}, {
