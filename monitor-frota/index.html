@@ -380,9 +380,8 @@ const EVENT_INFO = {
 const ALERT_TYPES = Object.keys(EVENT_INFO).filter(t => EVENT_INFO[t][0] !== "info");
 
 // Ruído que não deve poluir a aba Eventos nem o feed de alertas. O histórico de
-// tomada/carregador continua visível no detalhe do carro (Frota). "resumo_dados"
-// some porque o consumo do dia já aparece no cartão da Frota.
-const NOISE_TYPES = new Set(["carregador_conectado", "carregador_desconectado", "leitura_carregador", "resumo_dados"]);
+// tomada/carregador continua visível no detalhe do carro (Frota).
+const NOISE_TYPES = new Set(["carregador_conectado", "carregador_desconectado", "leitura_carregador"]);
 // Leitores RFID do carro (SGBT_... e 7T...) NÃO são música. "Música tocando" só
 // vale quando há um aparelho de som conectado que NÃO é um leitor.
 const READER_RE = /sgbt|(?:^|[^a-z0-9])7t/i;
@@ -395,6 +394,9 @@ function musicIsReaderOnly(msg) {
 function isNoiseEvent(e) {
   if (NOISE_TYPES.has(e.type)) return true;
   if (e.type === "musica_tocando" && musicIsReaderOnly(e.message)) return true;  // só o leitor = falso positivo
+  // resumo_dados: mostra só o novo fechamento diário ("Consumo do dia ...");
+  // esconde os resumos horários antigos (do app < 0.5.2) que não traziam os números.
+  if (e.type === "resumo_dados") return !/Consumo do dia/.test(e.message || "");
   return false;
 }
 
