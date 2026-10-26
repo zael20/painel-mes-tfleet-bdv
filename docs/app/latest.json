@@ -1,6 +1,6 @@
 {
-  "versionCode": 15,
-  "versionName": "0.6.2",
+  "versionCode": 16,
+  "versionName": "0.6.3",
   "url": "https://raw.githubusercontent.com/zael20/painel-mes-tfleet-bdv/main/monitor-frota/app/monitor-frota.apk",
-  "notes": "Corrige o envio (PGRST102): manda ?columns= com a uniao das chaves do lote, para misturar amostras normais e de rota. Usa atualizacao-rota.sql."
+  "notes": "Corrige a posicao com o carro PARADO: GPS agora atualiza por tempo (15s), nao so por movimento; usa tambem o provedor FUSED. Mostra a posicao na tela do app. Usa atualizacao-rota.sql."
 }
