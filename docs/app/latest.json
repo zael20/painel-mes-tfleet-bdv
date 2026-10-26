@@ -1,6 +1,6 @@
 {
-  "versionCode": 13,
-  "versionName": "0.6.0",
+  "versionCode": 14,
+  "versionName": "0.6.1",
   "url": "https://raw.githubusercontent.com/zael20/painel-mes-tfleet-bdv/main/monitor-frota/app/monitor-frota.apk",
-  "notes": "Gravacao de ROTA por movimento (GPS o tempo todo); grava lat/lon e estado da carga em cada ponto. RODAR atualizacao-rota.sql ANTES de instalar."
+  "notes": "Grava a ultima posicao mesmo parado (localizacao em tempo real no painel), alem da rota por movimento. Usa as mesmas colunas de atualizacao-rota.sql."
 }

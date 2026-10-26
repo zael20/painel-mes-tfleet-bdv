@@ -529,7 +529,18 @@ function haversine(a, b) {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
-let routeMap = null, routeLayers = null, routeShowCharge = true, routeGroups = [];
+let routeMap = null, routeLayers = null, routeNow = null, routeShowCharge = true, routeGroups = [];
+
+// Ultima posicao conhecida do carro (mesmo parado). Usa a ultima amostra (v_last_sample ja traz
+// lat/lon na v0.6.1); se vier sem, busca a amostra mais recente que tenha posicao.
+async function lastLocation(id) {
+  const s = fleet.find(x => x.device_id === id);
+  if (s && s.lat != null) return { lat: +s.lat, lon: +s.lon, ts: s.ts, battery_pct: s.battery_pct, speed_kmh: s.speed_kmh };
+  const { data, error } = await sb.from("samples").select("ts,lat,lon,battery_pct,speed_kmh")
+    .eq("device_id", id).not("lat", "is", null).order("ts", { ascending: false }).limit(1);
+  if (error) throw error;
+  return data && data[0] ? data[0] : null;
+}
 
 async function loadRoutePoints(id, start, end) {
   const pts = [];
@@ -591,35 +602,62 @@ async function openRoute(id, day) {
   const ov = ensureRouteOverlay();
   const s = fleet.find(x => x.device_id === id);
   day = day || new Date().toLocaleDateString("en-CA", { timeZone: TZ });
-  ov.querySelector("#routeTitle").textContent = `Rota · ${(s && s.device_name) || id} · ${day.split("-").reverse().join("/")}`;
+  ov.querySelector("#routeTitle").textContent = `Mapa · ${(s && s.device_name) || id} · ${day.split("-").reverse().join("/")}`;
   ov.hidden = false;
   const sel = ov.querySelector("#routeSel"), info = ov.querySelector("#routeInfo");
   sel.innerHTML = ""; info.textContent = "Carregando…";
   document.getElementById("routeLegend").innerHTML = "";
-  if (mode !== "live") { info.textContent = "Conecte o Supabase para ver a rota."; return; }
+  if (mode !== "live") { info.textContent = "Conecte o Supabase para ver o mapa."; return; }
+  if (typeof L === "undefined") {   // a biblioteca do mapa (CDN) não carregou — rede bloqueou
+    info.textContent = "O mapa foi bloqueado pela rede (a biblioteca não carregou). Tente abrir o painel pelos dados móveis 4G.";
+    return;
+  }
   try {
+    initRouteMap();
+    // 1) Última posição conhecida (mesmo parado): sempre mostra o ponto de "onde está agora".
+    const now = await lastLocation(id);
+    routeNow.clearLayers();
+    if (now) {
+      L.marker([now.lat, now.lon]).bindPopup(
+        `<b>Última posição</b><br>${fmtTime(now.ts)}<br>${now.battery_pct ?? "–"}%${now.speed_kmh ? " · " + now.speed_kmh + " km/h" : " · parado"}`
+      ).addTo(routeNow);
+    }
+    // 2) Rotas do dia escolhido (se houver).
     const start = new Date(day + "T00:00:00-03:00"), end = new Date(start.getTime() + 864e5);
     routeGroups = groupRoutes(await loadRoutePoints(id, start, end));
-    if (!routeGroups.length) { info.textContent = "Nenhuma rota gravada neste dia (o celular precisa estar na versão 0.6.0 com a localização liberada)."; return; }
-    sel.innerHTML = routeGroups.map((r, i) =>
-      `<option value="${r.id}">${fmtHour(r.start)}–${fmtHour(r.end)} · ${r.distKm.toFixed(1)} km · ${r.points.length} pts</option>`).join("");
-    sel.value = routeGroups[routeGroups.length - 1].id;   // abre na rota mais recente do dia
-    initRouteMap();
-    drawRoute(sel.value);
-    renderLegend();
+    routeLayers.clearLayers();
+    if (routeGroups.length) {
+      sel.innerHTML = routeGroups.map(r =>
+        `<option value="${r.id}">${fmtHour(r.start)}–${fmtHour(r.end)} · ${r.distKm.toFixed(1)} km · ${r.points.length} pts</option>`).join("");
+      sel.value = routeGroups[routeGroups.length - 1].id;   // abre na rota mais recente do dia
+      sel.disabled = false;
+      drawRoute(sel.value);
+      renderLegend();
+    } else {
+      sel.innerHTML = `<option>Sem rota neste dia</option>`;
+      sel.disabled = true;
+      document.getElementById("routeLegend").innerHTML = "";
+      if (now) {
+        routeMap.setView([now.lat, now.lon], 16);
+        info.textContent = "Sem rota gravada neste dia. Mostrando a última posição do carro.";
+      } else {
+        info.textContent = "Ainda não há posição deste carro. Verifique se ele está na 0.6.1, com a localização \"o tempo todo\" liberada e o SQL rodado.";
+      }
+    }
   } catch (e) {
-    info.textContent = "Erro ao carregar a rota: " + (e.message || e);
+    info.textContent = "Erro ao carregar o mapa: " + (e.message || e);
   }
 }
 
 function initRouteMap() {
   if (!routeMap) {
-    routeMap = L.map("routeMap", { zoomControl: true, attributionControl: true });
+    routeMap = L.map("routeMap", { zoomControl: true, attributionControl: true }).setView([-3.0, -47.35], 13);
     L.tileLayer(`https://api.maptiler.com/maps/hybrid/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`, {
       tileSize: 512, zoomOffset: -1, minZoom: 2, maxZoom: 20, crossOrigin: true,
       attribution: '© MapTiler © OpenStreetMap'
     }).addTo(routeMap);
     routeLayers = L.layerGroup().addTo(routeMap);
+    routeNow = L.layerGroup().addTo(routeMap);
   }
   setTimeout(() => routeMap.invalidateSize(), 60);   // o mapa só mede certo depois de visível
 }
@@ -763,7 +801,7 @@ async function openDetail(id, day) {
   try {
     const d = await loadDay(id, day);
     box.innerHTML = `<div class="dhead"><div><span class="label">Detalhe · ${esc(s.device_id)}</span><h2>${esc(s.device_name || id)}</h2></div>
-      <div class="toolbar"><input type="date" id="dDay" value="${day}" aria-label="Dia"><button class="btn" type="button" id="dRoute">Ver rota</button><button class="btn" type="button" id="dClose">Fechar</button></div></div>
+      <div class="toolbar"><input type="date" id="dDay" value="${day}" aria-label="Dia"><button class="btn" type="button" id="dRoute">Ver no mapa</button><button class="btn" type="button" id="dClose">Fechar</button></div></div>
       <div><span class="label">Bateria (%) e corrente na bateria (mA) no dia · faixas em branco = sem dados</span>
       <div class="chartbox">${dayChart(d, Math.max(560, Math.round(box.clientWidth - 34)))}</div></div>
       <div class="cols">
@@ -776,7 +814,7 @@ async function openDetail(id, day) {
           <dt>Modo de som</dt><dd>${esc(s.ringer_mode || "–")}</dd>
           <dt>Som/mídia</dt><dd class="${s.music_on ? "bad" : ""}">${s.music_on == null ? "–" : s.music_on ? "TOCANDO" : "parado"}</dd>
           <dt>Wi-Fi</dt><dd>${s.wifi_on == null ? "–" : s.wifi_on ? "ligado" : "desligado"}</dd>
-          <dt>Localização</dt><dd>${s.location_on == null ? "–" : s.location_on ? "ligada" : "desligada"}</dd>
+          <dt>Localização</dt><dd>${s.location_on == null ? "–" : s.location_on ? "ligada" : "desligada"}${s.lat != null ? ` · última: ${(+s.lat).toFixed(5)}, ${(+s.lon).toFixed(5)}` : ""}</dd>
           <dt>Pareados</dt><dd class="${s.bt_bonded_count != null && s.bt_bonded_count !== 1 ? "bad" : ""}">${esc(s.bt_bonded || "–")}</dd>
           <dt>Dados desde o boot</dt><dd class="num">${mb(s.mobile_bytes_boot)}</dd>
           <dt>Versão do app</dt><dd class="num">${esc(s.app_version || "–")}</dd>
