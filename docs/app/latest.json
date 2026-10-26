@@ -1,0 +1,6 @@
+{
+  "versionCode": 11,
+  "versionName": "0.5.1",
+  "url": "https://raw.githubusercontent.com/zael20/painel-mes-tfleet-bdv/main/monitor-frota/app/monitor-frota.apk",
+  "notes": "Abre sem exigir todas as permissoes (resolve A03 Core); musica/midia tocando; alerta de roteador com MB usados."
+}

@@ -1,26 +1,1206 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Teste de acesso</title>
+<title>Monitor Frota</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Deixa o painel instalavel como app ("Adicionar a tela inicial") quando hospedado em https -->
+<meta name="theme-color" content="#17212b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Monitor Frota">
+<link rel="manifest" href='data:application/manifest+json,{"name":"Monitor Frota","short_name":"Monitor","display":"standalone","background_color":"%23eef1f4","theme_color":"%2317212b","start_url":"."}'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <style>
-  :root { color-scheme: light dark; }
-  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#0b3d2e; color:#fff; padding:24px; }
-  .card { max-width:520px; text-align:center; background:#0f5a43; border-radius:16px; padding:32px 24px; box-shadow:0 10px 30px rgba(0,0,0,.3); }
-  h1 { font-size:1.5rem; margin:0 0 12px; }
-  .ok { font-size:3rem; }
-  p { line-height:1.5; margin:10px 0; }
-  code { background:rgba(255,255,255,.15); padding:2px 6px; border-radius:6px; }
+/* Layout: faixa de resumo da frota no topo, grade de celulares, e o detalhe do celular abre abaixo com grafico do dia + linha do tempo. */
+:root {
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --ink: #17212b;
+  --muted: #5b6875;
+  --line: #d5dce3;
+  --accent: #0d6c8c;
+  --accent-soft: #e0eff4;
+  --good: #1d7a46;
+  --good-soft: #e1f2e8;
+  --warn: #a35c00;
+  --warn-soft: #fbeedb;
+  --crit: #b3261e;
+  --crit-soft: #fbe3e1;
+  --chart-grid: #e3e8ed;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742;
+  --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f;
+  --warn: #e7a443; --warn-soft: #36280f; --crit: #f07b72; --crit-soft: #3a1a18; --chart-grid: #24303a;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742;
+  --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f;
+  --warn: #e7a443; --warn-soft: #36280f; --crit: #f07b72; --crit-soft: #3a1a18; --chart-grid: #24303a;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 40px; }
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
+h1 { font-size: 24px; font-weight: 700; letter-spacing: .01em; }
+h2 { font-size: 17px; font-weight: 600; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.label { font-family: var(--f-display); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 20px; }
+.top .meta { color: var(--muted); font-size: 13px; }
+.top .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 7px 12px; font-size: 13px; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); font-weight: 600; }
+
+.banner { border: 1px dashed var(--warn); background: var(--warn-soft); color: var(--ink); border-radius: 8px; padding: 10px 14px; font-size: 13px; }
+
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.summary div { background: var(--panel); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.summary .v { font-family: var(--f-display); font-size: 26px; font-weight: 700; line-height: 1.1; }
+.summary .v.good { color: var(--good); } .summary .v.warn { color: var(--warn); } .summary .v.crit { color: var(--crit); }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.toolbar input[type=search] { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 8px 10px; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); font-weight: 600; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; text-align: left; position: relative; }
+.card:hover { border-color: var(--accent); }
+.card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.card .name { font-family: var(--f-display); font-weight: 600; font-size: 16px; overflow-wrap: anywhere; }
+.pill { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.crit { background: var(--crit-soft); color: var(--crit); }
+.pill.muted { background: var(--bg); color: var(--muted); }
+.batt { display: flex; align-items: center; gap: 10px; }
+.batt .bar { flex: 1; height: 10px; border-radius: 3px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+.batt .bar i { display: block; height: 100%; }
+.batt .pct { font-family: var(--f-mono); font-weight: 500; font-size: 15px; min-width: 44px; text-align: right; }
+.facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; font-size: 12.5px; margin: 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.facts .bad { color: var(--crit); font-weight: 600; }
+.facts .attn { color: var(--warn); font-weight: 600; }
+.card .seen { font-size: 12px; color: var(--muted); }
+
+aside.feed { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; max-height: 78vh; min-width: 0; }
+aside.feed header { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.events { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.events li { display: grid; grid-template-columns: 4px minmax(0, 1fr); gap: 10px; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--line); }
+.events li .sev { border-radius: 0 2px 2px 0; }
+.events .sev.crit { background: var(--crit); } .events .sev.warn { background: var(--warn); } .events .sev.info { background: var(--line); }
+.events .when { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); }
+.events .msg { font-size: 13px; overflow-wrap: anywhere; }
+.events .who { font-family: var(--f-display); font-weight: 600; font-size: 12.5px; }
+.empty { padding: 20px 14px; color: var(--muted); font-size: 13px; }
+
+section.detail { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.detail .dhead { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; }
+.detail .dhead input { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 8px; }
+.chartbox { overflow-x: auto; }
+.chartbox svg { display: block; width: 100%; min-width: 560px; height: auto; }
+.chartbox text { fill: var(--muted); font-family: var(--f-mono); font-size: 10.5px; }
+.detail .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .detail .cols { grid-template-columns: minmax(0, 1fr); } }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: 13px; margin: 0; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+.kv dd.bad { color: var(--crit); font-weight: 600; }
+.calib { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 6px; }
+.calib label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.calib select, .calib input { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 6px 8px; }
+.calib input { width: 90px; }
+.calib-note { flex-basis: 100%; font-size: 12px; color: var(--muted); }
+.detail .events { max-height: 420px; border: 1px solid var(--line); border-radius: 6px; }
+
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 20px; width: min(440px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgb(0 0 0 / .35); }
+dialog form { display: flex; flex-direction: column; gap: 10px; }
+dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+dialog input { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 8px 10px; color: var(--ink); }
+dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.err { color: var(--crit); font-size: 13px; min-height: 1em; }
+@media (prefers-reduced-motion: no-preference) { .card, .btn, .chip { transition: border-color .15s, background .15s; } }
+
+/* abas */
+.tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin: 4px 0 14px; }
+.tab { border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 9px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:hover { color: var(--ink); }
+
+/* aba eventos */
+.evgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.evcard { text-align: left; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 12px 14px; cursor: pointer; }
+.evcard:hover { border-color: var(--accent); }
+.evcard.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.evcard .n { font: 600 26px/1 "IBM Plex Sans Condensed", sans-serif; }
+.evcard .n.crit { color: var(--crit); } .evcard .n.warn { color: var(--warn); } .evcard .n.info { color: var(--muted); }
+.evcard .lbl { display: block; margin-top: 4px; font-size: 13px; }
+.evcard .sub { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+.evdetail { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 16px; }
+.evdetail table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.evdetail th, .evdetail td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.evdetail th { color: var(--muted); font-weight: 600; }
+.evdetail .byveh { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+.evdetail .byveh span { font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 3px 10px; }
+
+/* gráfico de eventos */
+.evchartbox { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 18px; margin-bottom: 16px; }
+.evchartbox .donut { flex: 0 0 auto; line-height: 0; }
+.evchartbox .evsummary { flex: 1; min-width: 220px; margin: 0; }
+.seg { cursor: pointer; transition: opacity .15s; }
+.seg:hover { opacity: .82; }
+.evsummary { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.evsummary .tile { flex: 1; min-width: 110px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 14px; }
+.evsummary .tile .n { font: 600 28px/1 "IBM Plex Sans Condensed", sans-serif; }
+.evsummary .tile.crit .n { color: var(--crit); } .evsummary .tile.warn .n { color: var(--warn); } .evsummary .tile.info .n { color: var(--muted); }
+.evsummary .tile .lbl { display: block; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+.evbars { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 16px 14px; margin-bottom: 16px; }
+.evbar { display: grid; grid-template-columns: 160px 1fr 42px; align-items: center; gap: 10px; margin: 7px 0; font-size: 13px; }
+.evbar .track { background: var(--bg); border-radius: 6px; height: 16px; overflow: hidden; }
+.evbar .fill { height: 100%; border-radius: 6px; min-width: 3px; }
+.evbar .c { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+@media (max-width: 560px) { .evbar { grid-template-columns: 104px 1fr 34px; } }
+.evsummary .tile { cursor: pointer; }
+.evsummary .tile:hover, .evsummary .tile.sel { border-color: var(--accent); }
+.evbar { cursor: pointer; }
+.evbar:hover > span:first-child, .evbar.sel > span:first-child { color: var(--accent); font-weight: 600; }
+
+/* aba configurações */
+.cfgcard { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 16px 18px; max-width: 760px; }
+.cfggrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; margin-top: 10px; }
+.cfggrid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.cfggrid input, .cfggrid select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 8px 10px; font: inherit; }
+.cfg-hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* aba diagnóstico */
+.diag-head { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.diag-head .tile { flex: 1; min-width: 150px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 14px; }
+.diag-head .tile .n { font: 600 28px/1 "IBM Plex Sans Condensed", sans-serif; }
+.diag-head .tile.crit .n { color: var(--crit); } .diag-head .tile.warn .n { color: var(--warn); } .diag-head .tile.good .n { color: var(--good); }
+.diag-head .tile .lbl { display: block; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+.diagcard { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 16px; margin-bottom: 12px; }
+.diagcard.crit { border-left: 4px solid var(--crit); }
+.diagcard.warn { border-left: 4px solid var(--warn); }
+.diagcard .dhead { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
+.diagcard .dname { font-family: var(--f-display); font-weight: 600; font-size: 16px; }
+.diag-reason { font-size: 14px; margin: 8px 0 4px; }
+.daystrip { display: flex; gap: 4px; flex-wrap: wrap; margin: 10px 0 6px; }
+.daystrip .d { flex: 0 0 auto; min-width: 48px; text-align: center; border: 1px solid var(--line); border-radius: 6px; padding: 5px 4px; font-size: 11px; line-height: 1.3; }
+.daystrip .d .dd { font-family: var(--f-mono); font-weight: 500; display: block; }
+.daystrip .d .tag { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; }
+.daystrip .d.good { background: var(--good-soft); color: var(--good); border-color: var(--good); }
+.daystrip .d.warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+.daystrip .d.crit { background: var(--crit-soft); color: var(--crit); border-color: var(--crit); }
+.daystrip .d.muted { opacity: .5; }
+.diag-detail { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; padding-left: 16px; }
+.diag-detail li { margin: 2px 0; }
+.diag-ok { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.diag-ok b { color: var(--good); }
+
+/* aba aparelhos */
+.aptable { width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.aptable th, .aptable td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.aptable th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; background: var(--bg); }
+.aptable tr:last-child td { border-bottom: 0; }
+.aptable .ver { font-family: var(--f-mono); }
+.aptable .old { color: var(--warn); font-weight: 600; }
+.aptable .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 </style>
-</head>
-<body>
-  <div class="card">
-    <div class="ok">✅</div>
-    <h1>GitHub Pages abriu!</h1>
-    <p>Se você está vendo esta tela no wi-fi do trabalho, o endereço <code>github.io</code> <strong>não está bloqueado</strong> pelo Zscaler.</p>
-    <p>Pode avisar o Claude: dá pra hospedar o painel aqui.</p>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Monitor Frota</h1>
+      <div class="meta" id="meta">Carregando…</div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnRefresh" type="button">Atualizar</button>
+      <button class="btn" id="btnConfig" type="button">Conexão</button>
+      <button class="btn" id="btnLogout" type="button" hidden>Sair</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab" type="button" data-view="frota" aria-pressed="true">Frota</button>
+    <button class="tab" type="button" data-view="aparelhos" aria-pressed="false">Aparelhos</button>
+    <button class="tab" type="button" data-view="eventos" aria-pressed="false">Eventos</button>
+    <button class="tab" type="button" data-view="diag" aria-pressed="false">Diagnóstico</button>
+    <button class="tab" type="button" data-view="config" aria-pressed="false">Configurações</button>
+  </nav>
+
+  <section id="viewFrota">
+  <div class="banner" id="demoBanner" hidden>
+    <strong>Demonstração.</strong> Os ônibus e números abaixo são exemplos gerados para mostrar o painel. Para ver os dados reais, clique em <em>Conexão</em> e informe a URL e a chave do seu Supabase.
   </div>
-</body>
-</html>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Buscar ônibus ou aparelho" aria-label="Buscar ônibus">
+    <button class="chip" type="button" data-f="todos" aria-pressed="true">Todos</button>
+    <button class="chip" type="button" data-f="atencao" aria-pressed="false">Precisa de atenção</button>
+    <button class="chip" type="button" data-f="semsinal" aria-pressed="false">Sem sinal</button>
+    <button class="chip" type="button" data-f="hotspot" aria-pressed="false">Hotspot ligado</button>
+  </div>
+
+  <section class="detail" id="detail" hidden></section>
+
+  <div class="main">
+    <div class="grid" id="grid"></div>
+    <aside class="feed">
+      <header><h2>Alertas das últimas 24 h</h2><span class="label" id="feedCount"></span></header>
+      <ul class="events" id="feed"></ul>
+    </aside>
+  </div>
+  </section>
+
+  <section id="viewEventos" hidden>
+    <div class="toolbar">
+      <span class="label">Período</span>
+      <select id="evPeriod">
+        <option value="1">Hoje (24 h)</option>
+        <option value="7" selected>7 dias</option>
+        <option value="15">15 dias</option>
+        <option value="30">30 dias</option>
+        <option value="90">90 dias</option>
+      </select>
+      <select id="evType"><option value="">Todos os tipos</option></select>
+      <select id="evVeh"><option value="">Todos os veículos</option></select>
+      <span class="meta" id="evMeta"></span>
+    </div>
+    <div id="evChart"></div>
+    <div class="evgrid" id="evCounts"></div>
+    <section class="evdetail" id="evDetail" hidden></section>
+  </section>
+
+  <section id="viewAparelhos" hidden>
+    <div class="toolbar">
+      <span class="meta" id="apMeta"></span>
+      <span class="meta" id="apLatest"></span>
+    </div>
+    <div id="apBody"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <section id="viewDiag" hidden>
+    <div class="toolbar">
+      <span class="label">Janela</span>
+      <select id="diagPeriod">
+        <option value="7">Últimos 7 dias</option>
+        <option value="14">Últimos 14 dias</option>
+        <option value="30">Últimos 30 dias</option>
+      </select>
+      <span class="meta" id="diagMeta"></span>
+    </div>
+    <div id="diagBody"><div class="empty">Abra a aba para analisar.</div></div>
+  </section>
+
+  <section id="viewConfig" hidden>
+    <div id="cfgGlobal"></div>
+  </section>
+</div>
+
+<dialog id="dlgConfig">
+  <form id="formConfig" method="dialog">
+    <h2>Conexão com o Supabase</h2>
+    <label>URL do projeto<input id="cfgUrl" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off"></label>
+    <label>Chave anon / publishable<input id="cfgKey" type="text" placeholder="eyJ… ou sb_publishable_…" autocomplete="off"></label>
+    <div class="row">
+      <button class="btn" type="button" id="cfgDemo">Usar demonstração</button>
+      <button class="btn primary" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgLogin">
+  <form id="formLogin">
+    <h2>Painel Monitor Frota</h2>
+    <label>Código de acesso<input id="loginCode" type="password" inputmode="numeric" autocomplete="off" required autofocus></label>
+    <div class="err" id="loginErr"></div>
+    <div class="row"><button class="btn primary" type="submit">Entrar</button></div>
+  </form>
+</dialog>
+
+<script>
+// Conexao fixa do painel. A chave abaixo e publica. O painel abre so com o codigo 8015
+// (conferido aqui no navegador) e le os dados direto com a chave — sem conta de login no Supabase.
+const CONFIG = {
+  url: "https://orhuxmsrdnugpogvtnbg.supabase.co",
+  key: "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL"
+};
+// sha256("8015") — mesmo codigo admin do aplicativo.
+const ADMIN_PIN_SHA256 = "0eadf1d576bd3ec3f0e6d305a44136b198701bf1f369a001a848c4c561b3c0e6";
+async function codeOk(code) {
+  if (window.crypto && crypto.subtle) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
+    const hex = Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, "0")).join("");
+    return hex === ADMIN_PIN_SHA256;
+  }
+  return code === "8015"; // reserva, caso abra como arquivo local (sem https)
+}
+
+const TZ = "America/Belem";
+const ONLINE_MIN = 10, LATE_MIN = 60;
+const EVENT_INFO = {
+  carregador_fraco: ["crit", "Carregador fraco"], nao_carrega: ["crit", "Não está carregando"],
+  hotspot_ligado: ["crit", "Hotspot ligado"], hotspot_clientes: ["warn", "Aparelhos no hotspot"],
+  hotspot_desligado: ["info", "Hotspot desligado"], bateria_critica: ["crit", "Bateria crítica"],
+  bateria_baixa: ["warn", "Bateria baixa"], servico_parado: ["crit", "Monitor parado"],
+  bluetooth_desligado: ["warn", "Bluetooth desligado"], bluetooth_ligado: ["info", "Bluetooth ligado"],
+  bt_conectado: ["warn", "Bluetooth conectado"], bt_desconectado: ["info", "Bluetooth desconectado"],
+  bt_pareado: ["crit", "Novo dispositivo Bluetooth"], bt_despareado: ["warn", "Dispositivo Bluetooth removido"], bt_pareados_lista: ["info", "Lista de pareados"],
+  volume_alterado: ["warn", "Volume alterado"], volume_corrigido: ["info", "Volume devolvido"], modo_som: ["warn", "Modo de som"],
+  musica_tocando: ["crit", "Música/mídia tocando"],
+  modo_aviao_ligado: ["crit", "Modo avião"], modo_aviao_desligado: ["info", "Modo avião desligado"],
+  wifi_ligado: ["info", "Wi-Fi ligado"], wifi_desligado: ["warn", "Wi-Fi desligado"],
+  dados_moveis_ligado: ["info", "Dados móveis ligados"], dados_moveis_desligado: ["crit", "Dados móveis desligados"],
+  localizacao_ligada: ["info", "Localização ligada"], localizacao_desligada: ["warn", "Localização desligada"],
+  protecao_tentativa: ["crit", "Tentaram remover o monitor"], protecao_desativada: ["crit", "Proteção desativada"],
+  protecao_liberada: ["warn", "Remoção liberada (admin)"], protecao_ativada: ["info", "Proteção ativada"],
+  desligando: ["warn", "Desligando"], carregador_conectado: ["info", "Na tomada"],
+  carregador_desconectado: ["info", "Fora da tomada"], leitura_carregador: ["info", "Leitura do carregador"],
+  desbloqueio: ["info", "Desbloqueio"], servico_iniciado: ["info", "Monitor iniciado"], resumo_dados: ["info", "Resumo de dados"]
+};
+const ALERT_TYPES = Object.keys(EVENT_INFO).filter(t => EVENT_INFO[t][0] !== "info");
+
+const $ = s => document.querySelector(s);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmtTime = d => new Date(d).toLocaleString("pt-BR", { timeZone: TZ, day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+const fmtHour = d => new Date(d).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+const mb = b => b == null ? "–" : (b / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " MB";
+const minsAgo = d => (Date.now() - new Date(d).getTime()) / 60000;
+function ago(d) {
+  const m = minsAgo(d);
+  if (m < 1) return "agora";
+  if (m < 60) return Math.round(m) + " min atrás";
+  if (m < 1440) return Math.round(m / 60) + " h atrás";
+  return Math.round(m / 1440) + " d atrás";
+}
+
+let mode = "demo", sb = null, fleet = [], alerts = [], filter = "todos", selected = null, unlocked = false;
+
+// ------------------------------------------------------------------ fonte de dados
+function conn() {
+  const url = CONFIG.url || store.get("mf_url") || "";
+  const key = CONFIG.key || store.get("mf_key") || "";
+  return { url, key };
+}
+
+async function init() {
+  const { url, key } = conn();
+  if (url && key && window.supabase) {
+    mode = "live";
+    sb = window.supabase.createClient(url, key);
+    if (!unlocked) { $("#dlgLogin").showModal(); return; }
+    $("#btnLogout").hidden = false;
+  } else {
+    mode = "demo";
+  }
+  $("#demoBanner").hidden = mode !== "demo";
+  await refresh();
+}
+
+async function refresh() {
+  try {
+    if (mode === "live") {
+      const since = new Date(Date.now() - 864e5).toISOString();
+      const [f, a, cfg] = await Promise.all([
+        sb.from("v_last_sample").select("*").order("device_name"),
+        sb.from("events").select("*").gte("ts", since).in("type", ALERT_TYPES).order("ts", { ascending: false }).limit(300),
+        sb.from("device_config").select("device_id,config")
+      ]);
+      if (f.error) throw f.error;
+      if (a.error) throw a.error;
+      fleet = f.data; alerts = a.data;
+      deviceConfig = {};
+      if (!cfg.error) for (const r of cfg.data) deviceConfig[r.device_id] = r.config || {};
+    } else {
+      fleet = demo.fleet(); alerts = demo.alerts();
+    }
+    $("#meta").textContent = `${fleet.length} celulares · atualizado às ${fmtHour(new Date())} (horário de Paragominas)`;
+    render();
+    if (curView === "aparelhos") renderAparelhos();
+    if (selected) openDetail(selected, $("#dDay")?.value);
+  } catch (e) {
+    $("#meta").textContent = "Erro ao ler os dados: " + (e.message || e) + ". Confira a conexão e se o usuário tem acesso.";
+  }
+}
+
+async function loadDay(deviceId, day) {
+  const start = new Date(day + "T00:00:00-03:00"), end = new Date(start.getTime() + 864e5);
+  if (mode !== "live") return demo.day(deviceId, start);
+  const samples = [];
+  for (let from = 0; from < 5000; from += 1000) {
+    const { data, error } = await sb.from("samples")
+      .select("ts,battery_pct,plugged,current_ma,power_mw,voltage_mv,hotspot_on")
+      .eq("device_id", deviceId).gte("ts", start.toISOString()).lt("ts", end.toISOString())
+      .order("ts").range(from, from + 999);
+    if (error) throw error;
+    samples.push(...data);
+    if (data.length < 1000) break;
+  }
+  const ev = await sb.from("events").select("*").eq("device_id", deviceId)
+    .gte("ts", start.toISOString()).lt("ts", end.toISOString()).order("ts", { ascending: false }).limit(1000);
+  if (ev.error) throw ev.error;
+  return { samples, events: ev.data, start, end };
+}
+
+// ------------------------------------------------------------------ estado de cada celular
+// limites globais (device_config '*'), com padrões; usados nos cartões e nos alertas
+function glimits() {
+  const g = (deviceConfig && deviceConfig["*"]) || {};
+  return {
+    minCur: g.min_current_ma ?? 300, minPower: g.min_power_mw ?? 0, minVolt: g.min_voltage_mv ?? 0,
+    warnPct: g.batt_warn_pct ?? 20, critPct: g.batt_crit_pct ?? 10
+  };
+}
+function chargeWeak(s, L) {
+  L = L || glimits();
+  if (!s.plugged || s.battery_pct >= 95) return false;
+  return (s.current_ma != null && s.current_ma < L.minCur)
+    || (L.minPower > 0 && s.power_mw != null && s.power_mw < L.minPower)
+    || (L.minVolt > 0 && s.voltage_mv > 0 && s.voltage_mv < L.minVolt);
+}
+function assess(s) {
+  const L = glimits();
+  const m = minsAgo(s.ts);
+  const issues = [];
+  let signal = m <= ONLINE_MIN ? "online" : m <= LATE_MIN ? "atrasado" : "semsinal";
+  if (signal === "semsinal") issues.push("crit");
+  if (s.hotspot_on) issues.push("crit");
+  if (chargeWeak(s, L)) issues.push("crit");
+  if (!s.plugged && s.battery_pct != null && s.battery_pct <= L.warnPct) issues.push(s.battery_pct <= L.critPct ? "crit" : "warn");
+  if (s.bt_on === false) issues.push("warn");
+  const level = issues.includes("crit") ? "crit" : issues.length ? "warn" : "good";
+  return { signal, level };
+}
+
+function render() {
+  const rows = fleet.map(s => ({ s, a: assess(s) }));
+  const n = k => rows.filter(k).length;
+  const weak24 = new Set(alerts.filter(e => e.type === "carregador_fraco" || e.type === "nao_carrega").map(e => e.device_id)).size;
+  $("#summary").innerHTML = [
+    ["Online", n(r => r.a.signal === "online"), "good"],
+    ["Sem sinal (> 1 h)", n(r => r.a.signal === "semsinal"), n(r => r.a.signal === "semsinal") ? "crit" : ""],
+    ["Fora da tomada ≤ 20%", n(r => !r.s.plugged && r.s.battery_pct <= 20), n(r => !r.s.plugged && r.s.battery_pct <= 20) ? "warn" : ""],
+    ["Hotspot ligado agora", n(r => r.s.hotspot_on), n(r => r.s.hotspot_on) ? "crit" : ""],
+    ["Carregador com problema (24 h)", weak24, weak24 ? "crit" : ""]
+  ].map(([l, v, c]) => `<div><span class="label">${l}</span><span class="v ${c}">${v}</span></div>`).join("");
+
+  const q = $("#q").value.trim().toLowerCase();
+  const shown = rows.filter(({ s, a }) => {
+    if (q && !(`${s.device_name} ${s.device_id}`.toLowerCase().includes(q))) return false;
+    if (filter === "atencao") return a.level !== "good";
+    if (filter === "semsinal") return a.signal === "semsinal";
+    if (filter === "hotspot") return s.hotspot_on;
+    return true;
+  }).sort((x, y) => ({ crit: 0, warn: 1, good: 2 }[x.a.level] - { crit: 0, warn: 1, good: 2 }[y.a.level]) || String(x.s.device_name).localeCompare(y.s.device_name));
+
+  $("#grid").innerHTML = shown.length ? shown.map(({ s, a }) => card(s, a)).join("")
+    : `<div class="empty">Nenhum celular neste filtro.</div>`;
+
+  $("#feedCount").textContent = alerts.length ? alerts.length + " eventos" : "";
+  $("#feed").innerHTML = alerts.length ? alerts.slice(0, 120).map(e => eventItem(e, true)).join("")
+    : `<li class="empty" style="display:block">Nenhum alerta nas últimas 24 horas.</li>`;
+}
+
+function card(s, a) {
+  const sig = { online: ["good", "online"], atrasado: ["warn", "atrasado"], semsinal: ["crit", "sem sinal"] }[a.signal];
+  const pct = s.battery_pct ?? 0;
+  const bcol = pct <= 15 ? "var(--crit)" : pct <= 30 ? "var(--warn)" : "var(--good)";
+  const weak = chargeWeak(s);
+  const charge = !s.plugged ? "fora da tomada"
+    : s.current_ma == null ? `na tomada (${s.plug_type})`
+    : `${s.current_ma} mA${s.power_mw != null ? " · " + (s.power_mw / 1000).toFixed(1) + " W" : ""}`;
+  const hs = s.hotspot_on ? `LIGADO${s.hotspot_clients != null ? " · " + s.hotspot_clients + " aparelho(s)" : ""}` : "desligado";
+  const bt = s.bt_on == null ? "sem dado" : s.bt_on ? (s.bt_connected ? "ligado · " + s.bt_connected : "ligado") : "desligado";
+  return `<button type="button" class="card ${selected === s.device_id ? "sel" : ""}" data-id="${esc(s.device_id)}">
+    <div class="head"><span class="name">${esc(s.device_name || s.device_id)}</span><span class="pill ${sig[0]}">${sig[1]}</span></div>
+    <div class="batt"><div class="bar"><i style="width:${pct}%;background:${bcol}"></i></div><span class="pct">${s.battery_pct ?? "–"}%</span></div>
+    <dl class="facts">
+      <dt>Carga</dt><dd class="${weak ? "bad" : ""}">${esc(charge)}${weak ? " · fraco" : ""}</dd>
+      <dt>Hotspot</dt><dd class="${s.hotspot_on ? "bad" : ""}">${esc(hs)}</dd>
+      <dt>Bluetooth</dt><dd class="${s.bt_on === false ? "attn" : ""}">${esc(bt)}</dd>
+      <dt>Pareados</dt><dd class="${s.bt_bonded_count != null && s.bt_bonded_count !== 1 ? "bad" : ""}">${s.bt_bonded_count == null ? "–" : s.bt_bonded_count + (s.bt_bonded_count === 1 ? " (ok)" : " — verificar!")}</dd>
+      <dt>Dados hoje</dt><dd class="num">${mb(s.mobile_bytes_today)}${s.tether_bytes_today ? " · hotspot " + mb(s.tether_bytes_today) : ""}${s.wifi_bytes_today ? " · Wi-Fi " + mb(s.wifi_bytes_today) : ""}${s.usage_access === false ? ' <span class="attn">(sem Acesso ao uso)</span>' : ""}</dd>
+      <dt>Volume</dt><dd class="num ${s.vol_media === 0 || s.vol_ring === 0 ? "attn" : ""}">mídia ${s.vol_media ?? "–"}% · toque ${s.vol_ring ?? "–"}%</dd>
+    </dl>
+    <span class="seen">Último dado ${fmtTime(s.ts)} (${ago(s.ts)})</span>
+  </button>`;
+}
+
+function eventItem(e, withName) {
+  const [sev, label] = EVENT_INFO[e.type] || ["info", e.type];
+  return `<li><span class="sev ${sev}"></span><div>
+    <div class="when">${fmtTime(e.ts)}${e.battery_pct != null ? " · bateria " + e.battery_pct + "%" : ""}</div>
+    ${withName ? `<div class="who">${esc(e.device_name || e.device_id)} · ${esc(label)}</div>` : `<div class="who">${esc(label)}</div>`}
+    <div class="msg">${esc(e.message)}</div></div></li>`;
+}
+
+// ------------------------------------------------------------------ detalhe do celular
+async function openDetail(id, day) {
+  selected = id;
+  const s = fleet.find(x => x.device_id === id);
+  if (!s) return;
+  day = day || new Date().toLocaleDateString("en-CA", { timeZone: TZ });
+  const box = $("#detail");
+  box.hidden = false;
+  box.innerHTML = `<div class="dhead"><div><span class="label">Detalhe</span><h2>${esc(s.device_name || id)}</h2></div>
+    <div class="toolbar"><input type="date" id="dDay" value="${day}" aria-label="Dia"><button class="btn" type="button" id="dClose">Fechar</button></div></div>
+    <div class="empty">Carregando o dia…</div>`;
+  document.querySelectorAll(".card").forEach(c => c.classList.toggle("sel", c.dataset.id === id));
+  try {
+    const d = await loadDay(id, day);
+    box.innerHTML = `<div class="dhead"><div><span class="label">Detalhe · ${esc(s.device_id)}</span><h2>${esc(s.device_name || id)}</h2></div>
+      <div class="toolbar"><input type="date" id="dDay" value="${day}" aria-label="Dia"><button class="btn" type="button" id="dClose">Fechar</button></div></div>
+      <div><span class="label">Bateria (%) e corrente na bateria (mA) no dia · faixas em branco = sem dados</span>
+      <div class="chartbox">${dayChart(d, Math.max(560, Math.round(box.clientWidth - 34)))}</div></div>
+      <div class="cols">
+        <div><span class="label">Agora</span><dl class="kv">
+          <dt>Bateria</dt><dd class="num">${s.battery_pct}% · ${esc(s.battery_status || "")}</dd>
+          <dt>Tensão bateria</dt><dd class="num">${s.voltage_mv ?? "–"} mV</dd>
+          <dt>Corrente</dt><dd class="num">${s.current_ma ?? "não informada"} mA (bruto ${s.current_raw ?? "–"})</dd>
+          <dt>Temperatura</dt><dd class="num">${s.temp_c ?? "–"} °C</dd>
+          <dt>Tela</dt><dd>${s.screen_on ? "ligada" : "desligada"}</dd>
+          <dt>Modo de som</dt><dd>${esc(s.ringer_mode || "–")}</dd>
+          <dt>Som/mídia</dt><dd class="${s.music_on ? "bad" : ""}">${s.music_on == null ? "–" : s.music_on ? "TOCANDO" : "parado"}</dd>
+          <dt>Wi-Fi</dt><dd>${s.wifi_on == null ? "–" : s.wifi_on ? "ligado" : "desligado"}</dd>
+          <dt>Localização</dt><dd>${s.location_on == null ? "–" : s.location_on ? "ligada" : "desligada"}</dd>
+          <dt>Pareados</dt><dd class="${s.bt_bonded_count != null && s.bt_bonded_count !== 1 ? "bad" : ""}">${esc(s.bt_bonded || "–")}</dd>
+          <dt>Dados desde o boot</dt><dd class="num">${mb(s.mobile_bytes_boot)}</dd>
+          <dt>Versão do app</dt><dd class="num">${esc(s.app_version || "–")}</dd>
+        </dl>${calibBox(s)}</div>
+        <div><span class="label">Eventos do dia (${d.events.length})</span>
+          <ul class="events">${d.events.length ? d.events.map(e => eventItem(e, false)).join("") : `<li class="empty" style="display:block">Sem eventos neste dia.</li>`}</ul></div>
+      </div>`;
+    bindCalib(id);
+  } catch (e) {
+    box.querySelector(".empty").textContent = "Erro ao carregar o dia: " + (e.message || e);
+  }
+}
+
+// calibração e limites por celular (gravados em device_config; a central define, o celular lê)
+let deviceConfig = {};
+function cfgOf(id) { return Object.assign({}, deviceConfig["*"] || {}, deviceConfig[id] || {}); }
+
+function calibBox(s) {
+  const c = cfgOf(s.device_id);
+  const star = deviceConfig["*"] || {};
+  const dis = mode !== "live" ? "disabled" : "";
+  return `<div style="margin-top:14px"><span class="label">Calibração deste ônibus (vai para o celular)</span>
+    <div class="calib">
+      <label>Unidade da corrente
+        <select id="cbUnit" ${dis}>
+          ${["auto", "ma", "ua"].map(u => `<option value="${u}" ${(c.current_unit || "auto") === u ? "selected" : ""}>${u}</option>`).join("")}
+        </select></label>
+      <label>Inverter sinal
+        <select id="cbInv" ${dis}><option value="0" ${c.current_invert ? "" : "selected"}>não</option><option value="1" ${c.current_invert ? "selected" : ""}>sim</option></select></label>
+      <label>Corrente mínima (mA)
+        <input type="number" id="cbMin" value="${c.min_current_ma ?? star.min_current_ma ?? 300}" ${dis}></label>
+      <label>Forçar volume alto
+        <select id="cbVol" ${dis}><option value="0" ${c.force_volume ? "" : "selected"}>não</option><option value="1" ${c.force_volume ? "selected" : ""}>sim</option></select></label>
+      <label>Volume alvo (%)
+        <input type="number" id="cbVolT" value="${c.volume_target_pct ?? 100}" ${dis}></label>
+      <label>Religar Bluetooth (só Android ≤12)
+        <select id="cbBt" ${dis}><option value="0" ${c.force_bluetooth ? "" : "selected"}>não</option><option value="1" ${c.force_bluetooth ? "selected" : ""}>sim</option></select></label>
+      <button class="btn primary" type="button" id="cbSave" ${dis}>Salvar para este ônibus</button>
+      <span class="calib-note" id="cbMsg">${mode === "live" ? "O celular aplica em até 30 min ou ao reiniciar." : "Disponível ao conectar o Supabase."}</span>
+    </div></div>`;
+}
+
+function bindCalib(id) {
+  const btn = $("#cbSave");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const cfg = Object.assign({}, deviceConfig[id] || {}, {
+      current_unit: $("#cbUnit").value,
+      current_invert: $("#cbInv").value === "1",
+      min_current_ma: parseInt($("#cbMin").value, 10) || 300,
+      force_volume: $("#cbVol").value === "1",
+      volume_target_pct: parseInt($("#cbVolT").value, 10) || 100,
+      force_bluetooth: $("#cbBt").value === "1"
+    });
+    $("#cbMsg").textContent = "Salvando…";
+    const { error } = await sb.from("device_config").upsert({ device_id: id, label: fleet.find(x => x.device_id === id)?.device_name, config: cfg, updated_at: new Date().toISOString() });
+    if (error) { $("#cbMsg").textContent = "Erro: " + error.message; return; }
+    deviceConfig[id] = cfg;
+    $("#cbMsg").textContent = "Salvo. O celular aplica em até 30 min ou ao reiniciar.";
+  });
+}
+
+function dayChart({ samples, start, end }, W) {
+  const L = 44, R = 12, H1 = 120, H2 = 110, gap = 34, T = 22;
+  const x = t => L + (new Date(t) - start) / (end - start) * (W - L - R);
+  const yB = v => T + H1 - v / 100 * H1;
+  const cur = samples.map(p => p.current_ma).filter(v => v != null);
+  let cMin = Math.min(0, ...cur, -200), cMax = Math.max(0, ...cur, 500);
+  const step = cMax - cMin > 2500 ? 1000 : cMax - cMin > 1200 ? 500 : 250;
+  cMin = Math.floor(cMin / step) * step; cMax = Math.ceil(cMax / step) * step;
+  const top2 = T + H1 + gap;
+  const yC = v => top2 + H2 - (v - cMin) / (cMax - cMin) * H2;
+  // quebra a linha onde ha mais de 5 min sem amostra: ausencia de dado nao vira linha reta
+  const segs = (key, y) => {
+    let d = "", prev = null;
+    for (const p of samples) {
+      if (p[key] == null) { prev = null; continue; }
+      const jump = !prev || (new Date(p.ts) - new Date(prev.ts)) > 5 * 60000;
+      d += `${jump ? "M" : "L"}${x(p.ts).toFixed(1)} ${y(p[key]).toFixed(1)}`;
+      prev = p;
+    }
+    return d;
+  };
+  const plugBands = [];
+  let bandStart = null, lastTs = null;
+  for (const p of samples) {
+    if (p.plugged && bandStart == null) bandStart = p.ts;
+    if ((!p.plugged || (lastTs && new Date(p.ts) - new Date(lastTs) > 5 * 60000)) && bandStart != null) { plugBands.push([bandStart, lastTs]); bandStart = p.plugged ? p.ts : null; }
+    lastTs = p.ts;
+  }
+  if (bandStart != null) plugBands.push([bandStart, lastTs]);
+  let g = "";
+  for (let h = 0; h <= 24; h += 3) {
+    const xx = L + h / 24 * (W - L - R);
+    g += `<line x1="${xx}" x2="${xx}" y1="${T}" y2="${top2 + H2}" stroke="var(--chart-grid)"/><text x="${xx}" y="${top2 + H2 + 14}" text-anchor="middle">${String(h).padStart(2, "0")}h</text>`;
+  }
+  for (const v of [0, 50, 100]) g += `<line x1="${L}" x2="${W - R}" y1="${yB(v)}" y2="${yB(v)}" stroke="var(--chart-grid)"/><text x="${L - 6}" y="${yB(v) + 3.5}" text-anchor="end">${v}%</text>`;
+  for (let v = cMin; v <= cMax; v += step) g += `<line x1="${L}" x2="${W - R}" y1="${yC(v)}" y2="${yC(v)}" stroke="${v === 0 ? "var(--muted)" : "var(--chart-grid)"}" ${v === 0 ? 'stroke-dasharray="3 3"' : ""}/><text x="${L - 6}" y="${yC(v) + 3.5}" text-anchor="end">${v}</text>`;
+  const bands = plugBands.map(([a, b]) => `<rect x="${x(a)}" y="${T}" width="${Math.max(1, x(b) - x(a))}" height="${H1}" fill="var(--good-soft)"/>`).join("");
+  const last = [...samples].reverse().find(p => p.battery_pct != null);
+  return `<svg viewBox="0 0 ${W} ${top2 + H2 + 22}" role="img" aria-label="Bateria e corrente ao longo do dia">
+    ${bands}${g}
+    <path d="${segs("battery_pct", yB)}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    <path d="${segs("current_ma", yC)}" fill="none" stroke="var(--warn)" stroke-width="1.3"/>
+    ${last ? `<circle cx="${x(last.ts)}" cy="${yB(last.battery_pct)}" r="3.5" fill="var(--accent)"/>` : ""}
+    <text x="${L}" y="${T - 8}" style="fill:var(--accent)">bateria % (faixa verde = na tomada)</text>
+    <text x="${L}" y="${top2 - 8}" style="fill:var(--warn)">corrente mA (+ entrando na bateria)</text>
+    ${samples.length ? "" : `<text x="${W / 2}" y="${T + H1 / 2}" text-anchor="middle">Sem amostras neste dia</text>`}
+  </svg>`;
+}
+
+// ------------------------------------------------------------------ dados de demonstracao
+const demo = (() => {
+  const buses = [
+    ["ÔNIBUS 101", "a1f0c2"], ["ÔNIBUS 104", "b7d913"], ["ÔNIBUS 112", "c33e08"],
+    ["ÔNIBUS 118", "d90a55"], ["ÔNIBUS 120", "e41c7b"], ["ÔNIBUS 131", "f2b6a0"]
+  ];
+  const now = Date.now(), m = 60000;
+  const base = (i, over) => Object.assign({
+    device_name: buses[i][0], device_id: buses[i][1], ts: new Date(now - 2 * m).toISOString(),
+    battery_pct: 78, plugged: true, plug_type: "usb", battery_status: "carregando", voltage_mv: 4120,
+    current_ma: 1350, current_raw: 1350000, power_mw: 5562, temp_c: 33.5, hotspot_on: false, hotspot_clients: 0,
+    bt_on: true, bt_connected: null, bt_bonded: "Leitor RFID R20", bt_bonded_count: 1, wifi_on: false, location_on: true,
+    app_version: "0.2.0", screen_on: true, vol_media: 60, vol_ring: 80, ringer_mode: "normal",
+    mobile_bytes_boot: 412e6, mobile_bytes_today: 186e6, tether_bytes_today: 0
+  }, over);
+  const fleet = () => [
+    base(0, {}),
+    base(1, { battery_pct: 64, current_ma: 120, current_raw: 120000, power_mw: 470, plug_type: "usb" }),
+    base(2, { battery_pct: 17, plugged: false, plug_type: "nenhum", battery_status: "descarregando", current_ma: -410, current_raw: -410000, power_mw: -1530, voltage_mv: 3720 }),
+    base(3, { hotspot_on: true, hotspot_clients: 2, mobile_bytes_today: 1.9e9, tether_bytes_today: 1.42e9, battery_pct: 52, plugged: false, plug_type: "nenhum", battery_status: "descarregando", current_ma: -690, power_mw: -2600 }),
+    base(4, { ts: new Date(now - 190 * m).toISOString(), battery_pct: 4, plugged: false, plug_type: "nenhum", battery_status: "descarregando", current_ma: -300, power_mw: -1050 }),
+    base(5, { bt_on: false, vol_media: 0, battery_pct: 91, current_ma: 980, bt_bonded: "Leitor RFID R20, Fone JBL", bt_bonded_count: 2 })
+  ];
+  const ev = (i, minAgo, type, message, pct) => ({ device_id: buses[i][1], device_name: buses[i][0], ts: new Date(now - minAgo * m).toISOString(), type, message, battery_pct: pct });
+  const all = () => [
+    ev(3, 14, "hotspot_clientes", "2 aparelho(s) respondendo no hotspot", 55),
+    ev(3, 22, "hotspot_ligado", "Roteador (hotspot) LIGADO", 58),
+    ev(5, 41, "volume_alterado", "Volume de midia abaixado: 60% -> 0%", 90),
+    ev(5, 43, "bluetooth_desligado", "Bluetooth DESLIGADO", 90),
+    ev(1, 75, "carregador_fraco", "Carregador ligado mas corrente baixa: 120 mA (minimo 300 mA)", 63),
+    ev(1, 78, "leitura_carregador", "Corrente apos 1 min no carregador: 140 mA (0.5 W na bateria)", 63),
+    ev(1, 79, "carregador_conectado", "Colocado para carregar (usb) com 63%", 63),
+    ev(2, 96, "bateria_baixa", "Bateria em 20% e fora do carregador", 20),
+    ev(2, 180, "carregador_desconectado", "Retirado do carregador com 41%", 41),
+    ev(4, 200, "bateria_critica", "Bateria em 10% e fora do carregador", 10),
+    ev(0, 240, "bt_conectado", "Dispositivo Bluetooth conectado: JBL GO 3 (5C:FB:7C:12:9A:40)", 70),
+    ev(0, 300, "desbloqueio", "Tela desbloqueada", 66)
+  ];
+  const alerts = () => all().filter(e => ALERT_TYPES.includes(e.type));
+  function day(id, start) {
+    const i = Math.max(0, buses.findIndex(b => b[1] === id));
+    const f = fleet()[i], samples = [];
+    let pct = 96, seed = i * 7 + 3;
+    const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+    const stop = Math.min(Date.now(), start.getTime() + 864e5);
+    for (let t = start.getTime() + 5 * 3600e3; t < stop; t += 60000) {
+      const h = (t - start.getTime()) / 3600e3;
+      if (h > 12.2 && h < 12.9) continue; // sem sinal por ~40 min
+      const plugged = (h > 6 && h < 11) || (h > 14.5 && i !== 2 && i !== 3);
+      const cur = plugged ? (i === 1 ? 110 + rnd() * 40 : 1100 + rnd() * 400) : -(350 + rnd() * 300);
+      pct = Math.max(1, Math.min(100, pct + cur / 60 / 40));
+      samples.push({ ts: new Date(t).toISOString(), battery_pct: Math.round(pct), plugged, current_ma: Math.round(cur), power_mw: Math.round(cur * 4), voltage_mv: 4000, hotspot_on: false });
+    }
+    return { samples, events: all().filter(e => e.device_id === f.device_id), start, end: new Date(start.getTime() + 864e5) };
+  }
+  // perfis de carga por ônibus para a aba Diagnóstico (gera amostras e usa a mesma análise real)
+  function diag(D) {
+    const plan = i => dayOff => {
+      if (i === 0 || i === 3 || i === 5) return { cur: 1300, rise: 0.3 };      // sempre ok
+      if (i === 1) return { cur: 150, rise: 0.05 };                             // sempre lenta -> revisar
+      if (i === 2) return (dayOff === 1 || dayOff === 3) ? { cur: 180, rise: 0.06 } : { cur: 1250, rise: 0.3 }; // 2 dias lentos -> atenção
+      if (i === 4) return dayOff < 2 ? { cur: 30, rise: 0 } : { cur: 1300, rise: 0.3 };  // 2 dias recentes sem carregar
+      return { cur: 1300, rise: 0.3 };
+    };
+    return fleet().map((s, i) => {
+      const samples = [];
+      for (let dayOff = 0; dayOff < D.windowDays; dayOff++) {
+        const p = plan(i)(dayOff);
+        if (!p) continue;
+        const dateStr = dayKey(Date.now() - dayOff * 864e5);
+        const t0 = new Date(dateStr + "T06:00:00-03:00").getTime();
+        let pct = 40;
+        for (let mm = 0; mm < 300; mm++) {
+          pct = Math.min(100, pct + p.rise);
+          samples.push({ ts: new Date(t0 + mm * 60000).toISOString(), current_ma: Math.round(p.cur + (mm % 7) * 3 - 9), battery_pct: Math.round(pct), plugged: true });
+        }
+      }
+      return analyze(s.device_id, s.device_name, samples, D);
+    });
+  }
+  return { fleet, alerts, day, diag };
+})();
+
+// ------------------------------------------------------------------ abas
+let curView = "frota";
+function switchView(v) {
+  curView = v;
+  document.querySelectorAll("#tabs .tab").forEach(t => t.setAttribute("aria-pressed", String(t.dataset.view === v)));
+  $("#viewFrota").hidden = v !== "frota";
+  $("#viewAparelhos").hidden = v !== "aparelhos";
+  $("#viewEventos").hidden = v !== "eventos";
+  $("#viewDiag").hidden = v !== "diag";
+  $("#viewConfig").hidden = v !== "config";
+  if (v === "aparelhos") loadAparelhos();
+  if (v === "eventos") loadEventos();
+  if (v === "diag") loadDiag();
+  if (v === "config") renderConfig();
+}
+
+// ------------------------------------------------------------------ aba aparelhos (roster: versão + última comunicação)
+let latestCode = null, latestName = null;
+async function fetchLatest() {
+  if (latestCode !== null) return;
+  try {
+    const r = await fetch("app/latest.json", { cache: "no-store" });
+    if (r.ok) { const j = await r.json(); latestCode = j.versionCode ?? null; latestName = j.versionName ?? null; }
+  } catch (e) { /* servido fora do Render (artifact/local): segue sem comparar versão */ }
+}
+async function loadAparelhos() {
+  await fetchLatest();
+  if (mode === "live" && !fleet.length) { try { await refresh(); } catch (e) {} }
+  renderAparelhos();
+}
+function renderAparelhos() {
+  const el = $("#apBody");
+  if (!el) return;
+  $("#apMeta").textContent = `${fleet.length} aparelho(s) cadastrado(s)`;
+  $("#apLatest").textContent = latestName ? `· versão mais recente: ${latestName}` : "";
+  if (!fleet.length) { el.innerHTML = `<div class="empty">Nenhum aparelho ainda. Eles aparecem aqui assim que o app enviar o primeiro dado.</div>`; return; }
+  const rows = fleet.map(s => {
+    const m = minsAgo(s.ts);
+    const sig = m <= ONLINE_MIN ? ["good", "online"] : m <= LATE_MIN ? ["warn", "atrasado"] : ["crit", "sem sinal"];
+    const ver = s.app_version || "–";
+    // versionName do manifesto vem como "0.5.0"; comparamos texto (suficiente para avisar)
+    const old = latestName && ver !== "–" && ver !== latestName;
+    return { s, sig, ver, old, m };
+  }).sort((a, b) => ({ crit: 0, warn: 1, good: 2 }[a.sig[0]] - { crit: 0, warn: 1, good: 2 }[b.sig[0]]) || String(a.s.device_name).localeCompare(b.s.device_name));
+  const body = rows.map(({ s, sig, ver, old }) => `<tr>
+      <td>${esc(s.device_name || s.device_id)}</td>
+      <td class="ver ${old ? "old" : ""}">${esc(ver)}${old ? " · desatualizado" : ""}</td>
+      <td class="mono">${fmtTime(s.ts)}</td>
+      <td class="mono">${ago(s.ts)}</td>
+      <td><span class="pill ${sig[0]}">${sig[1]}</span></td>
+    </tr>`).join("");
+  el.innerHTML = `<table class="aptable">
+      <thead><tr><th>Carro</th><th>Versão do app</th><th>Última comunicação</th><th>Há</th><th>Sinal</th></tr></thead>
+      <tbody>${body}</tbody></table>`;
+}
+
+// ------------------------------------------------------------------ aba eventos (contagem + drill-down)
+let evData = [], evDrill = null, evType = "", evVeh = "";
+function evFiltered() {
+  return evData.filter(e => (!evType || e.type === evType) && (!evVeh || (e.device_name || e.device_id) === evVeh));
+}
+function fillEvFilters() {
+  const labelOf = t => (EVENT_INFO[t] || ["", t])[1];
+  const types = [...new Set(evData.map(e => e.type))].sort((a, b) => labelOf(a).localeCompare(labelOf(b)));
+  const vehs = [...new Set(evData.map(e => e.device_name || e.device_id))].sort();
+  $("#evType").innerHTML = `<option value="">Todos os tipos</option>` +
+    types.map(t => `<option value="${esc(t)}" ${evType === t ? "selected" : ""}>${esc(labelOf(t))}</option>`).join("");
+  $("#evVeh").innerHTML = `<option value="">Todos os veículos</option>` +
+    vehs.map(v => `<option value="${esc(v)}" ${evVeh === v ? "selected" : ""}>${esc(v)}</option>`).join("");
+}
+async function loadEventos() {
+  const days = parseInt($("#evPeriod").value, 10) || 7;
+  $("#evMeta").textContent = "carregando…";
+  try {
+    if (mode === "live") {
+      const since = new Date(Date.now() - days * 864e5).toISOString();
+      const rows = [];
+      for (let from = 0; from < 20000; from += 1000) {
+        const { data, error } = await sb.from("events").select("device_id,device_name,ts,type,message,battery_pct")
+          .gte("ts", since).order("ts", { ascending: false }).range(from, from + 999);
+        if (error) throw error;
+        rows.push(...data);
+        if (data.length < 1000) break;
+      }
+      evData = rows;
+    } else {
+      evData = demo.alerts();
+    }
+    // mantém os filtros só se ainda existirem nos dados novos
+    if (evType && !evData.some(e => e.type === evType)) evType = "";
+    if (evVeh && !evData.some(e => (e.device_name || e.device_id) === evVeh)) evVeh = "";
+    fillEvFilters();
+    $("#evMeta").textContent = `${evData.length} eventos nos últimos ${days} dia(s)`;
+    renderEvCounts();
+  } catch (e) {
+    $("#evMeta").textContent = "Erro ao carregar: " + (e.message || e);
+  }
+}
+function donutSvg(parts) {
+  const total = parts.reduce((a, p) => a + p.v, 0) || 1;
+  const r = 52, C = 2 * Math.PI * r, cx = 70, cy = 70;
+  let off = 0;
+  const segs = parts.filter(p => p.v > 0).map(p => {
+    const len = p.v / total * C;
+    const s = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${p.color}" stroke-width="20"
+        stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"
+        transform="rotate(-90 ${cx} ${cy})" class="seg" data-sev="${p.key}"></circle>`;
+    off += len;
+    return s;
+  }).join("");
+  return `<svg viewBox="0 0 140 140" width="132" height="132" role="img" aria-label="Eventos por gravidade">
+      ${segs || `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--line)" stroke-width="20"/>`}
+      <text x="${cx}" y="${cy - 1}" text-anchor="middle" style="font:600 24px 'IBM Plex Sans Condensed',sans-serif;fill:var(--ink)">${total}</text>
+      <text x="${cx}" y="${cy + 16}" text-anchor="middle" style="font-size:10px;fill:var(--muted)">eventos</text>
+    </svg>`;
+}
+function renderEvChart(list) {
+  const el = $("#evChart");
+  if (!list.length) { el.innerHTML = ""; return; }
+  const sev = { crit: 0, warn: 0, info: 0 };
+  for (const e of list) sev[(EVENT_INFO[e.type] || ["info"])[0]]++;
+  const selS = evDrill && evDrill.s;
+  const parts = [
+    { key: "crit", v: sev.crit, color: "var(--crit)" },
+    { key: "warn", v: sev.warn, color: "var(--warn)" },
+    { key: "info", v: sev.info, color: "var(--muted)" }
+  ];
+  el.innerHTML = `<div class="evchartbox">
+      <div class="donut">${donutSvg(parts)}</div>
+      <div class="evsummary">
+        <div class="tile crit ${selS === "crit" ? "sel" : ""}" data-sev="crit" role="button" tabindex="0"><span class="n">${sev.crit}</span><span class="lbl">Críticos</span></div>
+        <div class="tile warn ${selS === "warn" ? "sel" : ""}" data-sev="warn" role="button" tabindex="0"><span class="n">${sev.warn}</span><span class="lbl">Atenção</span></div>
+        <div class="tile info ${selS === "info" ? "sel" : ""}" data-sev="info" role="button" tabindex="0"><span class="n">${sev.info}</span><span class="lbl">Informativos</span></div>
+      </div>
+    </div>`;
+}
+function renderEvCounts() {
+  const list = evFiltered();
+  renderEvChart(list);
+  const counts = {};
+  for (const e of list) counts[e.type] = (counts[e.type] || 0) + 1;
+  const order = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  $("#evCounts").innerHTML = order.length ? order.map(type => {
+    const [sev, label] = EVENT_INFO[type] || ["info", type];
+    const veh = new Set(list.filter(e => e.type === type).map(e => e.device_id)).size;
+    return `<button type="button" class="evcard ${evDrill && evDrill.t === type ? "sel" : ""}" data-type="${esc(type)}">
+      <span class="n ${sev}">${counts[type]}</span>
+      <span class="lbl">${esc(label)}</span>
+      <span class="sub">${veh} veículo(s)</span></button>`;
+  }).join("") : `<div class="empty">Nenhum evento neste período/filtro.</div>`;
+  // reabre o detalhe que estava aberto; se o tipo/severidade sumiu com o filtro, fecha
+  if (evDrill) renderEvDrill(evDrill);
+  else if (evType) renderEvDrill({ t: evType });
+  else $("#evDetail").hidden = true;
+}
+function evRowsFor(drill) {
+  const base = evFiltered();
+  if (drill.t) return base.filter(e => e.type === drill.t);
+  if (drill.s) return base.filter(e => (EVENT_INFO[e.type] || ["info"])[0] === drill.s);
+  return [];
+}
+function renderEvDrill(drill) {
+  evDrill = drill;
+  const rows = evRowsFor(drill);
+  if (!rows.length) { evDrill = null; $("#evDetail").hidden = true; renderEvChart(evFiltered()); return; }
+  const showType = !!drill.s; // visão por severidade: mostra a coluna Tipo
+  const title = drill.t ? (EVENT_INFO[drill.t] || ["", drill.t])[1]
+    : ({ crit: "Eventos críticos", warn: "Eventos de atenção", info: "Eventos informativos" }[drill.s] || "Eventos");
+  // destaca o cartão e o gráfico
+  document.querySelectorAll(".evcard").forEach(c => c.classList.toggle("sel", !!drill.t && c.dataset.type === drill.t));
+  renderEvChart(evFiltered());
+  const byVeh = {};
+  for (const e of rows) { const k = e.device_name || e.device_id; byVeh[k] = (byVeh[k] || 0) + 1; }
+  const chips = Object.keys(byVeh).sort((a, b) => byVeh[b] - byVeh[a])
+    .map(k => `<span>${esc(k)}: <strong>${byVeh[k]}</strong></span>`).join("");
+  const body = rows.slice(0, 500).map(e => `<tr>
+      <td>${esc(e.device_name || e.device_id)}</td>
+      <td class="num">${fmtTime(e.ts)}</td>
+      ${showType ? `<td>${esc((EVENT_INFO[e.type] || ["", e.type])[1])}</td>` : ""}
+      <td>${esc(e.message || "")}</td></tr>`).join("");
+  const box = $("#evDetail");
+  box.hidden = false;
+  box.innerHTML = `<div class="dhead"><h2>${esc(title)} · ${rows.length}</h2>
+      <button class="btn" type="button" id="evClose">Fechar</button></div>
+    <span class="label">Por veículo</span><div class="byveh">${chips}</div>
+    <span class="label">Ocorrências${rows.length > 500 ? " (mostrando as 500 mais recentes)" : ""}</span>
+    <table><thead><tr><th>Veículo</th><th>Dia e hora</th>${showType ? "<th>Tipo</th>" : ""}<th>Descrição</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// ------------------------------------------------------------------ aba diagnóstico (carga lenta por período)
+// Regra: um "dia de carga lenta" = o carro ficou >= diag_min_plug_min minutos na tomada
+// e, na maior parte desse tempo (>= diag_weak_frac), a corrente ficou abaixo do mínimo.
+// "Dia sem carregar" = ficou na tomada o tempo mínimo e a bateria praticamente não subiu (<=2%).
+// Alerta: carga lenta em >= diag_crit_days dias = revisar; >= diag_attn_days = atenção;
+// OU >= diag_nocharge_consec dias seguidos sem carregar = urgente.
+function dlimits() {
+  const g = (deviceConfig && deviceConfig["*"]) || {};
+  return {
+    windowDays: parseInt($("#diagPeriod") && $("#diagPeriod").value, 10) || g.diag_window_days || 7,
+    minPlugMin: g.diag_min_plug_min ?? 30,
+    weakFrac: g.diag_weak_frac ?? 0.6,
+    attnDays: g.diag_attn_days ?? 2,
+    critDays: g.diag_crit_days ?? 3,
+    noChargeConsec: g.diag_nocharge_consec ?? 2,
+    minCur: g.min_current_ma ?? 300
+  };
+}
+const dayKey = d => new Date(d).toLocaleDateString("en-CA", { timeZone: TZ });
+function fmtDay(key) { const p = String(key).split("-"); return p.length === 3 ? `${p[2]}/${p[1]}` : key; }
+
+function analyze(id, name, samples, D) {
+  const byDay = {};
+  for (const p of samples) { const k = dayKey(p.ts); (byDay[k] = byDay[k] || []).push(p); }
+  const dates = [];
+  for (let i = D.windowDays - 1; i >= 0; i--) dates.push(dayKey(Date.now() - i * 864e5));
+  const days = dates.map(date => {
+    const ps = (byDay[date] || []).slice().sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    const plugMin = ps.length; // ~1 amostra por minuto enquanto na tomada
+    let weakMin = 0;
+    for (const p of ps) if (p.current_ma != null && p.current_ma < D.minCur) weakMin++;
+    // melhor ganho de bateria entre as sessões do dia (corta sessão em buraco > 5 min)
+    let gain = 0, sStart = null, prev = null;
+    for (const p of ps) {
+      if (!prev || (new Date(p.ts) - new Date(prev.ts)) > 5 * 60000) sStart = p.battery_pct;
+      if (sStart != null && p.battery_pct != null) gain = Math.max(gain, p.battery_pct - sStart);
+      prev = p;
+    }
+    const hadData = plugMin >= D.minPlugMin;
+    const weakFrac = plugMin ? weakMin / plugMin : 0;
+    const slow = hadData && weakFrac >= D.weakFrac;
+    const noCharge = hadData && gain <= 2;
+    return { date, plugMin, weakMin, weakFrac, gain, hadData, slow, noCharge };
+  });
+  const slowCount = days.filter(d => d.slow).length;
+  let streak = 0, best = 0;
+  for (const d of days) { if (d.noCharge) { streak++; best = Math.max(best, streak); } else streak = 0; }
+  const noDates = days.filter(d => d.noCharge).map(d => fmtDay(d.date));
+  let level = "ok", reason;
+  if (best >= D.noChargeConsec) { level = "crit"; reason = `Não carregou em ${best} dias seguidos (${noDates.slice(-best).join(", ")}). Revisar o carregador/cabo urgente.`; }
+  else if (slowCount >= D.critDays) { level = "crit"; reason = `Carga lenta em ${slowCount} dos últimos ${D.windowDays} dias. Revisar o carro.`; }
+  else if (slowCount >= D.attnDays) { level = "warn"; reason = `Carga lenta em ${slowCount} dos últimos ${D.windowDays} dias. Vale acompanhar.`; }
+  else if (slowCount >= 1) { level = "ok"; reason = `Carga lenta em ${slowCount} dia. Dentro do normal por enquanto.`; }
+  else reason = `Carregamento ok nos últimos ${D.windowDays} dias.`;
+  return { id, name, days, slowCount, noChargeStreak: best, level, reason };
+}
+
+async function fetchPlugged(id, D) {
+  const since = new Date(Date.now() - D.windowDays * 864e5).toISOString();
+  const rows = [];
+  for (let from = 0; from < 15000; from += 1000) {
+    const { data, error } = await sb.from("samples")
+      .select("ts,current_ma,battery_pct,plugged")
+      .eq("device_id", id).eq("plugged", true).gte("ts", since)
+      .order("ts").range(from, from + 999);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < 1000) break;
+  }
+  return rows;
+}
+
+async function loadDiag() {
+  const D = dlimits();
+  $("#diagMeta").textContent = "analisando…";
+  try {
+    let results;
+    if (mode === "live") {
+      results = await Promise.all(fleet.map(async s => {
+        const samples = await fetchPlugged(s.device_id, D);
+        return analyze(s.device_id, s.device_name || s.device_id, samples, D);
+      }));
+    } else {
+      results = demo.diag(D);
+    }
+    $("#diagMeta").textContent = `${results.length} carro(s) · janela de ${D.windowDays} dias`;
+    renderDiag(results, D);
+  } catch (e) {
+    $("#diagMeta").textContent = "Erro ao analisar: " + (e.message || e);
+  }
+}
+
+function renderDiag(results, D) {
+  const rank = { crit: 0, warn: 1, ok: 2 };
+  results.sort((a, b) => rank[a.level] - rank[b.level] || b.slowCount - a.slowCount || String(a.name).localeCompare(b.name));
+  const crit = results.filter(r => r.level === "crit");
+  const warn = results.filter(r => r.level === "warn");
+  const ok = results.filter(r => r.level === "ok");
+  const head = `<div class="diag-head">
+    <div class="tile crit"><span class="n">${crit.length}</span><span class="lbl">Revisar o carro</span></div>
+    <div class="tile warn"><span class="n">${warn.length}</span><span class="lbl">Acompanhar</span></div>
+    <div class="tile good"><span class="n">${ok.length}</span><span class="lbl">Sem problema de carga</span></div>
+  </div>`;
+  const affected = crit.concat(warn);
+  let cards;
+  if (affected.length) {
+    cards = affected.map(r => diagCard(r, D)).join("");
+  } else {
+    cards = `<div class="diagcard"><div class="diag-ok"><b>Nenhum carro precisa de revisão</b> pela carga nos últimos ${D.windowDays} dias. ✅</div></div>`;
+  }
+  const okLine = ok.length
+    ? `<div class="diag-ok" style="margin-top:4px">Sem alerta: ${ok.map(r => esc(r.name)).join(", ")}.</div>`
+    : "";
+  $("#diagBody").innerHTML = head + cards + okLine;
+}
+
+function diagCard(r, D) {
+  const pill = r.level === "crit"
+    ? `<span class="pill crit">Revisar o carro</span>`
+    : `<span class="pill warn">Acompanhar</span>`;
+  const strip = r.days.map(d => {
+    let cls = "muted", tag = "sem tomada";
+    if (d.noCharge) { cls = "crit"; tag = "não carregou"; }
+    else if (d.slow) { cls = "warn"; tag = "lenta"; }
+    else if (d.hadData) { cls = "good"; tag = "ok"; }
+    return `<span class="d ${cls}"><span class="dd">${fmtDay(d.date)}</span><span class="tag">${tag}</span></span>`;
+  }).join("");
+  const probDays = r.days.filter(d => d.slow || d.noCharge);
+  const detail = probDays.length ? `<ul class="diag-detail">${probDays.map(d => {
+    const mins = Math.round(d.plugMin);
+    const pctWeak = Math.round(d.weakFrac * 100);
+    return `<li>${fmtDay(d.date)}: ${mins} min na tomada, ${pctWeak}% do tempo abaixo de ${D.minCur} mA, bateria subiu ${d.gain}%${d.noCharge ? " (praticamente não carregou)" : ""}.</li>`;
+  }).join("")}</ul>` : "";
+  return `<div class="diagcard ${r.level}">
+    <div class="dhead"><span class="dname">${esc(r.name)}</span>${pill}</div>
+    <div class="diag-reason">${esc(r.reason)}</div>
+    <div class="daystrip">${strip}</div>
+    ${detail}</div>`;
+}
+
+// ------------------------------------------------------------------ aba configurações (limites globais)
+function renderConfig() {
+  const g = (deviceConfig && deviceConfig["*"]) || {};
+  const dis = mode !== "live" ? "disabled" : "";
+  const num = (k, def) => g[k] ?? def;
+  $("#cfgGlobal").innerHTML = `<div class="cfgcard">
+    <span class="label">Limites padrão da frota (valem para todos os ônibus)</span>
+    <p class="cfg-hint">Definem quando um celular "chama a atenção". Cada ônibus pode ter ajuste próprio na aba Frota, abrindo o detalhe dele. O celular aplica em até 30 min ou ao reiniciar.</p>
+    <div class="cfggrid">
+      <label>Bateria — atenção (%)<input type="number" id="gWarn" value="${num("batt_warn_pct", 20)}" ${dis}></label>
+      <label>Bateria — crítico (%)<input type="number" id="gCrit" value="${num("batt_crit_pct", 10)}" ${dis}></label>
+      <label>Corrente mínima (mA)<input type="number" id="gCur" value="${num("min_current_ma", 300)}" ${dis}></label>
+      <label>Potência mínima (W)<input type="number" step="0.1" id="gPow" value="${(num("min_power_mw", 0) / 1000) || 0}" ${dis}></label>
+      <label>Tensão mínima bateria (mV)<input type="number" id="gVolt" value="${num("min_voltage_mv", 0)}" ${dis}></label>
+      <label>Volume alvo (%)<input type="number" id="gVolT" value="${num("volume_target_pct", 100)}" ${dis}></label>
+      <label>Forçar volume alto<select id="gVolF" ${dis}><option value="0" ${g.force_volume ? "" : "selected"}>não</option><option value="1" ${g.force_volume ? "selected" : ""}>sim</option></select></label>
+      <label>Religar Bluetooth (Android ≤12)<select id="gBt" ${dis}><option value="0" ${g.force_bluetooth ? "" : "selected"}>não</option><option value="1" ${g.force_bluetooth ? "selected" : ""}>sim</option></select></label>
+    </div>
+    <div class="cfg-hint">Potência e tensão em 0 = não verifica. Corrente abaixo do mínimo (ou potência/tensão abaixo, se definidas) marca "carregador fraco".</div>
+    <span class="label" style="display:block;margin-top:18px">Diagnóstico de carga lenta (aba Diagnóstico)</span>
+    <p class="cfg-hint">Quando um carro vira alerta de revisão. Um "dia de carga lenta" = ficou o tempo mínimo na tomada e, na maior parte desse tempo, a corrente ficou abaixo do mínimo acima.</p>
+    <div class="cfggrid">
+      <label>Dias de carga lenta → acompanhar<input type="number" id="dAttn" value="${num("diag_attn_days", 2)}" ${dis}></label>
+      <label>Dias de carga lenta → revisar o carro<input type="number" id="dCrit" value="${num("diag_crit_days", 3)}" ${dis}></label>
+      <label>Dias seguidos sem carregar → urgente<input type="number" id="dNo" value="${num("diag_nocharge_consec", 2)}" ${dis}></label>
+      <label>Mínimo na tomada p/ contar o dia (min)<input type="number" id="dPlug" value="${num("diag_min_plug_min", 30)}" ${dis}></label>
+      <label>% do tempo abaixo do mínimo p/ "lenta"<input type="number" id="dFrac" value="${Math.round(num("diag_weak_frac", 0.6) * 100)}" ${dis}></label>
+    </div>
+    <div style="margin-top:12px"><button class="btn primary" type="button" id="gSave" ${dis}>Salvar limites</button>
+      <span class="calib-note" id="gMsg">${mode === "live" ? "" : "Disponível ao conectar o Supabase."}</span></div>
+  </div>`;
+  const btn = $("#gSave");
+  if (btn) btn.addEventListener("click", saveConfig);
+}
+async function saveConfig() {
+  const g = Object.assign({}, deviceConfig["*"] || {}, {
+    batt_warn_pct: parseInt($("#gWarn").value, 10) || 20,
+    batt_crit_pct: parseInt($("#gCrit").value, 10) || 10,
+    min_current_ma: parseInt($("#gCur").value, 10) || 0,
+    min_power_mw: Math.round((parseFloat($("#gPow").value) || 0) * 1000),
+    min_voltage_mv: parseInt($("#gVolt").value, 10) || 0,
+    volume_target_pct: parseInt($("#gVolT").value, 10) || 100,
+    force_volume: $("#gVolF").value === "1",
+    force_bluetooth: $("#gBt").value === "1",
+    diag_attn_days: parseInt($("#dAttn").value, 10) || 2,
+    diag_crit_days: parseInt($("#dCrit").value, 10) || 3,
+    diag_nocharge_consec: parseInt($("#dNo").value, 10) || 2,
+    diag_min_plug_min: parseInt($("#dPlug").value, 10) || 30,
+    diag_weak_frac: Math.min(1, Math.max(0.1, (parseFloat($("#dFrac").value) || 60) / 100))
+  });
+  $("#gMsg").textContent = "Salvando…";
+  const { error } = await sb.from("device_config").upsert({ device_id: "*", label: "Padrão da frota", config: g, updated_at: new Date().toISOString() });
+  if (error) { $("#gMsg").textContent = "Erro: " + error.message; return; }
+  deviceConfig["*"] = g;
+  $("#gMsg").textContent = "Salvo. Os celulares aplicam em até 30 min ou ao reiniciar.";
+}
+
+// ------------------------------------------------------------------ interacoes
+document.querySelectorAll("#tabs .tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
+$("#evPeriod").addEventListener("change", loadEventos);
+$("#diagPeriod").addEventListener("change", loadDiag);
+$("#evType").addEventListener("change", e => { evType = e.target.value; evDrill = evType ? { t: evType } : null; renderEvCounts(); });
+$("#evVeh").addEventListener("change", e => { evVeh = e.target.value; renderEvCounts(); });
+$("#evCounts").addEventListener("click", e => { const c = e.target.closest(".evcard"); if (c) renderEvDrill({ t: c.dataset.type }); });
+$("#evChart").addEventListener("click", e => {
+  const sevEl = e.target.closest("[data-sev]"); if (sevEl) renderEvDrill({ s: sevEl.dataset.sev });
+});
+$("#evDetail").addEventListener("click", e => { if (e.target.id === "evClose") { evDrill = null; $("#evDetail").hidden = true; renderEvCounts(); } });
+$("#grid").addEventListener("click", e => { const c = e.target.closest(".card"); if (c) openDetail(c.dataset.id); });
+$("#detail").addEventListener("change", e => { if (e.target.id === "dDay") openDetail(selected, e.target.value); });
+$("#detail").addEventListener("click", e => { if (e.target.id === "dClose") { selected = null; $("#detail").hidden = true; render(); } });
+$("#q").addEventListener("input", render);
+document.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => {
+  filter = b.dataset.f;
+  document.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  render();
+}));
+$("#btnRefresh").addEventListener("click", refresh);
+$("#btnConfig").addEventListener("click", () => { const c = conn(); $("#cfgUrl").value = c.url; $("#cfgKey").value = c.key; $("#dlgConfig").showModal(); });
+$("#formConfig").addEventListener("submit", () => { store.set("mf_url", $("#cfgUrl").value.trim()); store.set("mf_key", $("#cfgKey").value.trim()); init(); });
+$("#cfgDemo").addEventListener("click", () => { store.set("mf_url", ""); store.set("mf_key", ""); $("#dlgConfig").close(); init(); });
+$("#formLogin").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("#loginErr").textContent = "";
+  const code = $("#loginCode").value.trim();
+  if (!(await codeOk(code))) { $("#loginErr").textContent = "Código incorreto."; return; }
+  unlocked = true;
+  $("#loginCode").value = "";
+  $("#dlgLogin").close();
+  init();
+});
+$("#btnLogout").addEventListener("click", () => { location.reload(); });
+setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+init();
+</script>
