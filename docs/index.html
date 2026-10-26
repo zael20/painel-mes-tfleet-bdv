@@ -744,7 +744,7 @@ function render() {
     if (filter === "semsinal") return a.signal === "semsinal";
     if (filter === "hotspot") return s.hotspot_on;
     return true;
-  }).sort((x, y) => ({ crit: 0, warn: 1, good: 2 }[x.a.level] - { crit: 0, warn: 1, good: 2 }[y.a.level]) || String(x.s.device_name).localeCompare(y.s.device_name));
+  }).sort((x, y) => String(x.s.device_name).localeCompare(String(y.s.device_name), undefined, { numeric: true }));   // ordem por número do ônibus (2 antes de 10)
 
   $("#grid").innerHTML = shown.length ? shown.map(({ s, a }) => card(s, a)).join("")
     : `<div class="empty">Nenhum celular neste filtro.</div>`;
