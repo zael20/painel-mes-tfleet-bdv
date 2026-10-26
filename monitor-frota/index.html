@@ -228,6 +228,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 
 /* visualizador de rota (mapa) */
 .routeov { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: flex; flex-direction: column; }
+.routeov[hidden] { display: none; }   /* o "display:flex" acima sobrepunha o atributo hidden — sem isto o Fechar não escondia */
 .routebar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .routebar h3 { margin: 0; font-size: 15px; flex: 0 0 auto; }
 .routebar .grow { flex: 1 1 120px; }
@@ -598,12 +599,12 @@ function ensureRouteOverlay() {
   return ov;
 }
 
-async function openRoute(id, day) {
+async function openRoute(id, day, focusNow) {
   if (!id) return;
   const ov = ensureRouteOverlay();
   const s = fleet.find(x => x.device_id === id);
   day = day || new Date().toLocaleDateString("en-CA", { timeZone: TZ });
-  ov.querySelector("#routeTitle").textContent = `Mapa · ${(s && s.device_name) || id} · ${day.split("-").reverse().join("/")}`;
+  ov.querySelector("#routeTitle").textContent = `${focusNow ? "Posição" : "Mapa"} · ${(s && s.device_name) || id} · ${day.split("-").reverse().join("/")}`;
   ov.hidden = false;
   const sel = ov.querySelector("#routeSel"), info = ov.querySelector("#routeInfo");
   sel.innerHTML = ""; info.textContent = "Carregando…";
@@ -642,8 +643,15 @@ async function openRoute(id, day) {
         routeMap.setView([now.lat, now.lon], 16);
         info.textContent = "Sem rota gravada neste dia. Mostrando a última posição do carro.";
       } else {
-        info.textContent = "Ainda não há posição deste carro. Verifique se ele está na 0.6.1, com a localização \"o tempo todo\" liberada e o SQL rodado.";
+        info.textContent = "Ainda não há posição deste carro. O GPS precisa ter pegado sinal (céu aberto) com a localização \"o tempo todo\" liberada.";
       }
+    }
+    // "Posição agora": centra sempre na última posição, mesmo que haja rota desenhada.
+    if (focusNow && now) {
+      routeMap.setView([now.lat, now.lon], 16);
+      info.textContent = `Última posição: ${fmtTime(now.ts)}${now.speed_kmh ? " · " + now.speed_kmh + " km/h" : " · parado"}`;
+    } else if (focusNow && !now) {
+      info.textContent = "Ainda não há posição deste carro (o GPS ainda não pegou sinal).";
     }
   } catch (e) {
     info.textContent = "Erro ao carregar o mapa: " + (e.message || e);
@@ -802,7 +810,7 @@ async function openDetail(id, day) {
   try {
     const d = await loadDay(id, day);
     box.innerHTML = `<div class="dhead"><div><span class="label">Detalhe · ${esc(s.device_id)}</span><h2>${esc(s.device_name || id)}</h2></div>
-      <div class="toolbar"><input type="date" id="dDay" value="${day}" aria-label="Dia"><button class="btn" type="button" id="dRoute">Ver no mapa</button><button class="btn" type="button" id="dClose">Fechar</button></div></div>
+      <div class="toolbar"><input type="date" id="dDay" value="${day}" aria-label="Dia"><button class="btn" type="button" id="dPos">Posição agora</button><button class="btn" type="button" id="dRoute">Ver rota</button><button class="btn" type="button" id="dClose">Fechar</button></div></div>
       <div><span class="label">Bateria (%) e corrente na bateria (mA) no dia · faixas em branco = sem dados</span>
       <div class="chartbox">${dayChart(d, Math.max(560, Math.round(box.clientWidth - 34)))}</div></div>
       <div class="cols">
@@ -1412,7 +1420,8 @@ $("#grid").addEventListener("click", e => { const c = e.target.closest(".card");
 $("#detail").addEventListener("change", e => { if (e.target.id === "dDay") openDetail(selected, e.target.value); });
 $("#detail").addEventListener("click", e => {
   if (e.target.id === "dClose") { selected = null; $("#detail").hidden = true; render(); }
-  if (e.target.id === "dRoute") openRoute(selected, $("#dDay")?.value);
+  if (e.target.id === "dRoute") openRoute(selected, $("#dDay")?.value, false);
+  if (e.target.id === "dPos") openRoute(selected, $("#dDay")?.value, true);
 });
 $("#q").addEventListener("input", render);
 document.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => {
