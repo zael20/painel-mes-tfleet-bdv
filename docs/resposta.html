@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Confirmação de rota</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#17212b">
+<style>
+/* Pagina aberta pelos botoes do e-mail ao supervisor. Mostra o caso, deixa trocar a opcao e escrever, e so grava ao confirmar. */
+:root { --bg: #eef1f4; --panel: #fff; --ink: #17212b; --muted: #5b6875; --line: #d5dce3; --accent: #0d6c8c; --accent-soft: #e0eff4; --good: #2e7d32; --good-soft: #e8f5e9; --warn: #b26a00; --warn-soft: #fff4e0; --crit: #c62828; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742; --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f; --warn: #e7a443; --warn-soft: #36280f; --crit: #f07b72; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742; --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f; --warn: #e7a443; --warn-soft: #36280f; --crit: #f07b72; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+header { background: #17212b; color: #fff; padding: 16px; }
+header small { color: #93a1ae; letter-spacing: .06em; font-size: 12px; }
+header h1 { margin: 2px 0 0; font-size: 20px; }
+main { max-width: 560px; margin: 0 auto; padding: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.nome { font-size: 20px; font-weight: 700; }
+.muted { color: var(--muted); font-size: 14px; }
+.tag { display: inline-block; background: var(--warn-soft); color: var(--warn); font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-bottom: 6px; }
+fieldset { border: 0; padding: 0; margin: 16px 0 0; }
+legend { font-weight: 700; margin-bottom: 8px; }
+.opt { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.opt input { width: 20px; height: 20px; accent-color: var(--accent); }
+textarea { width: 100%; min-height: 90px; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 6px; }
+button { width: 100%; margin-top: 14px; font-family: inherit; font-weight: 600; font-size: 16px; padding: 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+button:disabled { opacity: .6; }
+.ok { background: var(--good-soft); color: var(--good); border-radius: 10px; padding: 16px; font-weight: 600; }
+.err { color: var(--crit); margin-top: 10px; }
+</style>
+</head>
+<body>
+<header><small>MONITOR FROTA · TRANSPORTE</small><h1>Confirmação de rota</h1></header>
+<main><div id="app" class="card">Carregando…</div></main>
+<script>
+// Conexao publica do painel: a pagina so consegue ver/responder a consulta do token do link.
+const CONFIG = { url: "https://orhuxmsrdnugpogvtnbg.supabase.co", key: "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL" };
+const OPCOES = [
+  ["TREINAMENTO", "Treinamento / temporário"], ["MUDOU_ENDERECO", "Mudou de endereço (vai permanecer)"],
+  ["MUDOU_TURNO", "Mudou de turno / escala"], ["COBERTURA", "Cobertura (férias / folga)"],
+  ["NAO_SEI", "Não sei, vou verificar"], ["OUTRO", "Outro motivo"]];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const dt = d => d ? String(d).slice(0, 10).split("-").reverse().join("/") : "";
+const sem = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s*-\s*PASSAGEIRO\s*$/, "").trim();
+const grupo = t => { const n = sem(t); return /^CT\s*-?\s*\d/.test(n) ? "terceiros (CT)" : /(^|[^A-Z])ADM([^A-Z]|$)/.test(n) ? "ADM" : /TURNO/.test(n) ? "turno" : null; };
+
+async function rpc(fn, body) {
+  const r = await fetch(CONFIG.url + "/rest/v1/rpc/" + fn, { method: "POST",
+    headers: { apikey: CONFIG.key, Authorization: "Bearer " + CONFIG.key, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const txt = await r.text();
+  if (!r.ok) { let m = txt; try { m = JSON.parse(txt).message || txt; } catch (e) {} throw new Error(m); }
+  return txt ? JSON.parse(txt) : null;
+}
+
+(async () => {
+  const p = new URLSearchParams(location.search), token = p.get("t"), pre = p.get("r");
+  if (!/^[0-9a-f-]{36}$/i.test(token || "")) { $("#app").textContent = "Link inválido. Abra pelo botão do e-mail."; return; }
+  let c;
+  try { c = (await rpc("consulta_ver", { p_token: token }))[0]; } catch (e) { $("#app").textContent = "Não consegui carregar: " + e.message; return; }
+  if (!c) { $("#app").textContent = "Consulta não encontrada ou expirada."; return; }
+  const gc = grupo(c.linha_cadastro), gu = grupo(c.linha_usada);
+  const sel = c.resposta || pre || "";
+  $("#app").innerHTML = `
+    ${gc && gu && gc !== gu ? `<span class="tag">POSSÍVEL MUDANÇA DE ${esc(gc).toUpperCase()} PARA ${esc(gu).toUpperCase()}</span>` : ""}
+    <div class="nome">${esc(c.nome)}</div>
+    <div class="muted">Matrícula ${esc(c.matricula)} · ${esc(c.tipopassageiro || "")} · ${esc(c.ga || "")}</div>
+    <p>Está embarcando na <b>${esc(c.linha_usada)}</b> (${esc(c.sentido || "")}) há <b>${c.dias} dias</b> (${dt(c.primeiro)} a ${dt(c.ultimo)}).<br>
+      <span class="muted">Cadastrado em: ${esc(c.linha_cadastro || "sem linha")}</span></p>
+    ${c.respondido_em ? `<div class="ok" style="margin-bottom:8px">Já respondido em ${dt(c.respondido_em)}. Pode alterar abaixo.</div>` : ""}
+    <form id="f">
+      <fieldset><legend>Por que está nessa rota?</legend>
+        ${OPCOES.map(([k, t]) => `<label class="opt"><input type="radio" name="r" value="${k}" ${k === sel ? "checked" : ""}> ${t}</label>`).join("")}
+      </fieldset>
+      <label for="obs" class="muted">Observação ${sel === "OUTRO" ? "(obrigatória)" : "(opcional)"}</label>
+      <textarea id="obs" maxlength="1000" placeholder="Ex.: treinamento até 05/11; depois volta para a rota de cadastro">${esc(c.comentario || "")}</textarea>
+      <button id="b">Enviar resposta</button>
+      <div id="e" class="err"></div>
+    </form>`;
+  $("#f").addEventListener("change", () => {
+    $('label[for="obs"]').textContent = "Observação " + ($('input[name="r"]:checked')?.value === "OUTRO" ? "(obrigatória)" : "(opcional)");
+  });
+  $("#f").addEventListener("submit", async e => {
+    e.preventDefault();
+    const r = $('input[name="r"]:checked')?.value, obs = $("#obs").value.trim();
+    if (!r) { $("#e").textContent = "Escolha uma opção."; return; }
+    if (r === "OUTRO" && !obs) { $("#e").textContent = "Escreva o motivo."; $("#obs").focus(); return; }
+    $("#b").disabled = true; $("#b").textContent = "Enviando…"; $("#e").textContent = "";
+    try {
+      await rpc("consulta_responder", { p_token: token, p_resposta: r, p_comentario: obs || null });
+      $("#app").innerHTML = `<div class="ok">Resposta registrada. Obrigado!</div><p class="muted">${esc(c.nome)} · ${esc(OPCOES.find(o => o[0] === r)[1])}${obs ? " — " + esc(obs) : ""}</p>`;
+    } catch (err) { $("#b").disabled = false; $("#b").textContent = "Enviar resposta"; $("#e").textContent = "Não enviou: " + err.message; }
+  });
+})();
+</script>
+</body>
+</html>

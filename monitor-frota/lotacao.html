@@ -37,12 +37,23 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 .bar label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 3px; }
 .bar select, .bar input { font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); }
 .bar input[type=search] { min-width: 200px; }
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-.kpi b { display: block; font: 600 26px var(--f-display); font-variant-numeric: tabular-nums; }
+.kpi b { display: block; font: 600 30px var(--f-display); font-variant-numeric: tabular-nums; }
+.kpi.info b { color: var(--accent); }
 .kpi span { font-size: 12px; color: var(--muted); }
 .kpi.crit b { color: var(--crit); } .kpi.warn b { color: var(--warn); }
-.list { display: flex; flex-direction: column; gap: 8px; }
+.list { display: flex; flex-direction: column; gap: 10px; }
+.big { display: flex; flex-wrap: wrap; gap: 2px 18px; margin-top: 8px; align-items: baseline; }
+.big b { font: 600 26px var(--f-display); font-variant-numeric: tabular-nums; color: var(--ink); }
+.big span { color: var(--muted); font-size: 13px; }
+.dias { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.dia { width: 44px; border-radius: 5px; text-align: center; padding: 3px 0; line-height: 1.1; }
+.dia b { display: block; font: 600 15px var(--f-body); }
+.dia small { font-size: 10px; opacity: .85; }
+.d-r { background: #c62828; color: #fff; } .d-a { background: #f5b301; color: #17212b; } .d-v { background: #2e7d32; color: #fff; }
+.acao { margin-top: 8px; font-weight: 600; }
+.mais { margin-top: 6px; font-size: 13px; color: var(--accent); }
 .row { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
 .row.s-rec { border-left-color: var(--crit); } .row.s-freq { border-left-color: var(--warn); }
 .row.s-pico, .row.s-perto { border-left-color: var(--accent); } .row.s-ok { border-left-color: var(--good); }
@@ -50,7 +61,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 .top .nome { font: 600 16px var(--f-display); }
 .star { background: none; border: 0; padding: 0 2px; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; }
 .star.on { color: var(--warn); }
-.top .meta { color: var(--muted); font-size: 13px; }
+.meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
 .chip { font: 600 11px var(--f-body); padding: 2px 8px; border-radius: 99px; letter-spacing: .03em; }
 .s-rec .chip { background: var(--crit-soft); color: var(--crit); } .s-freq .chip { background: var(--warn-soft); color: var(--warn); }
 .s-pico .chip, .s-perto .chip { background: var(--accent-soft); color: var(--accent); } .s-ok .chip { background: var(--good-soft); color: var(--good); }
@@ -89,25 +100,28 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 </head>
 <body>
 <div id="gate"><form id="gateForm"><b>Lotação das rotas</b><input id="gateCode" type="password" inputmode="numeric" placeholder="Código de acesso" autocomplete="off"><button>Entrar</button><small id="gateErr" style="color:var(--crit)"></small></form></div>
-<header><h1>Lotação das rotas</h1><p>Passageiros por viagem (API TFleet) por linha, sentido e horário de saída</p></header>
+<header><h1>Lotação das rotas</h1><p>Quais ônibus estão passando de 40 pessoas e o que fazer</p></header>
 <main>
   <div class="bar">
-    <label>Período<select id="fDias"><option value="7">7 dias</option><option value="15">15 dias</option><option value="14">14 dias</option><option value="30">30 dias</option><option value="60" selected>60 dias</option><option value="90">90 dias</option></select></label>
+    <label>Período<select id="fDias"><option value="7">7 dias</option><option value="14" selected>2 semanas</option><option value="30">30 dias</option><option value="60">60 dias</option></select></label>
     <label>Ideal<input id="fCap" type="number" min="1" value="40" style="width:80px"></label>
     <label>Lugares<input id="fLug" type="number" min="1" value="45" style="width:80px"></label>
+    <label>Grupo<select id="fGrupo"><option value="">Todos</option><option value="ADM">ADM</option><option value="CT">CT (terceiros)</option><option value="TURNO">Turno</option><option value="OUTRO">Outros</option></select></label>
     <label>Mostrar<select id="fStatus"><option value="prob" selected>Só com alerta</option><option value="mon">Só monitoradas</option><option value="all">Todas</option></select></label>
     <label>Buscar linha<input id="fBusca" type="search" placeholder="ex.: CT6, JK, ônibus 39"></label>
     <button id="btnGest" type="button" class="btn">Gestores</button>
   </div>
   <section id="gest" hidden>
     <h2>Gestores por gerência</h2>
-    <p class="muted">As gerências aparecem sozinhas a partir dos embarques. Preencha o e-mail do gestor e marque "envia" para ele receber a lista dos colaboradores da gerência usando linha diferente da cadastrada (com você em cópia). Para ver e salvar e-mails, use a senha de gestores definida no Supabase.</p>
+    <p class="muted">As gerências aparecem sozinhas a partir dos embarques. Preencha o e-mail do gestor e marque "envia" para ele receber as consultas de quem está usando rota diferente da cadastrada (você vai em cópia). Use a senha de gestores.</p>
     <div class="bar"><label>Senha de gestores<input id="gSenha" type="password" autocomplete="off"></label><button id="gEntrar" type="button" class="btn">Abrir</button><span id="gMsg" class="muted"></span></div>
     <div id="gLista"></div>
+    <h2 style="margin-top:16px">Respostas dos supervisores</h2>
+    <div id="gResp" class="muted">Abra com a senha para ver.</div>
   </section>
   <div class="kpis" id="kpis"></div>
   <div class="list" id="list"><div class="msg">Carregando…</div></div>
-  <p class="note">Ocupação = campo "ocupacao" da viagem no BDV (passageiros identificados na viagem). Ideal = limite para manter 5 vagas livres; lugares = assentos do ônibus. Viagens com 0 contam como "sem leitura" e ficam fora das médias. Horário agrupado pelo horário previsto do turno (API); sem previsto, faixa de 30 min da saída real. "Recorrente" só com 3+ viagens. A linha "vizinha" é só do mesmo turno/sentido/horário: confira se os pontos são compatíveis antes de remanejar.</p>
+  <p class="note">Média = passageiros identificados por viagem (BDV). Ideal = 40, deixando 5 vagas dos 45 lugares. Quadradinhos = um por dia: vermelho passou de 40, amarelo de 36 a 40, verde abaixo. Rota alternativa só é sugerida dentro do mesmo grupo (ADM com ADM, CT com CT, turno com turno), com ponto a até 400 m e embarque em horário parecido; confira com a operação antes de mudar.</p>
 </main>
 <script>
 // Mesma conexao publica do painel (so leitura).
@@ -135,71 +149,72 @@ async function api(path, body) {
   return r.json();
 }
 
-let rows = [], alts = [], resumo = [], monit = new Set(), gSenha = "";
+let rows = [], alts = [], resumo = [], diasR = [], monit = new Set(), gSenha = "";
 async function load() {
   $("#list").innerHTML = '<div class="msg">Carregando…</div>';
   try {
     const dias = +$("#fDias").value, capacidade = +$("#fCap").value || 40;
-    [rows, alts, resumo] = await Promise.all([
+    [rows, alts, resumo, diasR] = await Promise.all([
       api("rpc/lotacao_rotas", { dias, capacidade, lugares: +$("#fLug").value || 45 }),
       api("rpc/lotacao_alternativas", { dias, capacidade, raio_m: 400 }).catch(() => []),
-      api("rpc/fora_rota_resumo", { dias, min_dias: 3 }).catch(() => [])]);
+      api("rpc/fora_rota_resumo", { dias, min_dias: 3 }).catch(() => []),
+      api("rpc/lotacao_dias", { dias }).catch(() => [])]);
     monit = new Set((await api("rotas_monitoradas?select=linha").catch(() => [])).map(m => m.linha));
     render();
   } catch (e) {
     $("#kpis").innerHTML = "";
-    $("#list").innerHTML = '<div class="msg">Não consegui ler os dados (' + esc(e.message) + '). Se aparecer 404, falta rodar o <b>lotacao.sql</b> no Supabase.</div>';
+    $("#list").innerHTML = '<div class="msg">Não consegui ler os dados (' + esc(e.message) + '). Se aparecer 404, falta rodar o <b>lotacao-v3.sql</b> no Supabase.</div>';
   }
 }
 const fmt = n => n == null ? "–" : (+n).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 
+const STATUS_TXT = { "LOTACAO RECORRENTE": "Lotando", "LOTACAO FREQUENTE": "Atenção", "PREVISAO DE LOTACAO": "Previsão", "PICO EVENTUAL": "Lotou 1 dia", "POUCOS DADOS": "Poucos dados", "OK": "OK" };
+const GRUPO_TXT = { ADM: "ADM", CT: "CT terceiros", TURNO: "Turno", OUTRO: "Outro" };
+const ddmm = d => String(d).slice(8, 10) + "/" + String(d).slice(5, 7);
+
 function render() {
   const cap = +$("#fCap").value || 40;
-  const q = $("#fBusca").value.trim().toLowerCase();
-  const modo = $("#fStatus").value;
-  const vis = rows.filter(r => (modo === "all" || (modo === "mon" ? monit.has(r.linha) : r.status !== "OK")) &&
-    (!q || [r.linha, r.tipolinha, r.frotas].join(" ").toLowerCase().includes(q.replace(/^ônibus\s*|^onibus\s*/, ""))));
-  const rec = rows.filter(r => r.status === "LOTACAO RECORRENTE").length;
-  const freq = rows.filter(r => r.status === "LOTACAO FREQUENTE").length;
-  const viag = rows.reduce((s, r) => s + r.viagens, 0), acima = rows.reduce((s, r) => s + r.viagens_acima, 0);
-  const sem = rows.reduce((s, r) => s + r.viagens_sem_leitura, 0);
+  const q = $("#fBusca").value.trim().toLowerCase().replace(/^ônibus\s*|^onibus\s*/, "");
+  const modo = $("#fStatus").value, grp = $("#fGrupo").value;
+  const base = rows.filter(r => !grp || r.grupo === grp);
+  const vis = base.filter(r => (modo === "all" || (modo === "mon" ? monit.has(r.linha) : !["OK", "POUCOS DADOS", "PICO EVENTUAL"].includes(r.status))) &&
+    (!q || [r.linha, r.tipolinha, r.frotas].join(" ").toLowerCase().includes(q)));
+  const n = st => base.filter(r => r.status === st).length;
   $("#kpis").innerHTML =
-    `<div class="kpi crit"><b>${rec}</b><span>horários com lotação recorrente (≥50% das viagens acima de ${cap})</span></div>` +
-    `<div class="kpi warn"><b>${freq}</b><span>horários com lotação frequente (20–49%)</span></div>` +
-    `<div class="kpi"><b>${acima} / ${viag}</b><span>viagens acima de ${cap} no período</span></div>` +
-    `<div class="kpi"><b>${sem}</b><span>viagens sem leitura (ocupação 0/vazia)</span></div>`;
-  if (!rows.length) {
-    $("#list").innerHTML = '<div class="msg">Ainda não há viagens guardadas nesse período. A API só entrega o dia de hoje, então o histórico começa a se formar a partir do primeiro dia em que o fluxo de coleta do n8n estiver ligado.</div>';
-    return;
-  }
-  if (!vis.length) { $("#list").innerHTML = '<div class="msg">Nenhum horário com alerta nesse filtro. Use "Mostrar: Todas" para ver as linhas OK.</div>'; return; }
-  $("#list").innerHTML = vis.map((r, i) => {
-    const [cls, lbl] = STATUS[r.status] || ["s-ok", r.status];
+    `<div class="kpi crit"><b>${n("LOTACAO RECORRENTE")}</b><span><b style="font-size:14px;color:inherit;display:inline">Lotando</b><br>acima de ${cap} em metade dos dias ou mais</span></div>` +
+    `<div class="kpi warn"><b>${n("LOTACAO FREQUENTE")}</b><span><b style="font-size:14px;color:inherit;display:inline">Atenção</b><br>acima de ${cap} em alguns dias</span></div>` +
+    `<div class="kpi info"><b>${n("PREVISAO DE LOTACAO")}</b><span><b style="font-size:14px;color:inherit;display:inline">Previsão</b><br>perto de ${cap}, ainda sem passar</span></div>`;
+  if (!rows.length) { $("#list").innerHTML = '<div class="msg">Ainda não há viagens guardadas nesse período.</div>'; return; }
+  if (!vis.length) { $("#list").innerHTML = '<div class="msg">Nada com alerta nesse filtro. Use "Mostrar: Todas" para ver as rotas OK.</div>'; return; }
+  $("#list").innerHTML = vis.map(r => {
+    const [cls] = STATUS[r.status] || ["s-ok"];
+    const ds = diasR.filter(d => d.linha === r.linha && d.tipo === r.tipo && d.faixa === r.faixa).slice(-14);
+    const lotou = r.viagens_acima > 0 ? `<b>${r.dias_acima}</b> de ${r.dias_com_dado} dias acima de ${cap}` : `<b>0</b> dias acima de ${cap}`;
     return `<div class="row ${cls}" data-i="${rows.indexOf(r)}">
-      <div class="top"><button type="button" class="star${monit.has(r.linha) ? " on" : ""}" title="Monitorar esta rota" aria-label="Monitorar ${esc(r.linha)}">${monit.has(r.linha) ? "★" : "☆"}</button><span class="nome">${esc(r.linha)}</span><span class="chip">${lbl}</span>
-        <span class="meta">${esc(r.tipo)} · ${esc(r.tipolinha || "")} · ${r.ref === "turno" ? "turno " + esc(r.faixa) : "saída " + esc(r.faixa) + "–" + esc(endSlot(r.faixa))} · ônibus ${esc(r.frotas || "–")}</span></div>
-      <div class="nums"><span><em>média</em> ${fmt(r.media_viagem)}</span><span><em>máx</em> ${r.maximo ?? "–"}</span>
-        <span><em>acima de ${cap}</em> ${r.viagens_acima}/${r.viagens} viagens (${fmt(r.pct_acima)}%) em ${r.dias_acima} dia(s)</span>
-        <span><em>ônibus/dia</em> ${fmt(r.onibus_por_dia)}</span><span><em>total/dia</em> ${fmt(r.media_total_dia)} vs ideal ${fmt(r.capacidade_ofertada)}</span>
-        <span><em>últimos 7 dias</em> ${fmt(r.media_7d)}</span><span><em>acima de ${+$("#fLug").value || 45} lugares</em> ${r.viagens_superlotadas}</span>
-        <span><em>dias</em> ${r.dias_com_dado}</span></div>
-      ${r.sugestao ? `<div class="sug">${esc(r.sugestao)}</div>` : ""}
-      ${extras(r)}
+      <div class="top"><button type="button" class="star${monit.has(r.linha) ? " on" : ""}" title="Monitorar esta rota" aria-label="Monitorar ${esc(r.linha)}">${monit.has(r.linha) ? "★" : "☆"}</button>
+        <span class="nome">${esc(r.linha)}</span><span class="chip">${STATUS_TXT[r.status] || r.status}</span></div>
+      <div class="meta">${esc(r.tipo)} · ${r.ref === "turno" ? "turno " + esc(r.faixa) : "saída " + esc(r.faixa)} · ${GRUPO_TXT[r.grupo] || ""} · ônibus ${esc(r.frotas || "–")}</div>
+      <div class="big"><span><b>${Math.round(r.media_viagem)}</b> pessoas em média</span><span>${lotou}</span><span><b>${r.maximo}</b> no dia mais cheio</span></div>
+      ${ds.length ? `<div class="dias">${ds.map(d => `<div class="dia ${d.ocupacao > cap ? "d-r" : d.ocupacao >= cap * 0.9 ? "d-a" : "d-v"}" title="${ddmm(d.data_local)}: ${d.ocupacao} pessoas"><b>${d.ocupacao}</b><small>${ddmm(d.data_local)}</small></div>`).join("")}</div>` : ""}
+      ${r.sugestao ? `<div class="acao">➜ ${esc(r.sugestao)}</div>` : ""}
+      <div class="mais">Ver detalhes ▾</div>
       <div class="det"></div></div>`;
   }).join("");
 }
-// Passageiros de outra linha e pontos que outra linha com folga tambem atende (sem nomes).
+// Detalhe (so ao abrir): alternativa no mesmo grupo, de onde vem o pessoal, numeros completos.
 function extras(r) {
   let h = "";
-  const rs = resumo.find(x => x.linha === r.linha && x.sentido === r.tipo);
-  if (rs && (rs.de_outra_linha_dia > 0 || rs.inativos_dia > 0)) {
-    const exc = r.media_total_dia - r.capacidade_ofertada;
-    h += `<div class="sug">Dos ${fmt(rs.passageiros_dia)} passageiros/dia, <b>${fmt(rs.de_outra_linha_dia)} são de outra linha</b> (${rs.recorrentes} recorrentes) e ${fmt(rs.sem_cadastro_dia)} sem cadastro.` + (rs.inativos_dia > 0 ? ` <b style="color:var(--crit)">${fmt(rs.inativos_dia)}/dia com cadastro INATIVO.</b>` : "") +
-      (exc > 0 && rs.de_outra_linha_dia >= exc ? ` <b style="color:var(--good)">Só eles já explicam o excesso: regularizar a linha deles resolve sem ônibus extra.</b>` : "") + `</div>`;
-  }
   const al = alts.filter(a => a.linha === r.linha && a.sentido === r.tipo);
-  if (al.length) h += `<div class="sug">Pontos que outra linha com folga também atende:<ul style="margin:4px 0 0;padding-left:18px">` + al.map(a =>
-    `<li><a href="https://www.google.com/maps?q=${a.ponto_lat},${a.ponto_lon}" target="_blank" rel="noopener">ponto</a> com ~${fmt(a.embarques_dia)} embarques/dia → <b>${esc(a.alternativa)}</b> a ${a.distancia_m} m (folga ~${fmt(a.alt_folga)}, embarque ~${esc(a.alt_hora)})</li>`).join("") + `</ul></div>`;
+  if (al.length) h += `<div class="sug"><b>Rota do mesmo grupo com vaga perto dos pontos:</b><ul style="margin:4px 0 0;padding-left:18px">` + al.map(a =>
+    `<li><b>${esc(a.alternativa)}</b> passa a ${a.distancia_m} m (~${fmt(a.alt_folga)} vagas, embarque ~${esc(a.alt_hora)}) · <a href="https://www.google.com/maps?q=${a.ponto_lat},${a.ponto_lon}" target="_blank" rel="noopener">ver ponto</a> (~${fmt(a.embarques_dia)} embarques/dia)</li>`).join("") + `</ul></div>`;
+  const rs = resumo.find(x => x.linha === r.linha && x.sentido === r.tipo);
+  if (rs) {
+    const exc = r.media_total_dia - r.capacidade_ofertada;
+    h += `<div class="sug">Por dia: ${fmt(rs.passageiros_dia)} embarques, <b>${fmt(rs.de_outra_linha_dia)} cadastrados em outra rota</b>, ${fmt(rs.sem_cadastro_dia)} sem cadastro` +
+      (rs.inativos_dia > 0 ? `, <b style="color:var(--crit)">${fmt(rs.inativos_dia)} INATIVO</b>` : "") + "." +
+      (exc > 0 && rs.de_outra_linha_dia >= exc ? ` <b style="color:var(--good)">Regularizar quem é de outra rota já resolve.</b>` : "") + `</div>`;
+  }
+  h += `<div class="nums" style="margin-top:8px"><span><em>viagens</em> ${r.viagens}</span><span><em>ônibus/dia</em> ${fmt(r.onibus_por_dia)}</span><span><em>últimos 7 dias</em> ${fmt(r.media_7d)}</span><span><em>acima de ${+$("#fLug").value || 45} lugares</em> ${r.viagens_superlotadas}</span><span><em>sem leitura</em> ${r.viagens_sem_leitura}</span></div>`;
   return h;
 }
 function endSlot(f) { const [h, m] = f.split(":").map(Number); const t = h * 60 + m + 29; return String(Math.floor(t / 60) % 24).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }
@@ -216,7 +231,8 @@ async function toggleStar(btn, linha) {
 $("#list").addEventListener("click", async e => {
   const st = e.target.closest(".star"); if (st) { e.stopPropagation(); return toggleStar(st, rows[+st.closest(".row").dataset.i].linha); }
   const el = e.target.closest(".row"); if (!el) return;
-  el.classList.toggle("open"); if (!el.classList.contains("open") || el.dataset.loaded) return;
+  el.classList.toggle("open"); el.querySelector(".mais").textContent = el.classList.contains("open") ? "Fechar ▴" : "Ver detalhes ▾";
+  if (!el.classList.contains("open") || el.dataset.loaded) return;
   const r = rows[+el.dataset.i], det = el.querySelector(".det"), cap = +$("#fCap").value || 40;
   det.innerHTML = "Carregando viagens…";
   try {
@@ -229,34 +245,36 @@ $("#list").addEventListener("click", async e => {
       if (r.ref === "turno") return prev === r.faixa;
       return !prev && v.hora_saida >= r.faixa && v.hora_saida <= endSlot(r.faixa) + ":59";
     });
-    det.innerHTML = chart(vs, cap) + `<table><tr><th>Dia</th><th>Saída</th><th>Ônibus</th><th>Motorista</th><th style="text-align:right">Passag.</th></tr>` +
+    det.innerHTML = extras(r) + `<table><tr><th>Dia</th><th>Saída</th><th>Ônibus</th><th>Motorista</th><th style="text-align:right">Passag.</th></tr>` +
       vs.slice().reverse().map(v => `<tr><td>${v.data_local.split("-").reverse().join("/")}</td><td>${esc((v.hora_saida || "").slice(0, 5))}</td><td>${esc(v.frota)}</td><td>${esc(v.motorista)}</td>
         <td class="n ${v.ocupacao > cap ? "acima" : ""}">${v.ocupacao ? v.ocupacao : "sem leitura"}</td></tr>`).join("") + "</table>";
     el.dataset.loaded = 1;
   } catch (err) { det.textContent = "Erro ao carregar: " + err.message; }
 });
 
-// Barras por viagem (dia a dia) com a linha da capacidade.
-function chart(vs, cap) {
-  const ok = vs.filter(v => v.ocupacao > 0); if (!ok.length) return "";
-  const W = 600, H = 150, pl = 28, pb = 18, max = Math.max(cap + 5, ...ok.map(v => v.ocupacao));
-  const bw = (W - pl) / ok.length, y = v => H - pb - (v / max) * (H - pb - 8);
-  const css = getComputedStyle(document.documentElement), c = n => css.getPropertyValue(n).trim();
-  let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Passageiros por viagem">`;
-  for (const g of [0, Math.round(max / 2), max]) s += `<line x1="${pl}" x2="${W}" y1="${y(g)}" y2="${y(g)}" stroke="${c("--chart-grid")}"/><text x="0" y="${y(g) + 4}" font-size="10" fill="${c("--muted")}">${g}</text>`;
-  ok.forEach((v, i) => { const h = H - pb - y(v.ocupacao);
-    s += `<rect x="${pl + i * bw + 1}" y="${y(v.ocupacao)}" width="${Math.max(bw - 2, 1)}" height="${h}" rx="1" fill="${v.ocupacao > cap ? c("--crit") : c("--accent")}"><title>${v.data_local.split("-").reverse().join("/")} ${v.hora_saida.slice(0, 5)} · ${v.ocupacao}</title></rect>`; });
-  s += `<line x1="${pl}" x2="${W}" y1="${y(cap)}" y2="${y(cap)}" stroke="${c("--warn")}" stroke-width="1.5" stroke-dasharray="5 3"/><text x="${W - 4}" y="${y(cap) - 4}" text-anchor="end" font-size="10" fill="${c("--warn")}">capacidade ${cap}</text>`;
-  return s + "</svg>";
-}
-
 // ---- gestores (senha conferida no Supabase; sem senha so aparecem as gerencias, sem e-mail)
 
+// Respostas das consultas (com nome): so com a senha certa.
+const RESP_TXT = { TREINAMENTO: "Treinamento / temporário", MUDOU_ENDERECO: "Mudou de endereço", MUDOU_TURNO: "Mudou de turno / escala", COBERTURA: "Cobertura", NAO_SEI: "Vai verificar", OUTRO: "Outro" };
+async function respLoad(ok) {
+  if (!ok) { $("#gResp").textContent = "Abra com a senha para ver."; return; }
+  try {
+    const l = await api("rpc/consultas_lista", { senha: gSenha, dias: 30 });
+    if (!l.length) { $("#gResp").textContent = "Nenhuma consulta enviada nos últimos 30 dias."; return; }
+    const resp = l.filter(c => c.resposta).length;
+    $("#gResp").innerHTML = `<p>${l.length} consulta(s) nos últimos 30 dias · ${resp} respondida(s) · ${l.length - resp} aguardando.</p><div class="gl-wrap"><table class="gl"><tr><th>Colaborador</th><th>Usando / cadastro</th><th>Dias</th><th>Enviado para</th><th>Resposta</th></tr>` +
+      l.map(c => `<tr><td data-l="Colaborador">${esc(c.nome)}<br><span class="muted">${esc(c.matricula)} · ${esc(c.tipopassageiro || "")} · ${esc(c.ga || "")}</span></td>
+        <td data-l="Usando / cadastro">${esc(c.linha_usada)}<br><span class="muted">${esc(c.linha_cadastro || "sem linha")}</span></td><td data-l="Dias">${c.dias_fora}</td>
+        <td data-l="Enviado para">${esc(c.enviado_para || "ainda não enviado")}</td>
+        <td data-l="Resposta">${c.resposta ? `<b>${esc(RESP_TXT[c.resposta] || c.resposta)}</b>${c.comentario ? "<br>" + esc(c.comentario) : ""}` : '<span class="muted">aguardando</span>'}</td></tr>`).join("") + "</table></div>";
+  } catch (err) { $("#gResp").textContent = "Erro: " + err.message + " (rodou o lotacao-v3.sql?)"; }
+}
 async function gestLoad() {
   $("#gMsg").textContent = "Carregando…";
   try {
     const l = await api("rpc/gerencias_lista", { senha: gSenha || null, dias: +$("#fDias").value });
     const ok = l.length ? l[0].senha_ok : false;
+    respLoad(ok);
     $("#gMsg").textContent = gSenha && !ok ? "Senha incorreta." : (ok ? "Pode editar." : "Sem senha: só leitura.");
     if (!l.length) { $("#gLista").innerHTML = '<div class="msg">Nenhuma gerência ainda. Elas aparecem quando a coleta de embarques começar a gravar.</div>'; return; }
     $("#gLista").innerHTML = `<div class="gl-wrap"><table class="gl"><tr><th>Gerência (GA)</th><th>Passag.</th><th>Fora da linha<br>recorr. / event.</th><th>Gestor</th><th>E-mail</th><th>Envia</th><th></th></tr>` +
@@ -282,7 +300,7 @@ $("#btnGest").addEventListener("click", () => { const s = $("#gest"); s.hidden =
 $("#gEntrar").addEventListener("click", () => { gSenha = $("#gSenha").value; gestLoad(); });
 
 ["#fDias", "#fCap", "#fLug"].forEach(s => $(s).addEventListener("change", load));
-["#fStatus", "#fBusca"].forEach(s => $(s).addEventListener("input", render));
+["#fStatus", "#fBusca", "#fGrupo"].forEach(s => $(s).addEventListener("input", render));
 $("#gateForm").addEventListener("submit", async e => {
   e.preventDefault();
   if (await codeOk($("#gateCode").value.trim())) { store.set("lot_ok", "1"); $("#gate").remove(); load(); }
