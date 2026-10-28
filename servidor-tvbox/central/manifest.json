@@ -5,7 +5,18 @@
     "index": {
       "label": "Central da Frota",
       "order": 1,
-      "keywords": [{ "matches": ["frota", "n8n", "fluxos", "whatsapp", "backup"] }]
+      "keywords": [
+        {
+          "matches": [
+            "frota",
+            "n8n",
+            "fluxos",
+            "whatsapp",
+            "backup"
+          ]
+        }
+      ]
     }
-  }
+  },
+  "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:"
 }

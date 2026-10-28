@@ -86,6 +86,7 @@ N8N_ENCRYPTION_KEY=$N8N_ENCRYPTION_KEY
 IP_LAN=$IP_LAN
 EVO_URL=http://127.0.0.1:8080
 N8N_LOCAL=http://127.0.0.1:5678
+WHATSAPP_NUMERO=${WHATSAPP_NUMERO:-5511916311850}
 ENV
 chmod 600 .env
 
@@ -229,8 +230,8 @@ curl -fsSL "$RAW/servidor" -o /usr/local/bin/servidor && chmod 755 /usr/local/bi
   || aviso "Nao consegui baixar o comando 'servidor' (o resto funciona). Rode de novo depois."
 curl -fsSL "$RAW/configurar-whatsapp.sh" -o "$DIR/configurar-whatsapp.sh" \
   || aviso "Nao consegui baixar o configurar-whatsapp.sh. Rode de novo depois."
-mkdir -p /usr/share/cockpit/central
-for f in manifest.json index.html central.css central.js; do
+mkdir -p /usr/share/cockpit/central/vendor
+for f in manifest.json index.html central.css central.js vendor/xterm.js vendor/xterm.css vendor/addon-fit.js; do
   curl -fsSL "$RAW/central/$f" -o "/usr/share/cockpit/central/$f" || aviso "Nao consegui baixar a Central ($f)."
 done
 ok "Central da Frota instalada no Cockpit"

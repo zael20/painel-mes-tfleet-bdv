@@ -6,7 +6,7 @@ Um servidor só, na TV Box TX9 (S905X) com Armbian, rodando todos os fluxos: ale
 
 | Programa | Para que serve | Endereço |
 | --- | --- | --- |
-| Central da Frota (Cockpit) | Interface: fluxos, WhatsApp, arquivos, rede, backup, terminal | `https://IP:9090` |
+| Central da Frota (Cockpit) | Interface: fluxos (Configurar horário, configurações e código), WhatsApp, conexões, backup e terminal ao lado | `https://IP:9090` |
 | n8n | Editor visual dos fluxos | `http://IP:5678` |
 | Evolution API | Conexão com o WhatsApp (QR code) | `http://IP:8080/manager` |
 | Tailscale | Acesso de qualquer lugar sem abrir porta no roteador | app no celular/PC |
@@ -36,7 +36,7 @@ Um servidor só, na TV Box TX9 (S905X) com Armbian, rodando todos os fluxos: ale
    No fim ele mostra a RAM real, um link do Tailscale para autorizar a box e os endereços.
 5. Abrir o n8n (`http://IP:5678`) e criar o usuário dono.
 6. Na Central (`https://IP:9090`): ativar o acesso administrativo e usar Importar fluxo com os .json baixados do Cloud. No n8n, recriar a credencial do Gmail (SMTP) em cada fluxo que manda e-mail e ligar os fluxos.
-7. WhatsApp: abrir a tela do QR, criar a instância, ler o QR com o celular reserva e rodar no terminal `sudo servidor whatsapp` (pede a chave secreta do Supabase e a do Gemini, e o grupo).
+7. WhatsApp (número +55 11 91631-1850): abrir a tela do QR, criar a instância, ler o QR com o celular desse número e rodar no terminal `sudo servidor whatsapp` (pede a chave secreta do Supabase e a do Gemini, e o grupo).
 8. Desligar os fluxos no n8n Cloud só depois de conferir que os da box rodaram certo (para não mandar e-mail duplicado).
 
 ## Comando de ajuda

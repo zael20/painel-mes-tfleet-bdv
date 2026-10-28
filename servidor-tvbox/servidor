@@ -68,6 +68,10 @@ case "${1:-}" in
     curl -fsSL "$RAW/servidor" -o /usr/local/bin/servidor.novo && mv /usr/local/bin/servidor.novo /usr/local/bin/servidor \
       && chmod 755 /usr/local/bin/servidor && ok "Comando atualizado"
     curl -fsSL "$RAW/configurar-whatsapp.sh" -o "$DIR/configurar-whatsapp.sh" && ok "configurar-whatsapp.sh atualizado"
+    mkdir -p /usr/share/cockpit/central/vendor
+    for f in manifest.json index.html central.css central.js vendor/xterm.js vendor/xterm.css vendor/addon-fit.js; do
+      curl -fsSL "$RAW/central/$f" -o "/usr/share/cockpit/central/$f.novo" && mv "/usr/share/cockpit/central/$f.novo" "/usr/share/cockpit/central/$f"
+    done && ok "Central da Frota atualizada (recarregue a pagina)"
     ;;
   # ---- usados pela Central da Frota (interface no Cockpit); respondem em JSON
   status-json)
@@ -113,13 +117,14 @@ PY
     ;;
   whatsapp-json)
     root "$@"
-    set -a; source "$DIR/segredos.env"; set +a
+    set -a; source "$DIR/segredos.env"; source "$DIR/.env"; set +a
     curl -s --max-time 8 http://127.0.0.1:8080/instance/fetchInstances -H "apikey: $EVO_API_KEY" | python3 -c "
-import sys, json
+import sys, json, os
+esperado = os.environ.get('WHATSAPP_NUMERO', '')
 try: d = json.load(sys.stdin)
-except Exception: print(json.dumps({'ok': False, 'instancias': []})); raise SystemExit
+except Exception: print(json.dumps({'ok': False, 'esperado': esperado, 'instancias': []})); raise SystemExit
 d = d if isinstance(d, list) else d.get('response', [])
-print(json.dumps({'ok': True, 'instancias': [{'nome': i.get('name'), 'estado': i.get('connectionStatus'), 'numero': (i.get('ownerJid') or '').split('@')[0]} for i in d]}))"
+print(json.dumps({'ok': True, 'esperado': esperado, 'instancias': [{'nome': i.get('name'), 'estado': i.get('connectionStatus'), 'numero': (i.get('ownerJid') or '').split('@')[0]} for i in d]}))"
     ;;
   fluxo-ligar|fluxo-desligar)
     root "$@"
@@ -131,6 +136,59 @@ print(json.dumps({'ok': True, 'instancias': [{'nome': i.get('name'), 'estado': i
       $DC exec -T n8n sh -c "n8n unpublish:workflow --id=$2 2>/dev/null || n8n update:workflow --id=$2 --active=false"
     fi
     $DC restart n8n >/dev/null && ok "Fluxo $2: ativo=$a (n8n reiniciado)"
+    ;;
+  fluxo-exportar)
+    root "$@"
+    [ -n "${2:-}" ] || { echo "Informe o id do fluxo"; exit 1; }
+    chown -R 1000:1000 "$DIR/importar"
+    $DC exec -T n8n n8n export:workflow --id="$2" --output="/importar/.exportado-$2.json" >/dev/null 2>&1 \
+      || { echo "Falhou exportar o fluxo $2" >&2; exit 1; }
+    cat "$DIR/importar/.exportado-$2.json"; rm -f "$DIR/importar/.exportado-$2.json"
+    ;;
+  fluxo-salvar)
+    # a Central grava o fluxo editado em importar/.editar-<id>.json; aqui ele substitui o do n8n
+    root "$@"
+    id="${2:-}"; f="$DIR/importar/.editar-$id.json"
+    [ -n "$id" ] && [ -f "$f" ] || { echo "Arquivo do fluxo editado nao encontrado"; exit 1; }
+    python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" || { echo "JSON invalido, nada foi alterado"; exit 1; }
+    "$0" backup >/dev/null && ok "Backup feito antes de alterar"
+    ativo=$("$0" fluxos-json | python3 -c "import json,sys; print(any(f['id']==sys.argv[1] and f['ativo'] for f in json.load(sys.stdin)))" "$id")
+    chown 1000:1000 "$f"
+    $DC exec -T n8n n8n import:workflow --input="/importar/.editar-$id.json" || { aviso "Falhou importar"; exit 1; }
+    rm -f "$f"
+    if [ "$ativo" = True ]; then
+      $DC exec -T n8n sh -c "n8n publish:workflow --id=$id 2>/dev/null || n8n update:workflow --id=$id --active=true" >/dev/null
+    fi
+    $DC restart n8n >/dev/null && ok "Fluxo salvo$( [ "$ativo" = True ] && echo ' e religado'). O n8n reiniciou (1 a 2 minutos para voltar)."
+    ;;
+  rede-json)
+    root "$@"
+    export SV_CABO=$(ip -br -4 addr show 2>/dev/null | grep -E '^(e|end)' | head -1)
+    export SV_NET=$(curl -s -o /dev/null -w '%{http_code}' --max-time 6 https://www.google.com)
+    export SV_TS=$(tailscale status --json 2>/dev/null || echo '{}')
+    export SV_WIFI=$(command -v nmcli >/dev/null && nmcli -t -f TYPE,STATE,CONNECTION dev 2>/dev/null | grep '^wifi' | head -1 || echo SEM)
+    export SV_BT=$(command -v bluetoothctl >/dev/null && timeout 5 bluetoothctl show 2>&1 || echo SEM)
+    python3 - <<'PY'
+import json, os, re
+cabo = os.environ['SV_CABO'].split()
+ts = json.loads(os.environ['SV_TS'] or '{}')
+wifi = os.environ['SV_WIFI'].strip()
+bt = os.environ['SV_BT']
+wp = re.split(r'(?<!\\):', wifi) if wifi and wifi != 'SEM' else []
+print(json.dumps({
+  'cabo': {'ok': len(cabo) > 1 and cabo[1] == 'UP', 'nome': cabo[0] if cabo else '', 'ip': cabo[2] if len(cabo) > 2 else ''},
+  'internet': {'ok': os.environ['SV_NET'][:1] in ('2', '3')},
+  'tailscale': {'ok': ts.get('BackendState') == 'Running', 'estado': ts.get('BackendState', 'desligado'),
+                'ip': (ts.get('TailscaleIPs') or [''])[0], 'login': ts.get('AuthURL', '')},
+  'wifi': {'existe': bool(wp), 'ligado': bool(wp) and wp[1] not in ('unavailable',), 'conectado': bool(wp) and wp[1] == 'connected',
+           'rede': wp[2].replace('\\:', ':') if len(wp) > 2 else ''},
+  'bluetooth': {'existe': 'Controller' in bt and 'No default controller' not in bt, 'ligado': 'Powered: yes' in bt}}))
+PY
+    ;;
+  tailscale-ligar)
+    root "$@"
+    tailscale up --hostname=servidor-frota --timeout=8s 2>&1 | grep -o 'https://login.tailscale.com[^ ]*' | head -1 || true
+    tailscale status --json 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('AuthURL',''))" 2>/dev/null | grep . || true
     ;;
   whatsapp)   root "$@"; DIR=$DIR bash "$DIR/configurar-whatsapp.sh" ;;
   acessos)    root "$@"; cat "$DIR/ACESSOS.txt" ;;
