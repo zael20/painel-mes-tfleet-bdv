@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Lotação das rotas</title>
+<title>Ocupação dos ônibus</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#17212b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -81,6 +81,15 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 .muted { color: var(--muted); font-size: 13px; }
 #gest { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 14px; }
 #gest h2 { margin: 0 0 4px; font: 600 17px var(--f-display); }
+#gest h3 { margin: 14px 0 4px; font: 600 15px var(--f-display); }
+#vCola { width: 100%; min-height: 120px; font: 13px var(--f-mono); padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.vtodos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin: 8px 0; }
+.vtodos input { width: 100%; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+.vtodos label { font-size: 12px; color: var(--muted); }
+.v-err { color: var(--crit); }
+.v-ok { color: var(--good); }
+#gest details { border-bottom: 1px solid var(--line); padding: 6px 0; }
+#gest summary { cursor: pointer; font-size: 14px; }
 .gl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .gl th, .gl td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .gl input[type=text], .gl input[type=email] { width: 100%; min-width: 120px; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
@@ -99,8 +108,8 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 </style>
 </head>
 <body>
-<div id="gate"><form id="gateForm"><b>Lotação das rotas</b><input id="gateCode" type="password" inputmode="numeric" placeholder="Código de acesso" autocomplete="off"><button>Entrar</button><small id="gateErr" style="color:var(--crit)"></small></form></div>
-<header><h1>Lotação das rotas</h1><p>Quais ônibus estão passando de 40 pessoas e o que fazer</p></header>
+<div id="gate"><form id="gateForm"><b>Ocupação dos ônibus</b><input id="gateCode" type="password" inputmode="numeric" placeholder="Código de acesso" autocomplete="off"><button>Entrar</button><small id="gateErr" style="color:var(--crit)"></small></form></div>
+<header><h1>Ocupação dos ônibus</h1><p>Quais ônibus estão passando de 40 pessoas e o que fazer</p></header>
 <main>
   <div class="bar">
     <label>Período<select id="fDias"><option value="7">7 dias</option><option value="14" selected>2 semanas</option><option value="30">30 dias</option><option value="60">60 dias</option></select></label>
@@ -112,9 +121,22 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
     <button id="btnGest" type="button" class="btn">Gestores</button>
   </div>
   <section id="gest" hidden>
-    <h2>Gestores por gerência</h2>
-    <p class="muted">As gerências aparecem sozinhas a partir dos embarques. Preencha o e-mail do gestor e marque "envia" para ele receber as consultas de quem está usando rota diferente da cadastrada (você vai em cópia). Use a senha de gestores.</p>
+    <h2>Para quem vai o e-mail de passageiro fora de rota</h2>
+    <p class="muted">O sistema procura o gestor nesta ordem: <b>1)</b> pessoa vinculada no cadastro em massa abaixo; <b>2)</b> gestor da gerência (GA) que vem da TFleet. Sem nenhum dos dois, o e-mail vem para você. Use a senha de gestores.</p>
     <div class="bar"><label>Senha de gestores<input id="gSenha" type="password" autocomplete="off"></label><button id="gEntrar" type="button" class="btn">Abrir</button><span id="gMsg" class="muted"></span></div>
+    <h3>1. Cadastro em massa (pessoa → gestor)</h3>
+    <p class="muted">Copie as colunas da planilha (Excel ou Sheets) e cole aqui, com ou sem a linha de título. Colunas aceitas: <b>Matrícula, Nome, Empresa, Área, Gestor, E-mail do gestor</b> (nessa ordem quando não tiver título). A matrícula é o que liga a pessoa ao embarque; sem ela, usa o nome. Colar de novo a mesma pessoa atualiza o gestor.</p>
+    <textarea id="vCola" placeholder="Matrícula&#9;Nome&#9;Empresa&#9;Área&#9;Gestor&#9;E-mail do gestor&#10;12345&#9;JOÃO DA SILVA&#9;EMPRESA X&#9;MANUTENÇÃO&#9;Maria Souza&#9;maria@empresa.com"></textarea>
+    <div class="muted">Para a empresa inteira ir para o mesmo gestor, cole só matrícula e nome e preencha abaixo (vale para as linhas que estiverem sem esse dado):</div>
+    <div class="vtodos">
+      <label>Empresa<input id="vEmp" type="text"></label><label>Área<input id="vArea" type="text"></label>
+      <label>Gestor<input id="vGn" type="text"></label><label>E-mail do gestor<input id="vGe" type="email"></label>
+    </div>
+    <div class="bar"><button id="vPrev" type="button" class="btn">Conferir</button><button id="vSalvar" type="button" class="btn" hidden>Salvar</button><span id="vMsg" class="muted"></span></div>
+    <div id="vPrevia"></div>
+    <div id="vLista" class="muted">Abra com a senha para ver as pessoas já vinculadas.</div>
+    <h3>2. Gestor por gerência (GA da TFleet)</h3>
+    <p class="muted">As gerências aparecem sozinhas a partir dos embarques. Preencha o e-mail e marque "envia".</p>
     <div id="gLista"></div>
     <h2 style="margin-top:16px">Respostas dos supervisores</h2>
     <div id="gResp" class="muted">Abra com a senha para ver.</div>
@@ -269,12 +291,89 @@ async function respLoad(ok) {
         <td data-l="Resposta">${c.resposta ? `<b>${esc(RESP_TXT[c.resposta] || c.resposta)}</b>${c.comentario ? "<br>" + esc(c.comentario) : ""}` : '<span class="muted">aguardando</span>'}</td></tr>`).join("") + "</table></div>";
   } catch (err) { $("#gResp").textContent = "Erro: " + err.message + " (rodou o lotacao-v3.sql?)"; }
 }
+// ---- cadastro em massa pessoa -> gestor (texto colado do Excel: tab, ; ou ,)
+// ordem importa: "E-mail do gestor" e "Nome do gestor" tem que cair antes de "nome"
+const V_COLS = [["matricula", /matr|chapa|^re$|registro|crach/i], ["gestor_email", /mail/i], ["gestor_nome", /gestor|supervisor|respons/i],
+  ["nome", /nome|colaborador|funcion/i], ["empresa", /empresa|contratada|fornecedor/i], ["area", /area|área|gerencia|gerência|setor|^ga$/i]];
+const V_ORDEM = ["matricula", "nome", "empresa", "area", "gestor_nome", "gestor_email"];
+const emailOk = e => /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(e);
+let vLinhas = [];
+function vParse(txt) {
+  const lin = txt.split(/\r?\n/).filter(l => l.trim());
+  if (!lin.length) return [];
+  const sep = lin[0].includes("\t") ? "\t" : lin[0].includes(";") ? ";" : ",";
+  const cel = l => l.split(sep).map(c => c.trim().replace(/^"|"$/g, ""));
+  const h = cel(lin[0]);
+  // titulo = primeira linha sem nenhum numero de matricula nem e-mail e com alguma palavra das colunas
+  const temTitulo = !h.some(c => /^\d{3,}$/.test(c) || c.includes("@")) && h.some(c => V_COLS.some(([, re]) => re.test(c)));
+  let mapa = V_ORDEM;
+  if (temTitulo) mapa = h.map(c => { const k = V_COLS.find(([, re]) => re.test(c)); return k ? k[0] : null; });
+  const todos = { empresa: $("#vEmp").value.trim(), area: $("#vArea").value.trim(), gestor_nome: $("#vGn").value.trim(), gestor_email: $("#vGe").value.trim() };
+  return lin.slice(temTitulo ? 1 : 0).map(l => {
+    const o = {}; cel(l).forEach((c, i) => { if (mapa[i] && c && !o[mapa[i]]) o[mapa[i]] = c; });
+    // e-mail colado em qualquer coluna conta como e-mail do gestor
+    if (!o.gestor_email) { const m = cel(l).find(c => emailOk(c)); if (m) o.gestor_email = m; }
+    // gestor geral so entra em quem nao tem e-mail proprio (nao mistura nome de um com e-mail de outro)
+    if (!o.gestor_email && todos.gestor_email) { o.gestor_email = todos.gestor_email; o.gestor_nome = o.gestor_nome || todos.gestor_nome; }
+    for (const k of ["empresa", "area"]) if (todos[k] && !o[k]) o[k] = todos[k];
+    o._erro = !o.matricula && !o.nome ? "sem matrícula e sem nome" : o.gestor_email && !emailOk(o.gestor_email) ? "e-mail inválido"
+      : !o.gestor_email && !o.area ? "sem e-mail do gestor e sem área" : "";
+    return o;
+  });
+}
+$("#vPrev").addEventListener("click", () => {
+  if (!gSenha) { $("#vMsg").textContent = "Abra com a senha de gestores primeiro."; return; }
+  vLinhas = vParse($("#vCola").value);
+  const ok = vLinhas.filter(o => !o._erro), ruins = vLinhas.length - ok.length;
+  if (!vLinhas.length) { $("#vMsg").textContent = "Cole as linhas da planilha."; $("#vPrevia").innerHTML = ""; $("#vSalvar").hidden = true; return; }
+  $("#vMsg").innerHTML = `${ok.length} pessoa(s) prontas${ruins ? ` · <span class="v-err">${ruins} com problema (não serão salvas)</span>` : ""}`;
+  $("#vSalvar").hidden = !ok.length; $("#vSalvar").textContent = `Salvar ${ok.length} pessoa(s)`;
+  $("#vPrevia").innerHTML = `<div class="gl-wrap"><table class="gl"><tr><th>Matrícula</th><th>Nome</th><th>Empresa</th><th>Área</th><th>Gestor</th><th>E-mail</th><th></th></tr>` +
+    vLinhas.slice(0, 200).map(o => `<tr><td data-l="Matrícula">${esc(o.matricula || "")}</td><td data-l="Nome">${esc(o.nome || "")}</td><td data-l="Empresa">${esc(o.empresa || "")}</td>
+      <td data-l="Área">${esc(o.area || "")}</td><td data-l="Gestor">${esc(o.gestor_nome || "")}</td><td data-l="E-mail">${esc(o.gestor_email || "")}</td>
+      <td>${o._erro ? `<span class="v-err">${esc(o._erro)}</span>` : '<span class="v-ok">ok</span>'}</td></tr>`).join("") + "</table></div>" +
+    (vLinhas.length > 200 ? `<p class="muted">Mostrando 200 de ${vLinhas.length}.</p>` : "");
+});
+$("#vSalvar").addEventListener("click", async () => {
+  const ok = vLinhas.filter(o => !o._erro).map(({ _erro, ...o }) => o);
+  $("#vSalvar").disabled = true; $("#vMsg").textContent = "Salvando…";
+  try {
+    const r = await api("rpc/importar_vinculos", { senha: gSenha, p_linhas: ok });
+    $("#vMsg").innerHTML = `<span class="v-ok">${r.salvos} pessoa(s) salvas.</span>${r.erros.length ? ` <span class="v-err">${r.erros.length} recusada(s): ${esc(r.erros.slice(0, 5).map(e => "linha " + e.linha + " " + e.motivo).join("; "))}</span>` : ""}`;
+    $("#vPrevia").innerHTML = ""; $("#vCola").value = ""; $("#vSalvar").hidden = true; vincLoad(true);
+  } catch (err) { $("#vMsg").innerHTML = `<span class="v-err">Não salvou: ${esc(err.message)} (rodou o lotacao-v4.sql?)</span>`; }
+  $("#vSalvar").disabled = false;
+});
+// pessoas ja vinculadas, agrupadas por empresa + gestor. "Não apareceu" = matricula/nome nao bate com nenhum embarque de 30 dias.
+async function vincLoad(ok) {
+  if (!ok) { $("#vLista").textContent = "Abra com a senha para ver as pessoas já vinculadas."; return; }
+  try {
+    const l = await api("rpc/vinculos_lista", { senha: gSenha });
+    if (!l.length) { $("#vLista").textContent = "Ninguém vinculado ainda."; return; }
+    const grupos = {};
+    for (const v of l) { const k = (v.empresa || "Sem empresa") + "|" + (v.email_final || "sem gestor"); (grupos[k] = grupos[k] || []).push(v); }
+    $("#vLista").innerHTML = `<p>${l.length} pessoa(s) vinculadas.</p>` + Object.entries(grupos).map(([k, ps]) => {
+      const [emp, em] = k.split("|"), nao = ps.filter(p => !p.embarques).length;
+      return `<details><summary><b>${esc(emp)}</b> → ${esc(ps[0].gestor_nome || "")} ${esc(em)} · ${ps.length} pessoa(s)${nao ? ` · <span class="v-err">${nao} não apareceram nos embarques</span>` : ""}</summary>
+        <div class="gl-wrap"><table class="gl"><tr><th>Matrícula</th><th>Nome</th><th>Área</th><th>Embarques 30 dias</th></tr>` +
+        ps.map(p => `<tr><td data-l="Matrícula">${esc(p.matricula || "")}</td><td data-l="Nome">${esc(p.nome || "")}</td><td data-l="Área">${esc(p.area || "")}</td>
+          <td data-l="Embarques 30 dias">${p.embarques ? p.embarques + " (último " + esc(String(p.ultimo_embarque).split("-").reverse().join("/")) + ")" : '<span class="v-err">não apareceu</span>'}</td></tr>`).join("") +
+        `</table></div><button type="button" class="btn vRem" data-k="${esc(k)}">Remover estas ${ps.length}</button></details>`;
+    }).join("");
+    $("#vLista").onclick = async e => {
+      const b = e.target.closest(".vRem"); if (!b) return;
+      const ps = grupos[b.dataset.k]; if (!confirm(`Remover o vínculo de ${ps.length} pessoa(s)? Elas voltam a seguir o gestor da gerência.`)) return;
+      try { await api("rpc/remover_vinculos", { senha: gSenha, p_chaves: ps.map(p => p.chave) }); vincLoad(true); }
+      catch (err) { alert("Não removeu: " + err.message); }
+    };
+  } catch (err) { $("#vLista").textContent = "Erro: " + err.message + " (rodou o lotacao-v4.sql?)"; }
+}
 async function gestLoad() {
   $("#gMsg").textContent = "Carregando…";
   try {
     const l = await api("rpc/gerencias_lista", { senha: gSenha || null, dias: +$("#fDias").value });
     const ok = l.length ? l[0].senha_ok : false;
-    respLoad(ok);
+    respLoad(ok); vincLoad(ok);
     $("#gMsg").textContent = gSenha && !ok ? "Senha incorreta." : (ok ? "Pode editar." : "Sem senha: só leitura.");
     if (!l.length) { $("#gLista").innerHTML = '<div class="msg">Nenhuma gerência ainda. Elas aparecem quando a coleta de embarques começar a gravar.</div>'; return; }
     $("#gLista").innerHTML = `<div class="gl-wrap"><table class="gl"><tr><th>Gerência (GA)</th><th>Passag.</th><th>Fora da linha<br>recorr. / event.</th><th>Gestor</th><th>E-mail</th><th>Envia</th><th></th></tr>` +
