@@ -37,7 +37,20 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 .bar label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 3px; }
 .bar select, .bar input { font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); }
 .bar input[type=search] { min-width: 200px; }
-.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.tabs button { font: 600 14px var(--f-body); padding: 10px 14px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+.painel h3 { margin: 16px 0 4px; font: 600 16px var(--f-display); }
+.kpis.k4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 640px) { .kpis, .kpis.k4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+button.kpi { text-align: left; font: inherit; color: inherit; cursor: pointer; }
+button.kpi.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+button.kpi:hover { border-color: var(--accent); }
+.base { font-size: 13px; color: var(--muted); margin: -4px 0 12px; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft); }
+.tag { font: 600 11px var(--f-body); padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.tag.crit { background: var(--crit-soft); color: var(--crit); } .tag.warn { background: var(--warn-soft); color: var(--warn); }
 .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 .kpi b { display: block; font: 600 30px var(--f-display); font-variant-numeric: tabular-nums; }
 .kpi.info b { color: var(--accent); }
@@ -79,17 +92,15 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 .note { font-size: 12px; color: var(--muted); margin-top: 16px; }
 .btn { font: 600 14px var(--f-body); padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); cursor: pointer; }
 .muted { color: var(--muted); font-size: 13px; }
-#gest { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 14px; }
-#gest h2 { margin: 0 0 4px; font: 600 17px var(--f-display); }
-#gest h3 { margin: 14px 0 4px; font: 600 15px var(--f-display); }
+.painel h3.old { margin: 14px 0 4px; font: 600 15px var(--f-display); }
 #vCola { width: 100%; min-height: 120px; font: 13px var(--f-mono); padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
 .vtodos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin: 8px 0; }
 .vtodos input { width: 100%; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
 .vtodos label { font-size: 12px; color: var(--muted); }
 .v-err { color: var(--crit); }
 .v-ok { color: var(--good); }
-#gest details { border-bottom: 1px solid var(--line); padding: 6px 0; }
-#gest summary { cursor: pointer; font-size: 14px; }
+.painel details { border-bottom: 1px solid var(--line); padding: 6px 0; }
+.painel summary { cursor: pointer; font-size: 14px; }
 .gl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .gl th, .gl td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .gl input[type=text], .gl input[type=email] { width: 100%; min-width: 120px; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
@@ -111,39 +122,67 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 <div id="gate"><form id="gateForm"><b>Ocupação dos ônibus</b><input id="gateCode" type="password" inputmode="numeric" placeholder="Código de acesso" autocomplete="off"><button>Entrar</button><small id="gateErr" style="color:var(--crit)"></small></form></div>
 <header><h1>Ocupação dos ônibus</h1><p>Quais ônibus estão passando de 40 pessoas e o que fazer</p></header>
 <main>
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="ocup" class="on">Ocupação dos ônibus</button>
+    <button type="button" role="tab" data-tab="fora">Passageiros fora de rota</button>
+    <button type="button" role="tab" data-tab="cad">Cadastro e gestores</button>
+    <button type="button" role="tab" data-tab="resp">Respostas</button>
+  </nav>
   <div class="bar">
     <label>Período<select id="fDias"><option value="7">7 dias</option><option value="14" selected>2 semanas</option><option value="30">30 dias</option><option value="60">60 dias</option></select></label>
-    <label>Ideal<input id="fCap" type="number" min="1" value="40" style="width:80px"></label>
-    <label>Lugares<input id="fLug" type="number" min="1" value="45" style="width:80px"></label>
-    <label>Grupo<select id="fGrupo"><option value="">Todos</option><option value="ADM">ADM</option><option value="CT">CT (terceiros)</option><option value="TURNO">Turno</option><option value="OUTRO">Outros</option></select></label>
-    <label>Mostrar<select id="fStatus"><option value="prob" selected>Só com alerta</option><option value="mon">Só monitoradas</option><option value="all">Todas</option></select></label>
-    <label>Buscar linha<input id="fBusca" type="search" placeholder="ex.: CT6, JK, ônibus 39"></label>
-    <button id="btnGest" type="button" class="btn">Gestores</button>
+    <span id="senhaBar" class="bar" style="margin:0" hidden><label>Senha de gestores<input id="gSenha" type="password" autocomplete="off"></label><button id="gEntrar" type="button" class="btn">Abrir</button><span id="gMsg" class="muted"></span></span>
   </div>
-  <section id="gest" hidden>
-    <h2>Para quem vai o e-mail de passageiro fora de rota</h2>
-    <p class="muted">O sistema procura o gestor nesta ordem: <b>1)</b> pessoa vinculada no cadastro em massa abaixo; <b>2)</b> gestor da gerência (GA) que vem da TFleet. Sem nenhum dos dois, o e-mail vem para você. Use a senha de gestores.</p>
-    <div class="bar"><label>Senha de gestores<input id="gSenha" type="password" autocomplete="off"></label><button id="gEntrar" type="button" class="btn">Abrir</button><span id="gMsg" class="muted"></span></div>
-    <h3>1. Cadastro em massa (pessoa → gestor)</h3>
-    <p class="muted">Copie as colunas da planilha (Excel ou Sheets) e cole aqui, com ou sem a linha de título. Colunas aceitas: <b>Matrícula, Nome, Empresa, Área, Gestor, E-mail do gestor</b> (nessa ordem quando não tiver título). A matrícula é o que liga a pessoa ao embarque; sem ela, usa o nome. Colar de novo a mesma pessoa atualiza o gestor.</p>
-    <textarea id="vCola" placeholder="Matrícula&#9;Nome&#9;Empresa&#9;Área&#9;Gestor&#9;E-mail do gestor&#10;12345&#9;JOÃO DA SILVA&#9;EMPRESA X&#9;MANUTENÇÃO&#9;Maria Souza&#9;maria@empresa.com"></textarea>
-    <div class="muted">Para a empresa inteira ir para o mesmo gestor, cole só matrícula e nome e preencha abaixo (vale para as linhas que estiverem sem esse dado):</div>
-    <div class="vtodos">
-      <label>Empresa<input id="vEmp" type="text"></label><label>Área<input id="vArea" type="text"></label>
-      <label>Gestor<input id="vGn" type="text"></label><label>E-mail do gestor<input id="vGe" type="email"></label>
+
+  <section class="painel" data-p="ocup">
+    <div class="bar">
+      <label>Ideal<input id="fCap" type="number" min="1" value="40" style="width:80px"></label>
+      <label>Lugares<input id="fLug" type="number" min="1" value="45" style="width:80px"></label>
+      <label>Grupo<select id="fGrupo"><option value="">Todos</option><option value="ADM">ADM</option><option value="CT">CT (terceiros)</option><option value="TURNO">Turno</option><option value="OUTRO">Outros</option></select></label>
+      <label>Mostrar<select id="fStatus"><option value="prob" selected>Só com alerta</option><option value="LOTACAO RECORRENTE">Só lotando</option><option value="LOTACAO FREQUENTE">Só atenção</option><option value="PREVISAO DE LOTACAO">Só previsão</option><option value="mon">Só monitoradas</option><option value="all">Todas</option></select></label>
+      <label>Buscar linha<input id="fBusca" type="search" placeholder="ex.: CT6, JK, ônibus 39"></label>
     </div>
+    <div class="kpis" id="kpis"></div>
+    <p class="base" id="base"></p>
+    <div class="list" id="list"><div class="msg">Carregando…</div></div>
+    <p class="note">Clique num número de cima para ver só aquelas rotas; clique numa rota para ver as viagens que formam a média. Média = passageiros identificados por viagem (BDV). Ideal = 40, deixando 5 vagas dos 45 lugares. Quadradinhos = um por dia: vermelho passou de 40, amarelo de 36 a 40, verde abaixo. Rota alternativa só é sugerida dentro do mesmo grupo (ADM com ADM, CT com CT, turno com turno), com ponto a até 400 m e embarque em horário parecido; confira com a operação antes de mudar.</p>
+  </section>
+
+  <section class="painel" data-p="fora" hidden>
+    <div class="kpis k4" id="fKpis"></div>
+    <details open><summary><b>Por rota</b> <span class="muted">· média por dia no período; clique na rota para ver as pessoas dela</span></summary>
+    <div id="fRotas"></div></details>
+    <h3>Pessoas</h3>
+    <div class="bar"><label>Buscar<input id="fBuscaP" type="search" placeholder="nome, matrícula, linha, gestor, empresa"></label><span id="fFiltro" class="muted"></span></div>
+    <div id="fLista"></div>
+  </section>
+
+  <section class="painel" data-p="cad" hidden>
+    <p class="muted">Para quem vai o e-mail de passageiro fora de rota, nesta ordem: <b>1)</b> e-mail do gestor na linha da pessoa; <b>2)</b> gestor da empresa dela (ex.: gestor de contrato); <b>3)</b> gestor da gerência (GA). Sem nenhum, o e-mail vem para você.</p>
+    <div class="kpis k4" id="cKpis"></div>
+    <h3 id="sPlan">1. Planilha de pessoas</h3>
+    <p class="muted">Baixe o modelo, preencha as abas <b>Pessoas</b> e <b>Gestor por empresa</b> e suba aqui. Também dá para copiar as linhas do Excel e colar na caixa. A matrícula é o que liga a pessoa ao embarque; mandar a mesma pessoa de novo atualiza o cadastro.</p>
+    <div class="bar"><a class="btn" href="modelo-cadastro-gestores.xlsx" download>Baixar modelo Excel</a><label class="btn" style="flex-direction:row">Subir planilha<input id="vArq" type="file" accept=".xlsx,.xls,.csv" hidden></label></div>
+    <textarea id="vCola" placeholder="Ou cole aqui as linhas da aba Pessoas (com o título):&#10;Matrícula&#9;RFID (crachá)&#9;Nome&#9;Empresa&#9;Gerência de área (GA)&#9;Gerência geral (GG)&#9;E-mail do gestor&#9;Nome do gestor"></textarea>
+    <details><summary class="muted">Preencher o mesmo dado para todas as linhas coladas (só onde estiver vazio)</summary>
+    <div class="vtodos">
+      <label>Empresa<input id="vEmp" type="text"></label><label>Gerência de área (GA)<input id="vArea" type="text"></label>
+      <label>Nome do gestor<input id="vGn" type="text"></label><label>E-mail do gestor<input id="vGe" type="email"></label>
+    </div></details>
     <div class="bar"><button id="vPrev" type="button" class="btn">Conferir</button><button id="vSalvar" type="button" class="btn" hidden>Salvar</button><span id="vMsg" class="muted"></span></div>
     <div id="vPrevia"></div>
-    <div id="vLista" class="muted">Abra com a senha para ver as pessoas já vinculadas.</div>
-    <h3>2. Gestor por gerência (GA da TFleet)</h3>
+    <div id="vLista" class="muted">Abra com a senha para ver as pessoas cadastradas.</div>
+    <h3 id="sEmp">2. Gestor por empresa</h3>
+    <p class="muted">Quem cuida de cada empresa (gerente, gestor de contrato…). Todo mundo dessa empresa na planilha cai para ele. As empresas aparecem a partir da planilha; dá para incluir uma nova na última linha.</p>
+    <div id="eLista" class="muted">Abra com a senha para ver.</div>
+    <h3 id="sGa">3. Gestor por gerência (GA da TFleet)</h3>
     <p class="muted">As gerências aparecem sozinhas a partir dos embarques. Preencha o e-mail e marque "envia".</p>
     <div id="gLista"></div>
-    <h2 style="margin-top:16px">Respostas dos supervisores</h2>
+  </section>
+
+  <section class="painel" data-p="resp" hidden>
+    <div class="kpis k4" id="rKpis"></div>
     <div id="gResp" class="muted">Abra com a senha para ver.</div>
   </section>
-  <div class="kpis" id="kpis"></div>
-  <div class="list" id="list"><div class="msg">Carregando…</div></div>
-  <p class="note">Média = passageiros identificados por viagem (BDV). Ideal = 40, deixando 5 vagas dos 45 lugares. Quadradinhos = um por dia: vermelho passou de 40, amarelo de 36 a 40, verde abaixo. Rota alternativa só é sugerida dentro do mesmo grupo (ADM com ADM, CT com CT, turno com turno), com ponto a até 400 m e embarque em horário parecido; confira com a operação antes de mudar.</p>
 </main>
 <script>
 // Mesma conexao publica do painel (so leitura).
@@ -182,7 +221,7 @@ async function load() {
       api("rpc/fora_rota_resumo", { dias, min_dias: 3 }).catch(() => []),
       api("rpc/lotacao_dias", { dias }).catch(() => [])]);
     monit = new Set((await api("rotas_monitoradas?select=linha").catch(() => [])).map(m => m.linha));
-    render();
+    render(); foraRender();
   } catch (e) {
     $("#kpis").innerHTML = "";
     $("#list").innerHTML = '<div class="msg">Não consegui ler os dados (' + esc(e.message) + '). Se aparecer 404, falta rodar o <b>lotacao-v3.sql</b> no Supabase.</div>';
@@ -199,13 +238,17 @@ function render() {
   const q = $("#fBusca").value.trim().toLowerCase().replace(/^ônibus\s*|^onibus\s*/, "");
   const modo = $("#fStatus").value, grp = $("#fGrupo").value;
   const base = rows.filter(r => !grp || r.grupo === grp);
-  const vis = base.filter(r => (modo === "all" || (modo === "mon" ? monit.has(r.linha) : !["OK", "POUCOS DADOS", "PICO EVENTUAL"].includes(r.status))) &&
+  const passa = r => modo === "all" || (modo === "mon" ? monit.has(r.linha) : modo === "prob" ? !["OK", "POUCOS DADOS", "PICO EVENTUAL"].includes(r.status) : r.status === modo);
+  const vis = base.filter(r => passa(r) &&
     (!q || [r.linha, r.tipolinha, r.frotas].join(" ").toLowerCase().includes(q)));
   const n = st => base.filter(r => r.status === st).length;
-  $("#kpis").innerHTML =
-    `<div class="kpi crit"><b>${n("LOTACAO RECORRENTE")}</b><span><b style="font-size:14px;color:inherit;display:inline">Lotando</b><br>acima de ${cap} em metade dos dias ou mais</span></div>` +
-    `<div class="kpi warn"><b>${n("LOTACAO FREQUENTE")}</b><span><b style="font-size:14px;color:inherit;display:inline">Atenção</b><br>acima de ${cap} em alguns dias</span></div>` +
-    `<div class="kpi info"><b>${n("PREVISAO DE LOTACAO")}</b><span><b style="font-size:14px;color:inherit;display:inline">Previsão</b><br>perto de ${cap}, ainda sem passar</span></div>`;
+  const kpi = (cls, val, tit, sub, m) => `<button type="button" class="kpi ${cls}${modo === m ? " on" : ""}" data-m="${m}"><b>${val}</b><span><b style="font-size:14px;color:inherit;display:inline">${tit}</b><br>${sub}</span></button>`;
+  $("#kpis").innerHTML = kpi("crit", n("LOTACAO RECORRENTE"), "Lotando", `acima de ${cap} em metade dos dias ou mais`, "LOTACAO RECORRENTE") +
+    kpi("warn", n("LOTACAO FREQUENTE"), "Atenção", `acima de ${cap} em alguns dias`, "LOTACAO FREQUENTE") +
+    kpi("info", n("PREVISAO DE LOTACAO"), "Previsão", `perto de ${cap}, ainda sem passar`, "PREVISAO DE LOTACAO") +
+    kpi("", base.length, "Rotas analisadas", "linha + sentido + horário", "all");
+  const datas = diasR.map(d => d.data_local).sort(), viag = base.reduce((t, r) => t + r.viagens, 0), semL = base.reduce((t, r) => t + r.viagens_sem_leitura, 0);
+  $("#base").innerHTML = rows.length ? `Base: <b>${viag}</b> viagens com leitura${semL ? ` (+${semL} sem leitura, fora da média)` : ""} de ${datas.length ? ddmm(datas[0]) + " a " + ddmm(datas[datas.length - 1]) : "–"}, BDV da TFleet. Mostrando <b>${vis.length}</b> de ${base.length} rotas.` : "";
   if (!rows.length) { $("#list").innerHTML = '<div class="msg">Ainda não há viagens guardadas nesse período.</div>'; return; }
   if (!vis.length) { $("#list").innerHTML = '<div class="msg">Nada com alerta nesse filtro. Use "Mostrar: Todas" para ver as rotas OK.</div>'; return; }
   $("#list").innerHTML = vis.map(r => {
@@ -250,6 +293,11 @@ async function toggleStar(btn, linha) {
     on ? monit.add(linha) : monit.delete(linha); render();
   } catch (err) { if (/senha/i.test(err.message)) gSenha = ""; alert("Não salvou: " + err.message); }
 }
+$("#kpis").addEventListener("click", e => {
+  const b = e.target.closest(".kpi"); if (!b) return;
+  $("#fStatus").value = $("#fStatus").value === b.dataset.m ? "prob" : b.dataset.m; render();
+  $("#list").scrollIntoView({ behavior: "smooth", block: "start" });
+});
 $("#list").addEventListener("click", async e => {
   const st = e.target.closest(".star"); if (st) { e.stopPropagation(); return toggleStar(st, rows[+st.closest(".row").dataset.i].linha); }
   const el = e.target.closest(".row"); if (!el) return;
@@ -278,26 +326,107 @@ $("#list").addEventListener("click", async e => {
 
 // Respostas das consultas (com nome): so com a senha certa.
 const RESP_TXT = { TREINAMENTO: "Treinamento / temporário", MUDOU_ENDERECO: "Mudou de endereço", MUDOU_TURNO: "Mudou de turno / escala", COBERTURA: "Cobertura", NAO_SEI: "Vai verificar", OUTRO: "Outro" };
+let respL = [], respF = "";
 async function respLoad(ok) {
-  if (!ok) { $("#gResp").textContent = "Abra com a senha para ver."; return; }
+  if (!ok) { $("#gResp").textContent = "Abra com a senha para ver."; $("#rKpis").innerHTML = ""; return; }
   try {
-    const l = await api("rpc/consultas_lista", { senha: gSenha, dias: 30 });
-    if (!l.length) { $("#gResp").textContent = "Nenhuma consulta enviada nos últimos 30 dias."; return; }
-    const resp = l.filter(c => c.resposta).length;
-    $("#gResp").innerHTML = `<p>${l.length} consulta(s) nos últimos 30 dias · ${resp} respondida(s) · ${l.length - resp} aguardando.</p><div class="gl-wrap"><table class="gl"><tr><th>Colaborador</th><th>Usando / cadastro</th><th>Dias</th><th>Enviado para</th><th>Resposta</th></tr>` +
-      l.map(c => `<tr><td data-l="Colaborador">${esc(c.nome)}<br><span class="muted">${esc(c.matricula)} · ${esc(c.tipopassageiro || "")} · ${esc(c.ga || "")}</span></td>
-        <td data-l="Usando / cadastro">${esc(c.linha_usada)}<br><span class="muted">${esc(c.linha_cadastro || "sem linha")}</span></td><td data-l="Dias">${c.dias_fora}</td>
-        <td data-l="Enviado para">${esc(c.enviado_para || "ainda não enviado")}</td>
-        <td data-l="Resposta">${c.resposta ? `<b>${esc(RESP_TXT[c.resposta] || c.resposta)}</b>${c.comentario ? "<br>" + esc(c.comentario) : ""}` : '<span class="muted">aguardando</span>'}</td></tr>`).join("") + "</table></div>";
+    respL = await api("rpc/consultas_lista", { senha: gSenha, dias: Math.max(30, +$("#fDias").value) });
+    respRender();
   } catch (err) { $("#gResp").textContent = "Erro: " + err.message + " (rodou o lotacao-v3.sql?)"; }
 }
-// ---- cadastro em massa pessoa -> gestor (texto colado do Excel: tab, ; ou ,)
-// ordem importa: "E-mail do gestor" e "Nome do gestor" tem que cair antes de "nome"
-const V_COLS = [["matricula", /matr|chapa|^re$|registro|crach/i], ["gestor_email", /mail/i], ["gestor_nome", /gestor|supervisor|respons/i],
-  ["nome", /nome|colaborador|funcion/i], ["empresa", /empresa|contratada|fornecedor/i], ["area", /area|área|gerencia|gerência|setor|^ga$/i]];
-const V_ORDEM = ["matricula", "nome", "empresa", "area", "gestor_nome", "gestor_email"];
+function respRender() {
+  const l = respL, dias = Math.max(30, +$("#fDias").value);
+  const filtros = { todas: () => true, resp: c => c.resposta, agu: c => !c.resposta, naoenv: c => !c.enviado_para,
+    perm: c => ["MUDOU_TURNO", "MUDOU_ENDERECO"].includes(c.resposta) };
+  const k = (cls, f, val, tit, sub) => `<button type="button" class="kpi ${cls}${respF === f ? " on" : ""}" data-f="${f}"><b>${val}</b><span><b style="font-size:14px;color:inherit;display:inline">${tit}</b><br>${sub}</span></button>`;
+  $("#rKpis").innerHTML = k("", "todas", l.length, "Consultas", `últimos ${dias} dias`) + k("info", "resp", l.filter(filtros.resp).length, "Respondidas", "pelo gestor") +
+    k("warn", "agu", l.filter(filtros.agu).length, "Aguardando", "sem resposta") + k("crit", "perm", l.filter(filtros.perm).length, "Mudou turno / endereço", "atualizar o cadastro da rota");
+  const vis = l.filter(filtros[respF] || filtros.todas);
+  if (!l.length) { $("#gResp").textContent = `Nenhuma consulta nos últimos ${dias} dias.`; return; }
+  $("#gResp").innerHTML = `<p class="base">Mostrando ${vis.length} de ${l.length}. Clique num número de cima para filtrar.</p><div class="gl-wrap"><table class="gl"><tr><th>Colaborador</th><th>Usando / cadastro</th><th>Dias</th><th>Enviado para</th><th>Resposta</th></tr>` +
+    vis.map(c => `<tr><td data-l="Colaborador">${esc(c.nome)}<br><span class="muted">${esc(c.matricula)} · ${esc(c.tipopassageiro || "")} · ${esc(c.ga || "")}</span></td>
+      <td data-l="Usando / cadastro">${esc(c.linha_usada)}<br><span class="muted">${esc(c.linha_cadastro || "sem linha")}</span></td><td data-l="Dias">${c.dias_fora}</td>
+      <td data-l="Enviado para">${esc(c.enviado_para || "ainda não enviado")}</td>
+      <td data-l="Resposta">${c.resposta ? `<b>${esc(RESP_TXT[c.resposta] || c.resposta)}</b>${c.comentario ? "<br>" + esc(c.comentario) : ""}` : '<span class="muted">aguardando</span>'}</td></tr>`).join("") + "</table></div>";
+}
+$("#rKpis").addEventListener("click", e => { const b = e.target.closest(".kpi"); if (!b) return; respF = respF === b.dataset.f ? "" : b.dataset.f; respRender(); });
+
+// ---- aba Passageiros fora de rota: por rota (sem senha, numeros) e por pessoa (com senha)
+let foraL = null, inatL = [], foraF = "", foraLinha = "";
+const GRUPO_DE = t => { const n = String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s*-\s*PASSAGEIRO\s*$/, "").trim();
+  return /^CT\s*-?\s*\d/.test(n) ? "CT" : /(^|[^A-Z])ADM([^A-Z]|$)/.test(n) ? "ADM" : /TURNO/.test(n) ? "TURNO" : null; };
+async function foraLoad(ok) {
+  if (!ok) { foraL = null; foraRender(); return; }
+  try {
+    [foraL, inatL] = await Promise.all([api("rpc/fora_rota_lista", { senha: gSenha, dias: +$("#fDias").value, min_dias: 3 }),
+      api("rpc/inativos_lista", { senha: gSenha, dias: +$("#fDias").value }).catch(() => [])]);
+  } catch (err) { foraL = null; $("#fLista").innerHTML = `<div class="msg">Erro: ${esc(err.message)} (rodou o lotacao-v4.sql?)</div>`; }
+  foraRender();
+}
+function foraRender() {
+  const rs = resumo.slice().sort((a, b) => b.de_outra_linha_dia - a.de_outra_linha_dia).filter(r => r.de_outra_linha_dia > 0 || r.inativos_dia > 0);
+  $("#fRotas").innerHTML = rs.length ? `<div class="gl-wrap"><table class="gl"><tr><th>Rota</th><th>Embarques/dia</th><th>De outra rota/dia</th><th>Sem cadastro/dia</th><th>Inativos/dia</th><th>Pessoas recorrentes</th></tr>` +
+    rs.map(r => `<tr class="click${foraLinha === r.linha ? " on" : ""}" data-l="${esc(r.linha)}"><td data-l="Rota"><b>${esc(r.linha)}</b> <span class="muted">${esc(r.sentido || "")}</span></td><td data-l="Embarques/dia">${fmt(r.passageiros_dia)}</td>
+      <td data-l="De outra rota/dia"><b>${fmt(r.de_outra_linha_dia)}</b></td><td data-l="Sem cadastro/dia">${fmt(r.sem_cadastro_dia)}</td><td data-l="Inativos/dia">${r.inativos_dia > 0 ? `<b style="color:var(--crit)">${fmt(r.inativos_dia)}</b>` : "0"}</td><td data-l="Recorrentes">${r.recorrentes}</td></tr>`).join("") + "</table></div>"
+    : '<div class="msg">Ninguém embarcando fora da rota de cadastro nesse período.</div>';
+  if (!foraL) {
+    const tot = resumo.reduce((t, r) => t + r.recorrentes, 0);
+    $("#fKpis").innerHTML = `<div class="kpi crit"><b>${tot}</b><span><b style="font-size:14px;color:inherit;display:inline">Recorrentes</b><br>3+ dias em outra rota</span></div>`;
+    $("#fLista").innerHTML = '<div class="msg">Digite a senha de gestores (em cima) para ver os nomes, as gerências e para qual gestor vai cada um.</div>';
+    return;
+  }
+  const fs = { rec: p => p.classificacao === "RECORRENTE", eve: p => p.classificacao === "EVENTUAL", sem: p => p.classificacao === "RECORRENTE" && p.gestor_origem === "sem gestor",
+    grp: p => { const a = GRUPO_DE(p.linha_cadastro), b = GRUPO_DE(p.linha_usada); return a && b && a !== b; } };
+  const k = (cls, f, val, tit, sub) => `<button type="button" class="kpi ${cls}${foraF === f ? " on" : ""}" data-f="${f}"><b>${val}</b><span><b style="font-size:14px;color:inherit;display:inline">${tit}</b><br>${sub}</span></button>`;
+  $("#fKpis").innerHTML = k("crit", "rec", foraL.filter(fs.rec).length, "Recorrentes", "3+ dias em outra rota") + k("", "eve", foraL.filter(fs.eve).length, "Eventuais", "1 ou 2 dias") +
+    k("warn", "grp", foraL.filter(fs.grp).length, "Trocou de grupo", "ex.: turno → ADM") + k("crit", "inat", inatL.length, "Inativos embarcando", "cadastro INATIVO") +
+    `<button type="button" class="kpi${foraF === "sem" ? " on" : ""}" data-f="sem"><b>${foraL.filter(fs.sem).length}</b><span><b style="font-size:14px;color:inherit;display:inline">Recorrentes sem gestor</b><br>o e-mail vem para você</span></button>`;
+  const q = $("#fBuscaP").value.trim().toLowerCase();
+  const dt = d => d ? String(d).slice(8, 10) + "/" + String(d).slice(5, 7) : "";
+  $("#fFiltro").innerHTML = foraLinha ? `Rota: <b>${esc(foraLinha)}</b> <button type="button" class="btn" id="fLimpa">limpar</button>` : "";
+  if (foraF === "inat") {
+    const v = inatL.filter(p => (!foraLinha || p.linha === foraLinha) && (!q || [p.nome, p.matricula, p.linha, p.ga].join(" ").toLowerCase().includes(q)));
+    $("#fLista").innerHTML = `<p class="base">${v.length} cadastro(s) INATIVO embarcando. Fonte: embarques da TFleet (OcupacaoHoje).</p><div class="gl-wrap"><table class="gl"><tr><th>Colaborador</th><th>Rota</th><th>Dias</th><th>Período</th><th>GA / GG</th></tr>` +
+      v.map(p => `<tr><td data-l="Colaborador"><b>${esc(p.nome)}</b><br><span class="muted">${esc(p.matricula || "")}</span></td><td data-l="Rota">${esc(p.linha)} <span class="muted">${esc(p.sentido || "")}</span></td>
+        <td data-l="Dias">${p.dias_embarcou}</td><td data-l="Período">${dt(p.primeiro)} a ${dt(p.ultimo)}</td><td data-l="GA / GG">${esc(p.ga || "")}<br><span class="muted">${esc(p.gg || "")}</span></td></tr>`).join("") + "</table></div>";
+    return;
+  }
+  const v = foraL.filter(p => (!foraF || fs[foraF](p)) && (!foraLinha || p.linha_usada === foraLinha) &&
+    (!q || [p.nome, p.matricula, p.linha_usada, p.linha_cadastro, p.ga, p.gg, p.empresa, p.gestor_nome, p.gestor_email].join(" ").toLowerCase().includes(q)));
+  $("#fLista").innerHTML = `<p class="base">Mostrando ${v.length} de ${foraL.length} pessoa(s)/rota. Fonte: embarques da TFleet; "cadastro" = linha do passageiro na TFleet.</p>` + (v.length ? `<div class="gl-wrap"><table class="gl"><tr><th>Colaborador</th><th>Usando / cadastro</th><th>Dias</th><th>Período</th><th>GA / GG</th><th>Gestor (e-mail vai para)</th></tr>` +
+    v.slice(0, 500).map(p => { const a = GRUPO_DE(p.linha_cadastro), b = GRUPO_DE(p.linha_usada);
+      return `<tr><td data-l="Colaborador"><b>${esc(p.nome)}</b><br><span class="muted">${esc(p.matricula)} · ${esc(p.tipopassageiro || "")}${p.empresa ? " · " + esc(p.empresa) : ""}</span></td>
+      <td data-l="Usando / cadastro">${esc(p.linha_usada)} <span class="muted">${esc(p.sentido || "")}</span><br><span class="muted">${esc(p.linha_cadastro || "sem linha")}</span>${a && b && a !== b ? `<br><span class="tag warn">${a} → ${b}</span>` : ""}</td>
+      <td data-l="Dias"><span class="tag ${p.classificacao === "RECORRENTE" ? "crit" : ""}">${p.dias_fora} de ${p.dias_embarcou}</span></td><td data-l="Período">${dt(p.primeiro)} a ${dt(p.ultimo)}</td>
+      <td data-l="GA / GG">${esc(p.ga || "")}<br><span class="muted">${esc(p.gg || "")}</span></td>
+      <td data-l="Gestor">${p.gestor_email ? `${esc(p.gestor_nome || "")}<br><span class="muted">${esc(p.gestor_email)} · via ${esc(p.gestor_origem)}</span>` : '<span class="v-err">sem gestor</span>'}</td></tr>`; }).join("") + "</table></div>" : "");
+}
+$("#fKpis").addEventListener("click", e => { const b = e.target.closest("button.kpi"); if (!b) return; foraF = foraF === b.dataset.f ? "" : b.dataset.f; foraRender(); });
+$("#fRotas").addEventListener("click", e => { const tr = e.target.closest("tr.click"); if (!tr) return; foraLinha = foraLinha === tr.dataset.l ? "" : tr.dataset.l; foraRender(); $("#fFiltro").scrollIntoView({ behavior: "smooth", block: "center" }); });
+$("#fFiltro").addEventListener("click", e => { if (e.target.id === "fLimpa") { foraLinha = ""; foraRender(); } });
+$("#fBuscaP").addEventListener("input", foraRender);
+
+// ---- aba Cadastro: resumo clicavel (leva para a secao)
+let cSt = {};
+function cadKpis() {
+  const k = (cls, alvo, val, tit, sub) => `<button type="button" class="kpi ${cls}" data-a="${alvo}"><b>${val ?? "–"}</b><span><b style="font-size:14px;color:inherit;display:inline">${tit}</b><br>${sub}</span></button>`;
+  $("#cKpis").innerHTML = k("", "vLista", cSt.pessoas, "Pessoas cadastradas", cSt.nao ? `${cSt.nao} não apareceram nos embarques` : "planilha") +
+    k(cSt.semGestor ? "crit" : "", "vLista", cSt.semGestor, "Pessoas sem gestor", "o e-mail vem para você") +
+    k(cSt.empSem ? "warn" : "", "eLista", cSt.empSem, "Empresas sem gestor", `de ${cSt.emp ?? "–"} empresa(s)`) +
+    k(cSt.gaSem ? "warn" : "", "gLista", cSt.gaSem, "Gerências sem gestor", `de ${cSt.ga ?? "–"} gerência(s)`);
+}
+$("#cKpis").addEventListener("click", e => { const b = e.target.closest(".kpi"); if (!b) return;
+  const el = document.getElementById(b.dataset.a); if (b.dataset.a === "vLista") el.querySelectorAll("details").forEach(d => { if (d.dataset.sem) d.open = true; });
+  el.scrollIntoView({ behavior: "smooth", block: "start" }); });
+
+// ---- cadastro em massa// ---- cadastro em massa pessoa -> gestor (texto colado do Excel: tab, ; ou ,)
+// ordem importa: "E-mail do gestor", "Nome do gestor" e "Gerência geral" tem que cair antes de "nome" e "gerência"
+const V_COLS = [["matricula", /matr|chapa|^re$|registro/i], ["rfid", /rfid|crach|cart[aã]o|tag/i], ["gestor_email", /mail/i],
+  ["gestor_nome", /gestor|supervisor|respons/i], ["gg", /geral|^gg$/i], ["area", /ger[eê]ncia|área|area|setor|^ga$/i],
+  ["nome", /nome|colaborador|funcion/i], ["empresa", /empresa|contratada|fornecedor/i]];
+const V_ORDEM = ["matricula", "rfid", "nome", "empresa", "area", "gg", "gestor_email", "gestor_nome"];   // ordem do modelo Excel
 const emailOk = e => /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(e);
-let vLinhas = [];
+let vLinhas = [], vEmpresasArq = [];   // vEmpresasArq = aba "Gestor por empresa" da planilha subida
 function vParse(txt) {
   const lin = txt.split(/\r?\n/).filter(l => l.trim());
   if (!lin.length) return [];
@@ -317,7 +446,7 @@ function vParse(txt) {
     if (!o.gestor_email && todos.gestor_email) { o.gestor_email = todos.gestor_email; o.gestor_nome = o.gestor_nome || todos.gestor_nome; }
     for (const k of ["empresa", "area"]) if (todos[k] && !o[k]) o[k] = todos[k];
     o._erro = !o.matricula && !o.nome ? "sem matrícula e sem nome" : o.gestor_email && !emailOk(o.gestor_email) ? "e-mail inválido"
-      : !o.gestor_email && !o.area ? "sem e-mail do gestor e sem área" : "";
+      : !o.gestor_email && !o.area && !o.empresa ? "sem e-mail do gestor, sem empresa e sem gerência" : "";
     return o;
   });
 }
@@ -325,44 +454,111 @@ $("#vPrev").addEventListener("click", () => {
   if (!gSenha) { $("#vMsg").textContent = "Abra com a senha de gestores primeiro."; return; }
   vLinhas = vParse($("#vCola").value);
   const ok = vLinhas.filter(o => !o._erro), ruins = vLinhas.length - ok.length;
-  if (!vLinhas.length) { $("#vMsg").textContent = "Cole as linhas da planilha."; $("#vPrevia").innerHTML = ""; $("#vSalvar").hidden = true; return; }
-  $("#vMsg").innerHTML = `${ok.length} pessoa(s) prontas${ruins ? ` · <span class="v-err">${ruins} com problema (não serão salvas)</span>` : ""}`;
-  $("#vSalvar").hidden = !ok.length; $("#vSalvar").textContent = `Salvar ${ok.length} pessoa(s)`;
-  $("#vPrevia").innerHTML = `<div class="gl-wrap"><table class="gl"><tr><th>Matrícula</th><th>Nome</th><th>Empresa</th><th>Área</th><th>Gestor</th><th>E-mail</th><th></th></tr>` +
-    vLinhas.slice(0, 200).map(o => `<tr><td data-l="Matrícula">${esc(o.matricula || "")}</td><td data-l="Nome">${esc(o.nome || "")}</td><td data-l="Empresa">${esc(o.empresa || "")}</td>
-      <td data-l="Área">${esc(o.area || "")}</td><td data-l="Gestor">${esc(o.gestor_nome || "")}</td><td data-l="E-mail">${esc(o.gestor_email || "")}</td>
+  const empOk = vEmpresasArq.filter(e => e.empresa && emailOk(e.gestor_email || "")), empRuins = vEmpresasArq.length - empOk.length;
+  if (!vLinhas.length && !vEmpresasArq.length) { $("#vMsg").textContent = "Suba a planilha ou cole as linhas."; $("#vPrevia").innerHTML = ""; $("#vSalvar").hidden = true; return; }
+  $("#vMsg").innerHTML = `${ok.length} pessoa(s) prontas${ruins ? ` · <span class="v-err">${ruins} com problema (não serão salvas)</span>` : ""}` +
+    (vEmpresasArq.length ? ` · ${empOk.length} gestor(es) de empresa${empRuins ? ` · <span class="v-err">${empRuins} sem empresa ou e-mail válido</span>` : ""}` : "");
+  $("#vSalvar").hidden = !ok.length && !empOk.length;
+  $("#vSalvar").textContent = "Salvar " + [ok.length && ok.length + " pessoa(s)", empOk.length && empOk.length + " gestor(es) de empresa"].filter(Boolean).join(" e ");
+  $("#vPrevia").innerHTML = (vEmpresasArq.length ? `<div class="gl-wrap"><table class="gl"><tr><th>Empresa</th><th>Gestor</th><th>Cargo</th><th>E-mail</th><th></th></tr>` +
+    vEmpresasArq.map(e => `<tr><td data-l="Empresa">${esc(e.empresa || "")}</td><td data-l="Gestor">${esc(e.gestor_nome || "")}</td><td data-l="Cargo">${esc(e.cargo || "")}</td><td data-l="E-mail">${esc(e.gestor_email || "")}</td>
+      <td>${e.empresa && emailOk(e.gestor_email || "") ? '<span class="v-ok">ok</span>' : '<span class="v-err">sem empresa ou e-mail válido</span>'}</td></tr>`).join("") + "</table></div>" : "") +
+    (vLinhas.length ? `<div class="gl-wrap"><table class="gl"><tr><th>Matrícula</th><th>RFID</th><th>Nome</th><th>Empresa</th><th>GA / GG</th><th>Gestor</th><th></th></tr>` +
+    vLinhas.slice(0, 200).map(o => `<tr><td data-l="Matrícula">${esc(o.matricula || "")}</td><td data-l="RFID">${esc(o.rfid || "")}</td><td data-l="Nome">${esc(o.nome || "")}</td><td data-l="Empresa">${esc(o.empresa || "")}</td>
+      <td data-l="GA / GG">${esc(o.area || "")}${o.gg ? "<br>" + esc(o.gg) : ""}</td><td data-l="Gestor">${esc(o.gestor_nome || "")}${o.gestor_email ? "<br>" + esc(o.gestor_email) : ""}</td>
       <td>${o._erro ? `<span class="v-err">${esc(o._erro)}</span>` : '<span class="v-ok">ok</span>'}</td></tr>`).join("") + "</table></div>" +
-    (vLinhas.length > 200 ? `<p class="muted">Mostrando 200 de ${vLinhas.length}.</p>` : "");
+    (vLinhas.length > 200 ? `<p class="muted">Mostrando 200 de ${vLinhas.length}.</p>` : "") : "");
 });
 $("#vSalvar").addEventListener("click", async () => {
   const ok = vLinhas.filter(o => !o._erro).map(({ _erro, ...o }) => o);
+  const emps = vEmpresasArq.filter(e => e.empresa && emailOk(e.gestor_email || ""));
   $("#vSalvar").disabled = true; $("#vMsg").textContent = "Salvando…";
   try {
-    const r = await api("rpc/importar_vinculos", { senha: gSenha, p_linhas: ok });
-    $("#vMsg").innerHTML = `<span class="v-ok">${r.salvos} pessoa(s) salvas.</span>${r.erros.length ? ` <span class="v-err">${r.erros.length} recusada(s): ${esc(r.erros.slice(0, 5).map(e => "linha " + e.linha + " " + e.motivo).join("; "))}</span>` : ""}`;
-    $("#vPrevia").innerHTML = ""; $("#vCola").value = ""; $("#vSalvar").hidden = true; vincLoad(true);
+    for (const e of emps) await api("rpc/salvar_gestor_empresa", { senha: gSenha, p_empresa: e.empresa, p_nome: e.gestor_nome || null, p_cargo: e.cargo || null, p_email: e.gestor_email, p_ativo: true });
+    const r = ok.length ? await api("rpc/importar_vinculos", { senha: gSenha, p_linhas: ok }) : { salvos: 0, erros: [] };
+    $("#vMsg").innerHTML = `<span class="v-ok">${r.salvos} pessoa(s)${emps.length ? " e " + emps.length + " gestor(es) de empresa" : ""} salvos.</span>${r.erros.length ? ` <span class="v-err">${r.erros.length} recusada(s): ${esc(r.erros.slice(0, 5).map(e => "linha " + e.linha + " " + e.motivo).join("; "))}</span>` : ""}`;
+    $("#vPrevia").innerHTML = ""; $("#vCola").value = ""; $("#vSalvar").hidden = true; vEmpresasArq = []; vincLoad(true); empLoad(true);
   } catch (err) { $("#vMsg").innerHTML = `<span class="v-err">Não salvou: ${esc(err.message)} (rodou o lotacao-v4.sql?)</span>`; }
   $("#vSalvar").disabled = false;
 });
+// Subir planilha: le no navegador (SheetJS, carregado so quando precisa). Aba Pessoas vai para a caixa; aba Gestor por empresa fica separada.
+let xlsxLib = null;
+async function carregaXlsx() {
+  if (xlsxLib) return xlsxLib;
+  // copia local (mesmo site do painel, abre na rede da Hydro); se faltar, tenta o CDN
+  const carrega = src => new Promise((ok, erro) => { const sc = document.createElement("script"); sc.src = src; sc.onload = ok; sc.onerror = erro; document.head.appendChild(sc); });
+  try { await carrega("xlsx.full.min.js"); } catch (e) {
+    try { await carrega("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"); } catch (e2) { throw new Error("não carregou o leitor de Excel; copie e cole as linhas na caixa"); } }
+  return (xlsxLib = window.XLSX);
+}
+$("#vArq").addEventListener("change", async e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (!gSenha) { $("#vMsg").textContent = "Abra com a senha de gestores primeiro."; e.target.value = ""; return; }
+  $("#vMsg").textContent = "Lendo planilha…";
+  try {
+    const X = await carregaXlsx();
+    const wb = X.read(await f.arrayBuffer(), { type: "array", raw: false });
+    const aba = re => wb.SheetNames.find(n => re.test(n.normalize("NFD").replace(/[\u0300-\u036f]/g, "")));
+    const pes = aba(/pessoa/i) || wb.SheetNames.find(n => !/empresa|como/i.test(n));
+    $("#vCola").value = pes ? X.utils.sheet_to_csv(wb.Sheets[pes], { FS: "\t", blankrows: false, rawNumbers: false }) : "";
+    const emp = aba(/empresa/i);
+    vEmpresasArq = emp ? X.utils.sheet_to_json(wb.Sheets[emp], { header: 1, raw: false, blankrows: false }).slice(1)
+      .map(r => ({ empresa: String(r[0] || "").trim(), gestor_nome: String(r[1] || "").trim(), cargo: String(r[2] || "").trim(), gestor_email: String(r[3] || "").trim() }))
+      .filter(r => r.empresa || r.gestor_email) : [];
+    $("#vPrev").click();
+  } catch (err) { $("#vMsg").innerHTML = `<span class="v-err">Não consegui ler: ${esc(err.message)}</span>`; }
+  e.target.value = "";
+});
+// Gestor por empresa: lista as empresas da planilha + as ja cadastradas, editavel
+async function empLoad(ok) {
+  if (!ok) { $("#eLista").textContent = "Abra com a senha para ver."; return; }
+  try {
+    const l = await api("rpc/empresas_lista", { senha: gSenha });
+    cSt.emp = l.length; cSt.empSem = l.filter(e => !e.gestor_email || !e.ativo).length; cadKpis();
+    l.push({ empresa: "", pessoas: 0, novo: true });
+    $("#eLista").innerHTML = `<div class="gl-wrap"><table class="gl"><tr><th>Empresa</th><th>Pessoas</th><th>Gestor</th><th>Cargo</th><th>E-mail</th><th>Envia</th><th></th></tr>` +
+      l.map((e, i) => `<tr data-i="${i}"><td data-l="Empresa">${e.novo ? '<input type="text" class="en" placeholder="Nova empresa">' : esc(e.empresa)}</td><td data-l="Pessoas">${e.pessoas}</td>
+        <td data-l="Gestor"><input type="text" class="egn" value="${esc(e.gestor_nome || "")}"></td>
+        <td data-l="Cargo"><input type="text" class="ec" value="${esc(e.cargo || "")}" placeholder="Gestor de contrato" list="cargos"></td>
+        <td data-l="E-mail"><input type="email" class="ee" value="${esc(e.gestor_email || "")}"></td>
+        <td data-l="Envia"><input type="checkbox" class="ea" ${e.ativo || e.novo ? "checked" : ""}></td>
+        <td><button type="button" class="btn es">${e.novo ? "Incluir" : "Salvar"}</button></td></tr>`).join("") +
+      `</table></div><datalist id="cargos"><option>Gestor de contrato</option><option>Gerente</option><option>Supervisor</option><option>Coordenador</option></datalist>`;
+    $("#eLista").onclick = async ev => {
+      const b = ev.target.closest(".es"); if (!b) return;
+      const tr = b.closest("tr"), e = l[+tr.dataset.i], nome = e.novo ? tr.querySelector(".en").value.trim() : e.empresa;
+      if (!nome) { alert("Digite o nome da empresa."); return; }
+      b.disabled = true; b.textContent = "…";
+      try {
+        await api("rpc/salvar_gestor_empresa", { senha: gSenha, p_empresa: nome, p_nome: tr.querySelector(".egn").value, p_cargo: tr.querySelector(".ec").value,
+          p_email: tr.querySelector(".ee").value, p_ativo: tr.querySelector(".ea").checked });
+        b.textContent = "Salvo ✓"; if (e.novo) empLoad(true); vincLoad(true);
+      } catch (err) { b.textContent = e.novo ? "Incluir" : "Salvar"; alert("Não salvou: " + err.message); }
+      b.disabled = false;
+    };
+  } catch (err) { $("#eLista").textContent = "Erro: " + err.message + " (rodou o lotacao-v4.sql?)"; }
+}
 // pessoas ja vinculadas, agrupadas por empresa + gestor. "Não apareceu" = matricula/nome nao bate com nenhum embarque de 30 dias.
 async function vincLoad(ok) {
   if (!ok) { $("#vLista").textContent = "Abra com a senha para ver as pessoas já vinculadas."; return; }
   try {
     const l = await api("rpc/vinculos_lista", { senha: gSenha });
-    if (!l.length) { $("#vLista").textContent = "Ninguém vinculado ainda."; return; }
+    cSt.pessoas = l.length; cSt.nao = l.filter(p => !p.embarques).length; cSt.semGestor = l.filter(p => !p.email_final).length; cadKpis();
+    if (!l.length) { $("#vLista").textContent = "Ninguém cadastrado ainda."; return; }
+    // um grupo por GA / GG / empresa / gestor final: mostra a vinculacao completa e abre a lista de pessoas
     const grupos = {};
-    for (const v of l) { const k = (v.empresa || "Sem empresa") + "|" + (v.email_final || "sem gestor"); (grupos[k] = grupos[k] || []).push(v); }
-    $("#vLista").innerHTML = `<p>${l.length} pessoa(s) vinculadas.</p>` + Object.entries(grupos).map(([k, ps]) => {
-      const [emp, em] = k.split("|"), nao = ps.filter(p => !p.embarques).length;
-      return `<details><summary><b>${esc(emp)}</b> → ${esc(ps[0].gestor_nome || "")} ${esc(em)} · ${ps.length} pessoa(s)${nao ? ` · <span class="v-err">${nao} não apareceram nos embarques</span>` : ""}</summary>
-        <div class="gl-wrap"><table class="gl"><tr><th>Matrícula</th><th>Nome</th><th>Área</th><th>Embarques 30 dias</th></tr>` +
-        ps.map(p => `<tr><td data-l="Matrícula">${esc(p.matricula || "")}</td><td data-l="Nome">${esc(p.nome || "")}</td><td data-l="Área">${esc(p.area || "")}</td>
+    for (const v of l) { const k = [v.area || "", v.gg || "", (v.empresa || "").toUpperCase(), v.email_final || ""].join("|"); (grupos[k] = grupos[k] || []).push(v); }
+    $("#vLista").innerHTML = `<p class="base">${l.length} pessoa(s) cadastradas, agrupadas por gerência de área / gerência geral / empresa / gestor. Clique para ver as pessoas.</p>` + Object.entries(grupos).map(([k, ps]) => {
+      const [ga, gg, emp, em] = k.split("|"), nao = ps.filter(p => !p.embarques).length, p0 = ps[0];
+      return `<details${em ? "" : ' data-sem="1"'}><summary><b>${esc(ga || "sem GA")}</b> / ${esc(gg || "sem GG")} · <b>${esc(emp || "sem empresa")}</b> → ${em ? `${esc(p0.nome_final || "")} ${esc(em)} <span class="tag">via ${esc(p0.origem)}</span>` : '<span class="v-err">sem gestor</span>'} · ${ps.length} pessoa(s)${nao ? ` · <span class="v-err">${nao} não apareceram nos embarques</span>` : ""}</summary>
+        <div class="gl-wrap"><table class="gl"><tr><th>Matrícula</th><th>RFID</th><th>Nome</th><th>GA / GG</th><th>Embarques 30 dias</th></tr>` +
+        ps.map(p => `<tr><td data-l="Matrícula">${esc(p.matricula || "")}</td><td data-l="RFID">${esc(p.rfid || "")}</td><td data-l="Nome">${esc(p.nome || "")}</td><td data-l="GA / GG">${esc(p.area || "")}<br><span class="muted">${esc(p.gg || "")}</span></td>
           <td data-l="Embarques 30 dias">${p.embarques ? p.embarques + " (último " + esc(String(p.ultimo_embarque).split("-").reverse().join("/")) + ")" : '<span class="v-err">não apareceu</span>'}</td></tr>`).join("") +
         `</table></div><button type="button" class="btn vRem" data-k="${esc(k)}">Remover estas ${ps.length}</button></details>`;
     }).join("");
     $("#vLista").onclick = async e => {
       const b = e.target.closest(".vRem"); if (!b) return;
-      const ps = grupos[b.dataset.k]; if (!confirm(`Remover o vínculo de ${ps.length} pessoa(s)? Elas voltam a seguir o gestor da gerência.`)) return;
+      const ps = grupos[b.dataset.k]; if (!confirm(`Remover ${ps.length} pessoa(s) do cadastro? Elas voltam a seguir o gestor da gerência da TFleet.`)) return;
       try { await api("rpc/remover_vinculos", { senha: gSenha, p_chaves: ps.map(p => p.chave) }); vincLoad(true); }
       catch (err) { alert("Não removeu: " + err.message); }
     };
@@ -373,7 +569,8 @@ async function gestLoad() {
   try {
     const l = await api("rpc/gerencias_lista", { senha: gSenha || null, dias: +$("#fDias").value });
     const ok = l.length ? l[0].senha_ok : false;
-    respLoad(ok); vincLoad(ok);
+    senhaOk = ok; respLoad(ok); vincLoad(ok); empLoad(ok); foraLoad(ok);
+    cSt.ga = l.length; cSt.gaSem = l.filter(g => !g.email || !g.ativo).length; cadKpis();
     $("#gMsg").textContent = gSenha && !ok ? "Senha incorreta." : (ok ? "Pode editar." : "Sem senha: só leitura.");
     if (!l.length) { $("#gLista").innerHTML = '<div class="msg">Nenhuma gerência ainda. Elas aparecem quando a coleta de embarques começar a gravar.</div>'; return; }
     $("#gLista").innerHTML = `<div class="gl-wrap"><table class="gl"><tr><th>Gerência (GA)</th><th>Passag.</th><th>Fora da linha<br>recorr. / event.</th><th>Gestor</th><th>E-mail</th><th>Envia</th><th></th></tr>` +
@@ -395,17 +592,29 @@ async function gestLoad() {
     };
   } catch (err) { $("#gMsg").textContent = "Erro: " + err.message + " (rodou o lotacao-gestores.sql?)"; }
 }
-$("#btnGest").addEventListener("click", () => { const s = $("#gest"); s.hidden = !s.hidden; if (!s.hidden) gestLoad(); });
+// abas: a senha de gestores so aparece nas abas que tem nome/e-mail
+let senhaOk = false, gestCarregado = false;
+document.querySelector(".tabs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-tab]"); if (!b) return;
+  document.querySelectorAll(".tabs button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-selected", x === b); });
+  document.querySelectorAll(".painel").forEach(p => p.hidden = p.dataset.p !== b.dataset.tab);
+  $("#senhaBar").hidden = b.dataset.tab === "ocup";
+  store.set("lot_tab", b.dataset.tab);
+  if (b.dataset.tab === "fora") foraRender();
+  if (b.dataset.tab !== "ocup" && !gestCarregado) { gestCarregado = true; gestLoad(); }
+});
 $("#gEntrar").addEventListener("click", () => { gSenha = $("#gSenha").value; gestLoad(); });
+$("#gSenha").addEventListener("keydown", e => { if (e.key === "Enter") { gSenha = $("#gSenha").value; gestLoad(); } });
 
-["#fDias", "#fCap", "#fLug"].forEach(s => $(s).addEventListener("change", load));
+["#fCap", "#fLug"].forEach(s => $(s).addEventListener("change", load));
+$("#fDias").addEventListener("change", async () => { await load(); if (gestCarregado) gestLoad(); });
 ["#fStatus", "#fBusca", "#fGrupo"].forEach(s => $(s).addEventListener("input", render));
 $("#gateForm").addEventListener("submit", async e => {
   e.preventDefault();
   if (await codeOk($("#gateCode").value.trim())) { store.set("lot_ok", "1"); $("#gate").remove(); load(); }
   else $("#gateErr").textContent = "Código incorreto";
 });
-if (store.get("lot_ok") === "1") { $("#gate").remove(); load(); }
+if (store.get("lot_ok") === "1") { $("#gate").remove(); load(); const t = store.get("lot_tab"); if (t && t !== "ocup") document.querySelector(`.tabs [data-tab="${t}"]`)?.click(); }
 </script>
 </body>
 </html>
