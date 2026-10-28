@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Lotação das rotas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#17212b">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Mesma identidade do painel Monitor Frota. Lista de linha+sentido+horario ordenada por gravidade; clicar abre o dia a dia. */
+:root {
+  --bg: #eef1f4; --panel: #ffffff; --ink: #17212b; --muted: #5b6875; --line: #d5dce3;
+  --accent: #0d6c8c; --accent-soft: #e0eff4; --good: #1d7a46; --good-soft: #e1f2e8;
+  --warn: #a35c00; --warn-soft: #fbeedb; --crit: #b3261e; --crit-soft: #fbe3e1; --chart-grid: #e3e8ed;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742;
+  --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f;
+  --warn: #e7a443; --warn-soft: #36280f; --crit: #f07b72; --crit-soft: #3a1a18; --chart-grid: #24303a;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742;
+  --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f;
+  --warn: #e7a443; --warn-soft: #36280f; --crit: #f07b72; --crit-soft: #3a1a18; --chart-grid: #24303a;
+  color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--f-body); }
+header { background: #17212b; color: #e4eaf0; padding: 14px 16px; }
+header h1 { margin: 0; font: 600 20px var(--f-display); letter-spacing: .02em; }
+header p { margin: 2px 0 0; color: #93a1ae; font-size: 13px; }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 14px; }
+.bar label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 3px; }
+.bar select, .bar input { font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); }
+.bar input[type=search] { min-width: 200px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.kpi b { display: block; font: 600 26px var(--f-display); font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 12px; color: var(--muted); }
+.kpi.crit b { color: var(--crit); } .kpi.warn b { color: var(--warn); }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.row { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+.row.s-rec { border-left-color: var(--crit); } .row.s-freq { border-left-color: var(--warn); }
+.row.s-pico, .row.s-perto { border-left-color: var(--accent); } .row.s-ok { border-left-color: var(--good); }
+.top { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.top .nome { font: 600 16px var(--f-display); }
+.star { background: none; border: 0; padding: 0 2px; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; }
+.star.on { color: var(--warn); }
+.top .meta { color: var(--muted); font-size: 13px; }
+.chip { font: 600 11px var(--f-body); padding: 2px 8px; border-radius: 99px; letter-spacing: .03em; }
+.s-rec .chip { background: var(--crit-soft); color: var(--crit); } .s-freq .chip { background: var(--warn-soft); color: var(--warn); }
+.s-pico .chip, .s-perto .chip { background: var(--accent-soft); color: var(--accent); } .s-ok .chip { background: var(--good-soft); color: var(--good); }
+.nums { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font: 13px var(--f-mono); font-variant-numeric: tabular-nums; }
+.nums em { font-style: normal; color: var(--muted); }
+.sug { margin-top: 6px; font-size: 14px; }
+.det { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; display: none; }
+.row.open .det { display: block; }
+.det svg { width: 100%; height: 150px; display: block; }
+.det table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.det td, .det th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.det td.n { text-align: right; font-family: var(--f-mono); }
+.det td.acima { color: var(--crit); font-weight: 600; }
+.msg { background: var(--panel); border: 1px dashed var(--line); border-radius: 8px; padding: 18px; color: var(--muted); }
+.note { font-size: 12px; color: var(--muted); margin-top: 16px; }
+.btn { font: 600 14px var(--f-body); padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); cursor: pointer; }
+.muted { color: var(--muted); font-size: 13px; }
+#gest { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+#gest h2 { margin: 0 0 4px; font: 600 17px var(--f-display); }
+.gl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.gl th, .gl td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.gl input[type=text], .gl input[type=email] { width: 100%; min-width: 120px; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+.gl-wrap { overflow-x: auto; }
+@media (max-width: 640px) {
+  .gl tr:first-child { display: none; }
+  .gl tr { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .gl td { border: 0; padding: 2px 0; }
+  .gl td:first-child, .gl td:nth-child(4), .gl td:nth-child(5) { grid-column: 1 / -1; }
+  .gl td[data-l]::before { content: attr(data-l); display: block; font-size: 11px; color: var(--muted); }
+}
+#gate { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#gate form { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; width: 100%; max-width: 300px; display: flex; flex-direction: column; gap: 10px; }
+#gate input, #gate button { font: inherit; padding: 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+#gate button { background: var(--accent); color: #fff; border: 0; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="gate"><form id="gateForm"><b>Lotação das rotas</b><input id="gateCode" type="password" inputmode="numeric" placeholder="Código de acesso" autocomplete="off"><button>Entrar</button><small id="gateErr" style="color:var(--crit)"></small></form></div>
+<header><h1>Lotação das rotas</h1><p>Passageiros por viagem (API TFleet) por linha, sentido e horário de saída</p></header>
+<main>
+  <div class="bar">
+    <label>Período<select id="fDias"><option value="7">7 dias</option><option value="15">15 dias</option><option value="14">14 dias</option><option value="30">30 dias</option><option value="60" selected>60 dias</option><option value="90">90 dias</option></select></label>
+    <label>Ideal<input id="fCap" type="number" min="1" value="40" style="width:80px"></label>
+    <label>Lugares<input id="fLug" type="number" min="1" value="45" style="width:80px"></label>
+    <label>Mostrar<select id="fStatus"><option value="prob" selected>Só com alerta</option><option value="mon">Só monitoradas</option><option value="all">Todas</option></select></label>
+    <label>Buscar linha<input id="fBusca" type="search" placeholder="ex.: CT6, JK, ônibus 39"></label>
+    <button id="btnGest" type="button" class="btn">Gestores</button>
+  </div>
+  <section id="gest" hidden>
+    <h2>Gestores por gerência</h2>
+    <p class="muted">As gerências aparecem sozinhas a partir dos embarques. Preencha o e-mail do gestor e marque "envia" para ele receber a lista dos colaboradores da gerência usando linha diferente da cadastrada (com você em cópia). Para ver e salvar e-mails, use a senha de gestores definida no Supabase.</p>
+    <div class="bar"><label>Senha de gestores<input id="gSenha" type="password" autocomplete="off"></label><button id="gEntrar" type="button" class="btn">Abrir</button><span id="gMsg" class="muted"></span></div>
+    <div id="gLista"></div>
+  </section>
+  <div class="kpis" id="kpis"></div>
+  <div class="list" id="list"><div class="msg">Carregando…</div></div>
+  <p class="note">Ocupação = campo "ocupacao" da viagem no BDV (passageiros identificados na viagem). Ideal = limite para manter 5 vagas livres; lugares = assentos do ônibus. Viagens com 0 contam como "sem leitura" e ficam fora das médias. Horário agrupado pelo horário previsto do turno (API); sem previsto, faixa de 30 min da saída real. "Recorrente" só com 3+ viagens. A linha "vizinha" é só do mesmo turno/sentido/horário: confira se os pontos são compatíveis antes de remanejar.</p>
+</main>
+<script>
+// Mesma conexao publica do painel (so leitura).
+const CONFIG = { url: "https://orhuxmsrdnugpogvtnbg.supabase.co", key: "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL" };
+const ADMIN_PIN_SHA256 = "0eadf1d576bd3ec3f0e6d305a44136b198701bf1f369a001a848c4c561b3c0e6";
+const $ = s => document.querySelector(s);
+const store = { get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} } };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const STATUS = { "LOTACAO RECORRENTE": ["s-rec", "Lotação recorrente"], "LOTACAO FREQUENTE": ["s-freq", "Lotação frequente"],
+  "PICO EVENTUAL": ["s-pico", "Pico eventual"], "PREVISAO DE LOTACAO": ["s-perto", "Previsão de lotação"], "POUCOS DADOS": ["s-pico", "Poucos dados"], "OK": ["s-ok", "OK"] };
+
+async function codeOk(code) {
+  if (window.crypto && crypto.subtle) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
+    return Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, "0")).join("") === ADMIN_PIN_SHA256;
+  }
+  return code === "8015";
+}
+async function api(path, body) {
+  const r = await fetch(CONFIG.url + "/rest/v1/" + path, {
+    method: body ? "POST" : "GET",
+    headers: { apikey: CONFIG.key, Authorization: "Bearer " + CONFIG.key, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok) throw new Error(r.status + " " + (await r.text()).slice(0, 200));
+  return r.json();
+}
+
+let rows = [], alts = [], resumo = [], monit = new Set(), gSenha = "";
+async function load() {
+  $("#list").innerHTML = '<div class="msg">Carregando…</div>';
+  try {
+    const dias = +$("#fDias").value, capacidade = +$("#fCap").value || 40;
+    [rows, alts, resumo] = await Promise.all([
+      api("rpc/lotacao_rotas", { dias, capacidade, lugares: +$("#fLug").value || 45 }),
+      api("rpc/lotacao_alternativas", { dias, capacidade, raio_m: 400 }).catch(() => []),
+      api("rpc/fora_rota_resumo", { dias, min_dias: 3 }).catch(() => [])]);
+    monit = new Set((await api("rotas_monitoradas?select=linha").catch(() => [])).map(m => m.linha));
+    render();
+  } catch (e) {
+    $("#kpis").innerHTML = "";
+    $("#list").innerHTML = '<div class="msg">Não consegui ler os dados (' + esc(e.message) + '). Se aparecer 404, falta rodar o <b>lotacao.sql</b> no Supabase.</div>';
+  }
+}
+const fmt = n => n == null ? "–" : (+n).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+
+function render() {
+  const cap = +$("#fCap").value || 40;
+  const q = $("#fBusca").value.trim().toLowerCase();
+  const modo = $("#fStatus").value;
+  const vis = rows.filter(r => (modo === "all" || (modo === "mon" ? monit.has(r.linha) : r.status !== "OK")) &&
+    (!q || [r.linha, r.tipolinha, r.frotas].join(" ").toLowerCase().includes(q.replace(/^ônibus\s*|^onibus\s*/, ""))));
+  const rec = rows.filter(r => r.status === "LOTACAO RECORRENTE").length;
+  const freq = rows.filter(r => r.status === "LOTACAO FREQUENTE").length;
+  const viag = rows.reduce((s, r) => s + r.viagens, 0), acima = rows.reduce((s, r) => s + r.viagens_acima, 0);
+  const sem = rows.reduce((s, r) => s + r.viagens_sem_leitura, 0);
+  $("#kpis").innerHTML =
+    `<div class="kpi crit"><b>${rec}</b><span>horários com lotação recorrente (≥50% das viagens acima de ${cap})</span></div>` +
+    `<div class="kpi warn"><b>${freq}</b><span>horários com lotação frequente (20–49%)</span></div>` +
+    `<div class="kpi"><b>${acima} / ${viag}</b><span>viagens acima de ${cap} no período</span></div>` +
+    `<div class="kpi"><b>${sem}</b><span>viagens sem leitura (ocupação 0/vazia)</span></div>`;
+  if (!rows.length) {
+    $("#list").innerHTML = '<div class="msg">Ainda não há viagens guardadas nesse período. A API só entrega o dia de hoje, então o histórico começa a se formar a partir do primeiro dia em que o fluxo de coleta do n8n estiver ligado.</div>';
+    return;
+  }
+  if (!vis.length) { $("#list").innerHTML = '<div class="msg">Nenhum horário com alerta nesse filtro. Use "Mostrar: Todas" para ver as linhas OK.</div>'; return; }
+  $("#list").innerHTML = vis.map((r, i) => {
+    const [cls, lbl] = STATUS[r.status] || ["s-ok", r.status];
+    return `<div class="row ${cls}" data-i="${rows.indexOf(r)}">
+      <div class="top"><button type="button" class="star${monit.has(r.linha) ? " on" : ""}" title="Monitorar esta rota" aria-label="Monitorar ${esc(r.linha)}">${monit.has(r.linha) ? "★" : "☆"}</button><span class="nome">${esc(r.linha)}</span><span class="chip">${lbl}</span>
+        <span class="meta">${esc(r.tipo)} · ${esc(r.tipolinha || "")} · ${r.ref === "turno" ? "turno " + esc(r.faixa) : "saída " + esc(r.faixa) + "–" + esc(endSlot(r.faixa))} · ônibus ${esc(r.frotas || "–")}</span></div>
+      <div class="nums"><span><em>média</em> ${fmt(r.media_viagem)}</span><span><em>máx</em> ${r.maximo ?? "–"}</span>
+        <span><em>acima de ${cap}</em> ${r.viagens_acima}/${r.viagens} viagens (${fmt(r.pct_acima)}%) em ${r.dias_acima} dia(s)</span>
+        <span><em>ônibus/dia</em> ${fmt(r.onibus_por_dia)}</span><span><em>total/dia</em> ${fmt(r.media_total_dia)} vs ideal ${fmt(r.capacidade_ofertada)}</span>
+        <span><em>últimos 7 dias</em> ${fmt(r.media_7d)}</span><span><em>acima de ${+$("#fLug").value || 45} lugares</em> ${r.viagens_superlotadas}</span>
+        <span><em>dias</em> ${r.dias_com_dado}</span></div>
+      ${r.sugestao ? `<div class="sug">${esc(r.sugestao)}</div>` : ""}
+      ${extras(r)}
+      <div class="det"></div></div>`;
+  }).join("");
+}
+// Passageiros de outra linha e pontos que outra linha com folga tambem atende (sem nomes).
+function extras(r) {
+  let h = "";
+  const rs = resumo.find(x => x.linha === r.linha && x.sentido === r.tipo);
+  if (rs && (rs.de_outra_linha_dia > 0 || rs.inativos_dia > 0)) {
+    const exc = r.media_total_dia - r.capacidade_ofertada;
+    h += `<div class="sug">Dos ${fmt(rs.passageiros_dia)} passageiros/dia, <b>${fmt(rs.de_outra_linha_dia)} são de outra linha</b> (${rs.recorrentes} recorrentes) e ${fmt(rs.sem_cadastro_dia)} sem cadastro.` + (rs.inativos_dia > 0 ? ` <b style="color:var(--crit)">${fmt(rs.inativos_dia)}/dia com cadastro INATIVO.</b>` : "") +
+      (exc > 0 && rs.de_outra_linha_dia >= exc ? ` <b style="color:var(--good)">Só eles já explicam o excesso: regularizar a linha deles resolve sem ônibus extra.</b>` : "") + `</div>`;
+  }
+  const al = alts.filter(a => a.linha === r.linha && a.sentido === r.tipo);
+  if (al.length) h += `<div class="sug">Pontos que outra linha com folga também atende:<ul style="margin:4px 0 0;padding-left:18px">` + al.map(a =>
+    `<li><a href="https://www.google.com/maps?q=${a.ponto_lat},${a.ponto_lon}" target="_blank" rel="noopener">ponto</a> com ~${fmt(a.embarques_dia)} embarques/dia → <b>${esc(a.alternativa)}</b> a ${a.distancia_m} m (folga ~${fmt(a.alt_folga)}, embarque ~${esc(a.alt_hora)})</li>`).join("") + `</ul></div>`;
+  return h;
+}
+function endSlot(f) { const [h, m] = f.split(":").map(Number); const t = h * 60 + m + 29; return String(Math.floor(t / 60) % 24).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }
+
+// Estrela = rota monitorada (o e-mail diario mostra so as marcadas). Pede a senha de gestores uma vez.
+async function toggleStar(btn, linha) {
+  if (!gSenha) { gSenha = prompt("Senha de gestores para marcar rotas monitoradas:") || ""; if (!gSenha) return; }
+  const on = !monit.has(linha);
+  try {
+    await api("rpc/marcar_rota", { senha: gSenha, p_linha: linha, p_monitorar: on });
+    on ? monit.add(linha) : monit.delete(linha); render();
+  } catch (err) { if (/senha/i.test(err.message)) gSenha = ""; alert("Não salvou: " + err.message); }
+}
+$("#list").addEventListener("click", async e => {
+  const st = e.target.closest(".star"); if (st) { e.stopPropagation(); return toggleStar(st, rows[+st.closest(".row").dataset.i].linha); }
+  const el = e.target.closest(".row"); if (!el) return;
+  el.classList.toggle("open"); if (!el.classList.contains("open") || el.dataset.loaded) return;
+  const r = rows[+el.dataset.i], det = el.querySelector(".det"), cap = +$("#fCap").value || 40;
+  det.innerHTML = "Carregando viagens…";
+  try {
+    const desde = new Date(Date.now() - 3 * 3600e3 - (+$("#fDias").value) * 864e5).toISOString().slice(0, 10);
+    const p = new URLSearchParams({ select: "data_local,hora_saida,frota,motorista,ocupacao,ent:bruto->>entradaprevista,sai:bruto->>saidaprevista",
+      linha: "eq." + r.linha, tipo: "eq." + r.tipo, data_local: "gte." + desde, order: "data_local.asc,hora_saida.asc" });
+    const hhmm = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ""); return m ? m[1].padStart(2, "0") + ":" + m[2] : null; };
+    const vs = (await api("viagens?" + p.toString())).filter(v => {
+      const prev = hhmm(r.tipo === "VOLTA" ? v.sai : v.ent);
+      if (r.ref === "turno") return prev === r.faixa;
+      return !prev && v.hora_saida >= r.faixa && v.hora_saida <= endSlot(r.faixa) + ":59";
+    });
+    det.innerHTML = chart(vs, cap) + `<table><tr><th>Dia</th><th>Saída</th><th>Ônibus</th><th>Motorista</th><th style="text-align:right">Passag.</th></tr>` +
+      vs.slice().reverse().map(v => `<tr><td>${v.data_local.split("-").reverse().join("/")}</td><td>${esc((v.hora_saida || "").slice(0, 5))}</td><td>${esc(v.frota)}</td><td>${esc(v.motorista)}</td>
+        <td class="n ${v.ocupacao > cap ? "acima" : ""}">${v.ocupacao ? v.ocupacao : "sem leitura"}</td></tr>`).join("") + "</table>";
+    el.dataset.loaded = 1;
+  } catch (err) { det.textContent = "Erro ao carregar: " + err.message; }
+});
+
+// Barras por viagem (dia a dia) com a linha da capacidade.
+function chart(vs, cap) {
+  const ok = vs.filter(v => v.ocupacao > 0); if (!ok.length) return "";
+  const W = 600, H = 150, pl = 28, pb = 18, max = Math.max(cap + 5, ...ok.map(v => v.ocupacao));
+  const bw = (W - pl) / ok.length, y = v => H - pb - (v / max) * (H - pb - 8);
+  const css = getComputedStyle(document.documentElement), c = n => css.getPropertyValue(n).trim();
+  let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Passageiros por viagem">`;
+  for (const g of [0, Math.round(max / 2), max]) s += `<line x1="${pl}" x2="${W}" y1="${y(g)}" y2="${y(g)}" stroke="${c("--chart-grid")}"/><text x="0" y="${y(g) + 4}" font-size="10" fill="${c("--muted")}">${g}</text>`;
+  ok.forEach((v, i) => { const h = H - pb - y(v.ocupacao);
+    s += `<rect x="${pl + i * bw + 1}" y="${y(v.ocupacao)}" width="${Math.max(bw - 2, 1)}" height="${h}" rx="1" fill="${v.ocupacao > cap ? c("--crit") : c("--accent")}"><title>${v.data_local.split("-").reverse().join("/")} ${v.hora_saida.slice(0, 5)} · ${v.ocupacao}</title></rect>`; });
+  s += `<line x1="${pl}" x2="${W}" y1="${y(cap)}" y2="${y(cap)}" stroke="${c("--warn")}" stroke-width="1.5" stroke-dasharray="5 3"/><text x="${W - 4}" y="${y(cap) - 4}" text-anchor="end" font-size="10" fill="${c("--warn")}">capacidade ${cap}</text>`;
+  return s + "</svg>";
+}
+
+// ---- gestores (senha conferida no Supabase; sem senha so aparecem as gerencias, sem e-mail)
+
+async function gestLoad() {
+  $("#gMsg").textContent = "Carregando…";
+  try {
+    const l = await api("rpc/gerencias_lista", { senha: gSenha || null, dias: +$("#fDias").value });
+    const ok = l.length ? l[0].senha_ok : false;
+    $("#gMsg").textContent = gSenha && !ok ? "Senha incorreta." : (ok ? "Pode editar." : "Sem senha: só leitura.");
+    if (!l.length) { $("#gLista").innerHTML = '<div class="msg">Nenhuma gerência ainda. Elas aparecem quando a coleta de embarques começar a gravar.</div>'; return; }
+    $("#gLista").innerHTML = `<div class="gl-wrap"><table class="gl"><tr><th>Gerência (GA)</th><th>Passag.</th><th>Fora da linha<br>recorr. / event.</th><th>Gestor</th><th>E-mail</th><th>Envia</th><th></th></tr>` +
+      l.map((g, i) => `<tr data-i="${i}"><td>${esc(g.ga)}<br><span class="muted">${esc(g.gg || "")}</span></td><td data-l="Passageiros">${g.passageiros}</td><td data-l="Fora da linha (recorr. / event.)">${g.fora_recorrentes} / ${g.fora_eventuais}</td>
+        <td data-l="Gestor"><input type="text" class="gn" value="${esc(g.nome || "")}" ${ok ? "" : "disabled"}></td>
+        <td data-l="E-mail"><input type="email" class="ge" value="${esc(g.email || "")}" ${ok ? "" : "disabled"}></td>
+        <td data-l="Envia"><input type="checkbox" class="ga" ${g.ativo ? "checked" : ""} ${ok ? "" : "disabled"}></td>
+        <td>${ok ? '<button type="button" class="btn gs">Salvar</button>' : ""}</td></tr>`).join("") + "</table></div>";
+    $("#gLista").onclick = async e => {
+      const b = e.target.closest(".gs"); if (!b) return;
+      const tr = b.closest("tr"), g = l[+tr.dataset.i];
+      b.disabled = true; b.textContent = "…";
+      try {
+        await api("rpc/salvar_gestor", { senha: gSenha, p_ga: g.ga, p_gg: g.gg, p_nome: tr.querySelector(".gn").value,
+          p_email: tr.querySelector(".ge").value, p_ativo: tr.querySelector(".ga").checked });
+        b.textContent = "Salvo ✓";
+      } catch (err) { b.textContent = "Salvar"; alert("Não salvou: " + err.message); }
+      b.disabled = false;
+    };
+  } catch (err) { $("#gMsg").textContent = "Erro: " + err.message + " (rodou o lotacao-gestores.sql?)"; }
+}
+$("#btnGest").addEventListener("click", () => { const s = $("#gest"); s.hidden = !s.hidden; if (!s.hidden) gestLoad(); });
+$("#gEntrar").addEventListener("click", () => { gSenha = $("#gSenha").value; gestLoad(); });
+
+["#fDias", "#fCap", "#fLug"].forEach(s => $(s).addEventListener("change", load));
+["#fStatus", "#fBusca"].forEach(s => $(s).addEventListener("input", render));
+$("#gateForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (await codeOk($("#gateCode").value.trim())) { store.set("lot_ok", "1"); $("#gate").remove(); load(); }
+  else $("#gateErr").textContent = "Código incorreto";
+});
+if (store.get("lot_ok") === "1") { $("#gate").remove(); load(); }
+</script>
+</body>
+</html>
