@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# Comando de ajuda do servidor da TV Box. Digite "servidor" no terminal (do Cockpit ou SSH).
+set -uo pipefail
+
+DIR=/opt/servidor
+RAW="${RAW:-https://raw.githubusercontent.com/zael20/painel-mes-tfleet-bdv/main/servidor-tvbox}"
+DC="docker compose -f $DIR/docker-compose.yml --project-directory $DIR"
+
+ok()   { echo -e "\e[32m[OK]\e[0m $*"; }
+aviso(){ echo -e "\e[33m[!]\e[0m $*"; }
+root() { [ "$(id -u)" -eq 0 ] || { echo "Use com sudo:  sudo servidor $*"; exit 1; }; }
+
+ajuda() {
+cat <<TXT
+servidor status            -> o que esta rodando, memoria, disco e temperatura
+servidor logs [servico]    -> ultimas linhas de log (n8n, evolution, postgres, redis)
+servidor reiniciar [serv]  -> reinicia tudo ou um servico
+servidor backup            -> salva fluxos + credenciais agora (em $DIR/backups)
+servidor importar          -> importa os .json colocados em $DIR/importar para o n8n
+servidor atualizar         -> baixa versoes novas do n8n/Evolution e reinicia
+servidor atualizar-script  -> atualiza este comando a partir do GitHub
+servidor whatsapp          -> liga o fluxo de ocorrencias (Supabase, Gemini, grupo)
+servidor acessos           -> mostra os enderecos e a chave da Evolution
+TXT
+}
+
+case "${1:-}" in
+  status)
+    $DC ps --format 'table {{.Service}}\t{{.Status}}'
+    echo; free -h | head -2
+    echo; df -h / | tail -1 | awk '{print "Cartao SD: "$3" usados de "$2" ("$5")"}'
+    t=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0); echo "Temperatura: $((t/1000)) C"
+    echo "Tailscale: $(tailscale ip -4 2>/dev/null | head -1 || echo 'desligado')"
+    echo "Ultimo backup: $(ls -1t $DIR/backups/*.tar.gz 2>/dev/null | head -1 || echo 'nenhum ainda')"
+    ;;
+  logs)       $DC logs --tail "${3:-60}" ${2:-} ;;
+  reiniciar)  root "$@"; $DC restart ${2:-}; ok "Reiniciado" ;;
+  backup)
+    root "$@"
+    d=$(date +%Y-%m-%d_%H%M); tmp="$DIR/backups/$d"
+    mkdir -p "$tmp/fluxos" && chown -R 1000:1000 "$DIR/backups"
+    $DC exec -T n8n n8n export:workflow --all --backup --output=/backups/$d/fluxos/ >/dev/null \
+      && $DC exec -T n8n n8n export:credentials --all --backup --output=/backups/$d/credenciais/ >/dev/null \
+      || { aviso "Falhou exportar do n8n"; exit 1; }
+    cp "$DIR/segredos.env" "$DIR/.env" "$tmp/" 2>/dev/null; [ -f "$DIR/config.env" ] && cp "$DIR/config.env" "$tmp/"
+    tar -czf "$DIR/backups/backup-$d.tar.gz" -C "$DIR/backups" "$d" && rm -rf "$tmp"
+    chmod 600 "$DIR/backups/backup-$d.tar.gz"
+    find "$DIR/backups" -name 'backup-*.tar.gz' -mtime +14 -delete
+    ok "Backup: $DIR/backups/backup-$d.tar.gz (credenciais seguem criptografadas; a chave esta no segredos.env do mesmo arquivo)"
+    ;;
+  importar)
+    root "$@"
+    ls "$DIR"/importar/*.json >/dev/null 2>&1 || { echo "Coloque os .json em $DIR/importar e rode de novo."; exit 1; }
+    chown -R 1000:1000 "$DIR/importar"
+    for f in "$DIR"/importar/*.json; do
+      b=$(basename "$f")
+      if $DC exec -T n8n n8n import:workflow --input="/importar/$b"; then ok "Importado: $b"; mv "$f" "$f.importado"; else aviso "Falhou: $b"; fi
+    done
+    echo "Abra o n8n, confira as credenciais de cada fluxo e ligue o botao Publish/Active."
+    ;;
+  atualizar)
+    root "$@"
+    "$0" backup
+    $DC pull -q && $DC up -d && ok "Atualizado. Se algo quebrar, me chame: o backup de agora esta em $DIR/backups"
+    ;;
+  atualizar-script)
+    root "$@"
+    curl -fsSL "$RAW/servidor" -o /usr/local/bin/servidor.novo && mv /usr/local/bin/servidor.novo /usr/local/bin/servidor \
+      && chmod 755 /usr/local/bin/servidor && ok "Comando atualizado"
+    curl -fsSL "$RAW/configurar-whatsapp.sh" -o "$DIR/configurar-whatsapp.sh" && ok "configurar-whatsapp.sh atualizado"
+    ;;
+  # ---- usados pela Central da Frota (interface no Cockpit); respondem em JSON
+  status-json)
+    root "$@"
+    export SV_PS=$($DC ps -a --format '{{.Service}}|{{.State}}|{{.Status}}' 2>/dev/null)
+    export SV_TS=$(tailscale ip -4 2>/dev/null | head -1)
+    export SV_BK=$(ls -1t $DIR/backups/*.tar.gz 2>/dev/null | head -1)
+    export SV_TEMP=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0)
+    export SV_LAN=$(hostname -I | awk '{print $1}')
+    python3 - <<'PY'
+import json, os, shutil
+mem = {l.split(':')[0]: int(l.split()[1]) for l in open('/proc/meminfo')}
+du = shutil.disk_usage('/')
+svc = [dict(zip(['nome', 'estado', 'detalhe'], l.split('|'))) for l in os.environ['SV_PS'].splitlines() if l]
+print(json.dumps({
+  'servicos': svc,
+  'ram_total_mb': mem['MemTotal'] // 1024, 'ram_livre_mb': mem['MemAvailable'] // 1024,
+  'disco_total_gb': round(du.total / 1e9, 1), 'disco_usado_gb': round(du.used / 1e9, 1),
+  'temp_c': int(os.environ['SV_TEMP'] or 0) // 1000,
+  'ip_casa': os.environ['SV_LAN'], 'ip_tailscale': os.environ['SV_TS'],
+  'ultimo_backup': os.path.basename(os.environ['SV_BK']) if os.environ['SV_BK'] else ''}))
+PY
+    ;;
+  fluxos-json)
+    root "$@"
+    # le direto do banco do n8n (rapido); se falhar, usa o CLI do n8n (lento numa TV Box)
+    export SV_DB="$(docker volume inspect -f '{{.Mountpoint}}' servidor_n8n_data 2>/dev/null)/database.sqlite"
+    python3 - 2>/dev/null <<'PY' && exit 0
+import json, os, sqlite3
+c = sqlite3.connect(f"file:{os.environ['SV_DB']}?mode=ro", uri=True)
+rows = c.execute("select id, name, activeVersionId is not null from workflow_entity where coalesce(isArchived, 0) = 0").fetchall()
+print(json.dumps(sorted([{'id': r[0], 'nome': r[1], 'ativo': bool(r[2])} for r in rows], key=lambda f: f['nome'].lower())))
+PY
+    export SV_ALL=$($DC exec -T n8n n8n list:workflow 2>/dev/null)
+    export SV_ON=$($DC exec -T n8n n8n list:workflow --active=true 2>/dev/null)
+    python3 - <<'PY'
+import json, os
+on = {l.split('|')[0] for l in os.environ['SV_ON'].splitlines() if '|' in l}
+fl = [{'id': l.split('|', 1)[0], 'nome': l.split('|', 1)[1], 'ativo': l.split('|')[0] in on}
+      for l in os.environ['SV_ALL'].splitlines() if '|' in l]
+print(json.dumps(sorted(fl, key=lambda f: f['nome'].lower())))
+PY
+    ;;
+  whatsapp-json)
+    root "$@"
+    set -a; source "$DIR/segredos.env"; set +a
+    curl -s --max-time 8 http://127.0.0.1:8080/instance/fetchInstances -H "apikey: $EVO_API_KEY" | python3 -c "
+import sys, json
+try: d = json.load(sys.stdin)
+except Exception: print(json.dumps({'ok': False, 'instancias': []})); raise SystemExit
+d = d if isinstance(d, list) else d.get('response', [])
+print(json.dumps({'ok': True, 'instancias': [{'nome': i.get('name'), 'estado': i.get('connectionStatus'), 'numero': (i.get('ownerJid') or '').split('@')[0]} for i in d]}))"
+    ;;
+  fluxo-ligar|fluxo-desligar)
+    root "$@"
+    [ -n "${2:-}" ] || { echo "Informe o id do fluxo"; exit 1; }
+    a=true; [ "$1" = fluxo-desligar ] && a=false
+    if [ "$a" = true ]; then
+      $DC exec -T n8n sh -c "n8n publish:workflow --id=$2 2>/dev/null || n8n update:workflow --id=$2 --active=true"
+    else
+      $DC exec -T n8n sh -c "n8n unpublish:workflow --id=$2 2>/dev/null || n8n update:workflow --id=$2 --active=false"
+    fi
+    $DC restart n8n >/dev/null && ok "Fluxo $2: ativo=$a (n8n reiniciado)"
+    ;;
+  whatsapp)   root "$@"; DIR=$DIR bash "$DIR/configurar-whatsapp.sh" ;;
+  acessos)    root "$@"; cat "$DIR/ACESSOS.txt" ;;
+  *)          ajuda ;;
+esac

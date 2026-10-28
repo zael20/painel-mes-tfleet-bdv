@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Central da Frota</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="../base1/cockpit.js"></script>
+  <link rel="stylesheet" href="central.css">
+</head>
+<body>
+  <header class="topo">
+    <div>
+      <h1>Central da Frota</h1>
+      <p class="sub">Servidor da TV Box: fluxos do n8n, WhatsApp, arquivos e manutenção.</p>
+    </div>
+    <div id="resumo" class="chips"><span class="chip">carregando...</span></div>
+  </header>
+
+  <div id="aviso-admin" class="alerta" hidden>
+    Para os botões funcionarem, clique em <b>Acesso limitado</b> no topo da tela e ative o
+    <b>acesso administrativo</b> (pede a sua senha da box). Só precisa fazer isso uma vez por login.
+  </div>
+
+  <main class="grade">
+    <!-- FLUXOS -->
+    <section class="bloco largo">
+      <div class="bloco-topo">
+        <h2>Fluxos (n8n)</h2>
+        <div class="acoes">
+          <label class="btn primario">Importar fluxo (.json)
+            <input type="file" id="arquivo-fluxo" accept=".json,application/json" multiple hidden>
+          </label>
+          <a class="btn" id="abrir-n8n" target="_blank" rel="noopener">Abrir o n8n</a>
+        </div>
+      </div>
+      <p class="dica">Cada fluxo é uma automação (alerta do roteador, lotação, WhatsApp...). <b>Editar</b> abre o
+        editor visual do n8n, igual ao da nuvem. <b>Ligar/Desligar</b> controla se ele roda sozinho no horário.
+        Fluxo importado entra <b>desligado</b>: confira as credenciais no n8n e depois ligue aqui.</p>
+      <div id="fluxos" class="lista"><p class="vazio">carregando...</p></div>
+    </section>
+
+    <!-- SERVICOS -->
+    <section class="bloco">
+      <h2>Programas do servidor</h2>
+      <p class="dica">Os programas que ficam rodando 24 h. Verde = funcionando. Se um ficar vermelho, use
+        <b>Reiniciar</b>; se continuar, veja os <b>Logs</b> e me mande um print.</p>
+      <div id="servicos" class="lista"><p class="vazio">carregando...</p></div>
+    </section>
+
+    <!-- WHATSAPP -->
+    <section class="bloco">
+      <h2>WhatsApp</h2>
+      <p class="dica">O número que lê o grupo de ocorrências. Se aparecer <b>desconectado</b>, abra a tela do QR e
+        leia com o WhatsApp do celular reserva (Aparelhos conectados).</p>
+      <div id="whatsapp" class="lista"><p class="vazio">carregando...</p></div>
+      <div class="acoes">
+        <a class="btn" id="abrir-evo" target="_blank" rel="noopener">Abrir tela do QR</a>
+        <button class="btn" data-terminal="sudo servidor whatsapp">Configurar grupo e IA</button>
+      </div>
+    </section>
+
+    <!-- ARQUIVOS -->
+    <section class="bloco largo">
+      <div class="bloco-topo">
+        <h2>Arquivos do servidor</h2>
+        <div class="acoes">
+          <button class="btn" id="novo-arquivo">Novo arquivo</button>
+          <label class="btn">Enviar arquivo
+            <input type="file" id="enviar-arquivo" multiple hidden>
+          </label>
+        </div>
+      </div>
+      <div class="abas" id="abas-pastas"></div>
+      <p class="dica" id="dica-pasta"></p>
+      <div id="arquivos" class="lista"></div>
+    </section>
+
+    <!-- REDE -->
+    <section class="bloco">
+      <h2>Rede</h2>
+      <p class="dica">O servidor usa o <b>cabo</b>. Wi-Fi e Bluetooth ficam aqui como reserva. Em muitas TV Box o
+        Linux não reconhece esses chips; nesse caso aparece "não disponível".</p>
+      <div id="rede" class="lista"><p class="vazio">carregando...</p></div>
+    </section>
+
+    <!-- MANUTENCAO -->
+    <section class="bloco">
+      <h2>Manutenção</h2>
+      <p class="dica">O backup roda sozinho todo dia às 03:00 e guarda 14 dias. Antes de atualizar, o backup é
+        feito automaticamente.</p>
+      <div class="acoes coluna">
+        <button class="btn primario" data-cmd="backup">Fazer backup agora</button>
+        <button class="btn" data-cmd="atualizar" data-confirma="Atualizar o n8n e a Evolution? Os fluxos param 1 a 3 minutos.">Atualizar n8n e Evolution</button>
+        <button class="btn" data-cmd="atualizar-script">Atualizar esta Central</button>
+        <button class="btn" data-terminal="">Abrir terminal</button>
+        <button class="btn perigo" id="reiniciar-box">Reiniciar a TV Box</button>
+      </div>
+      <div class="linha-log">
+        <select id="log-servico">
+          <option value="n8n">n8n</option><option value="evolution">evolution</option>
+          <option value="postgres">postgres</option><option value="redis">redis</option>
+        </select>
+        <button class="btn" id="ver-logs">Ver logs</button>
+      </div>
+    </section>
+  </main>
+
+  <section class="saida-bloco">
+    <div class="bloco-topo"><h2>Resultado do último comando</h2><button class="btn" id="limpar-saida">Limpar</button></div>
+    <pre id="saida">Nada executado ainda.</pre>
+  </section>
+
+  <dialog id="editor">
+    <form method="dialog" class="editor-form">
+      <div class="bloco-topo"><h2 id="editor-titulo">arquivo</h2></div>
+      <p class="alerta" id="editor-aviso" hidden></p>
+      <textarea id="editor-texto" spellcheck="false"></textarea>
+      <div class="acoes">
+        <button class="btn primario" id="editor-salvar" value="salvar">Salvar</button>
+        <button class="btn" value="cancelar">Fechar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="central.js"></script>
+</body>
+</html>

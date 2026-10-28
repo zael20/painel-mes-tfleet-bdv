@@ -1,0 +1,11 @@
+{
+  "version": 0,
+  "name": "central",
+  "menu": {
+    "index": {
+      "label": "Central da Frota",
+      "order": 1,
+      "keywords": [{ "matches": ["frota", "n8n", "fluxos", "whatsapp", "backup"] }]
+    }
+  }
+}
