@@ -246,7 +246,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Monitor Frota <span class="buildtag">painel v0.6.2</span></h1>
+      <h1>Monitor Frota <span class="buildtag">painel v0.6.4</span></h1>
       <div class="meta" id="meta">Carregando…</div>
     </div>
     <div class="actions">
@@ -1190,22 +1190,38 @@ function renderEvDrill(drill) {
   // destaca o cartão e o gráfico
   document.querySelectorAll(".evcard").forEach(c => c.classList.toggle("sel", !!drill.t && c.dataset.type === drill.t));
   renderEvChart(evFiltered());
-  const byVeh = {};
-  for (const e of rows) { const k = e.device_name || e.device_id; byVeh[k] = (byVeh[k] || 0) + 1; }
-  const chips = Object.keys(byVeh).sort((a, b) => byVeh[b] - byVeh[a])
-    .map(k => `<span>${esc(k)}: <strong>${byVeh[k]}</strong></span>`).join("");
-  const body = rows.slice(0, 500).map(e => `<tr>
-      <td>${esc(e.device_name || e.device_id)}</td>
-      <td class="num">${fmtTime(e.ts)}</td>
-      ${showType ? `<td>${esc((EVENT_INFO[e.type] || ["", e.type])[1])}</td>` : ""}
-      <td>${esc(e.message || "")}</td></tr>`).join("");
+  // Resumo por veículo: período (1ª → última ocorrência), nº de eventos e a descrição.
+  const groups = {};
+  for (const e of rows) {
+    const k = e.device_name || e.device_id;
+    const t = Date.parse(e.ts);
+    let g = groups[k];
+    if (!g) { g = groups[k] = { veh: k, n: 0, min: t, max: t, lastTs: t, lastMsg: e.message || "", types: new Set() }; }
+    g.n++;
+    if (t < g.min) g.min = t;
+    if (t > g.max) g.max = t;
+    if (t >= g.lastTs) { g.lastTs = t; g.lastMsg = e.message || ""; }
+    g.types.add(e.type);
+  }
+  const arr = Object.values(groups).sort((a, b) => b.n - a.n ||
+    String(a.veh).localeCompare(String(b.veh), undefined, { numeric: true }));
+  const periodo = g => {
+    const d1 = fmtDay(dayKey(g.min)), d2 = fmtDay(dayKey(g.max));
+    return d1 === d2 ? d1 : `${d1} → ${d2}`;
+  };
+  const tipoCol = g => g.types.size > 1 ? "vários" : (EVENT_INFO[[...g.types][0]] || ["", [...g.types][0]])[1];
+  const body = arr.map(g => `<tr>
+      <td>${esc(g.veh)}</td>
+      <td class="num">${periodo(g)}</td>
+      <td class="num">${g.n}</td>
+      ${showType ? `<td>${esc(tipoCol(g))}</td>` : ""}
+      <td>${esc(g.lastMsg)}</td></tr>`).join("");
   const box = $("#evDetail");
   box.hidden = false;
   box.innerHTML = `<div class="dhead"><h2>${esc(title)} · ${rows.length}</h2>
       <button class="btn" type="button" id="evClose">Fechar</button></div>
-    <span class="label">Por veículo</span><div class="byveh">${chips}</div>
-    <span class="label">Ocorrências${rows.length > 500 ? " (mostrando as 500 mais recentes)" : ""}</span>
-    <table><thead><tr><th>Veículo</th><th>Dia e hora</th>${showType ? "<th>Tipo</th>" : ""}<th>Descrição</th></tr></thead><tbody>${body}</tbody></table>`;
+    <span class="label">Resumo por veículo (${arr.length})</span>
+    <table><thead><tr><th>Veículo</th><th>Período</th><th>Eventos</th>${showType ? "<th>Tipo</th>" : ""}<th>Descrição</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
 // ------------------------------------------------------------------ aba diagnóstico (carga lenta por período)
