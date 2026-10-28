@@ -42,6 +42,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 .tabs button { font: 600 14px var(--f-body); padding: 10px 14px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
 .painel h3 { margin: 16px 0 4px; font: 600 16px var(--f-display); }
+.painel summary h3 { display: inline; }
+.painel h4 { margin: 12px 0 2px; font: 600 14px var(--f-display); }
+.imp { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
 .kpis.k4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 640px) { .kpis, .kpis.k4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 button.kpi { text-align: left; font: inherit; color: inherit; cursor: pointer; }
@@ -105,6 +108,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
 .gl th, .gl td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .gl input[type=text], .gl input[type=email] { width: 100%; min-width: 120px; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
 .gl-wrap { overflow-x: auto; }
+.gl tr[hidden] { display: none !important; }
 @media (max-width: 640px) {
   .gl tr:first-child { display: none; }
   .gl tr { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -157,26 +161,33 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
   </section>
 
   <section class="painel" data-p="cad" hidden>
-    <p class="muted">Para quem vai o e-mail de passageiro fora de rota, nesta ordem: <b>1)</b> e-mail do gestor na linha da pessoa; <b>2)</b> gestor da empresa dela (ex.: gestor de contrato); <b>3)</b> gestor da gerência (GA). Sem nenhum, o e-mail vem para você.</p>
+    <p class="muted">Para quem vai o e-mail de passageiro fora de rota, nesta ordem: <b>1)</b> pessoa com gestor próprio; <b>2)</b> gestor da <b>empresa</b>; <b>3)</b> base de gestores por <b>centro de custo</b>; <b>4)</b> por <b>gerência de área (GA)</b>; <b>5)</b> por <b>gerência geral (GG)</b>. Sem nenhum, vem para você. Clique nos números para ir à lista.</p>
     <div class="kpis k4" id="cKpis"></div>
-    <h3 id="sPlan">1. Planilha de pessoas</h3>
-    <p class="muted">Baixe o modelo, preencha as abas <b>Pessoas</b> e <b>Gestor por empresa</b> e suba aqui. Também dá para copiar as linhas do Excel e colar na caixa. A matrícula é o que liga a pessoa ao embarque; mandar a mesma pessoa de novo atualiza o cadastro.</p>
-    <div class="bar"><a class="btn" href="modelo-cadastro-gestores.xlsx" download>Baixar modelo Excel</a><label class="btn" style="flex-direction:row">Subir planilha<input id="vArq" type="file" accept=".xlsx,.xls,.csv" hidden></label></div>
-    <textarea id="vCola" placeholder="Ou cole aqui as linhas da aba Pessoas (com o título):&#10;Matrícula&#9;RFID (crachá)&#9;Nome&#9;Empresa&#9;Gerência de área (GA)&#9;Gerência geral (GG)&#9;E-mail do gestor&#9;Nome do gestor"></textarea>
-    <details><summary class="muted">Preencher o mesmo dado para todas as linhas coladas (só onde estiver vazio)</summary>
-    <div class="vtodos">
-      <label>Empresa<input id="vEmp" type="text"></label><label>Gerência de área (GA)<input id="vArea" type="text"></label>
-      <label>Nome do gestor<input id="vGn" type="text"></label><label>E-mail do gestor<input id="vGe" type="email"></label>
-    </div></details>
-    <div class="bar"><button id="vPrev" type="button" class="btn">Conferir</button><button id="vSalvar" type="button" class="btn" hidden>Salvar</button><span id="vMsg" class="muted"></span></div>
-    <div id="vPrevia"></div>
-    <div id="vLista" class="muted">Abra com a senha para ver as pessoas cadastradas.</div>
-    <h3 id="sEmp">2. Gestor por empresa</h3>
-    <p class="muted">Quem cuida de cada empresa (gerente, gestor de contrato…). Todo mundo dessa empresa na planilha cai para ele. As empresas aparecem a partir da planilha; dá para incluir uma nova na última linha.</p>
-    <div id="eLista" class="muted">Abra com a senha para ver.</div>
-    <h3 id="sGa">3. Gestor por gerência (GA da TFleet)</h3>
-    <p class="muted">As gerências aparecem sozinhas a partir dos embarques. Preencha o e-mail e marque "envia".</p>
-    <div id="gLista"></div>
+    <div class="imp">
+      <b>Atualizar pela planilha</b>
+      <p class="muted" style="margin:2px 0 8px">O modelo tem as abas <b>Gestor por empresa</b>, <b>Base de gestores</b> e <b>Pessoas</b>. Preencha só as que precisar; mandar de novo a mesma empresa, gerência/centro de custo ou matrícula atualiza.</p>
+      <div class="bar" style="margin:0"><a class="btn" href="modelo-cadastro-gestores.xlsx" download>Baixar modelo Excel</a><label class="btn" style="flex-direction:row">Subir planilha<input id="cArq" type="file" accept=".xlsx,.xls" hidden></label><button id="cSalvar" type="button" class="btn" hidden>Salvar</button><span id="cMsg" class="muted"></span></div>
+      <div id="cPrevia"></div>
+    </div>
+    <details open><summary><h3 id="sEmp">1. Vínculo por empresa</h3></summary>
+      <p class="muted">Uma linha por empresa: quem recebe o e-mail de todas as pessoas dela (gerente, gestor de contrato…). A empresa vem da TFleet; dá para incluir outra na última linha.</p>
+      <div id="eLista" class="muted">Abra com a senha para ver.</div></details>
+    <details open><summary><h3 id="sBase">2. Base de gestores</h3></summary>
+      <p class="muted">Gestor por gerência de área, gerência geral e centro de custo. Vale para quem não tem gestor pela empresa. Preencha só o que souber (ex.: só a GA).</p>
+      <div id="bLista" class="muted">Abra com a senha para ver.</div></details>
+    <details open><summary><h3 id="sSem">3. Quem ainda está sem gestor</h3></summary>
+      <p class="muted">Passageiros dos últimos 30 dias que não caem em nenhuma regra acima, agrupados por empresa, GA, GG e centro de custo (sem nomes).</p>
+      <div id="sgLista" class="muted">Abra com a senha para ver.</div></details>
+    <details><summary><h3 id="sPes">4. Pessoas com gestor próprio (exceções)</h3></summary>
+      <p class="muted">Só para quem tem um gestor diferente do resto da empresa. Vem da aba Pessoas da planilha, ou cole as linhas aqui (Matrícula, RFID, Nome, Empresa, GA, GG, E-mail do gestor, Nome do gestor).</p>
+      <textarea id="vCola" placeholder="Matrícula&#9;RFID (crachá)&#9;Nome&#9;Empresa&#9;Gerência de área (GA)&#9;Gerência geral (GG)&#9;E-mail do gestor&#9;Nome do gestor"></textarea>
+      <div class="muted">Dados para todas as linhas coladas (só onde estiver vazio):</div>
+      <div class="vtodos">
+        <label>Empresa<input id="vEmp" type="text"></label><label>Gerência de área (GA)<input id="vArea" type="text"></label>
+        <label>Nome do gestor<input id="vGn" type="text"></label><label>E-mail do gestor<input id="vGe" type="email"></label>
+      </div>
+      <div class="bar"><button id="vPrev" type="button" class="btn">Conferir</button></div>
+      <div id="vLista" class="muted">Abra com a senha para ver.</div></details>
   </section>
 
   <section class="painel" data-p="resp" hidden>
@@ -406,192 +417,262 @@ $("#fRotas").addEventListener("click", e => { const tr = e.target.closest("tr.cl
 $("#fFiltro").addEventListener("click", e => { if (e.target.id === "fLimpa") { foraLinha = ""; foraRender(); } });
 $("#fBuscaP").addEventListener("input", foraRender);
 
-// ---- aba Cadastro: resumo clicavel (leva para a secao)
+// ---- aba Cadastro e gestores
+// Ordem do e-mail (calculada no Supabase, funcao gestor_de): pessoa > empresa > centro de custo > GA > GG > voce.
 let cSt = {};
 function cadKpis() {
   const k = (cls, alvo, val, tit, sub) => `<button type="button" class="kpi ${cls}" data-a="${alvo}"><b>${val ?? "–"}</b><span><b style="font-size:14px;color:inherit;display:inline">${tit}</b><br>${sub}</span></button>`;
-  $("#cKpis").innerHTML = k("", "vLista", cSt.pessoas, "Pessoas cadastradas", cSt.nao ? `${cSt.nao} não apareceram nos embarques` : "planilha") +
-    k(cSt.semGestor ? "crit" : "", "vLista", cSt.semGestor, "Pessoas sem gestor", "o e-mail vem para você") +
+  $("#cKpis").innerHTML = k(cSt.semPes ? "crit" : "", "sgLista", cSt.semPes, "Passageiros sem gestor", cSt.totPes != null ? `de ${cSt.totPes} que embarcaram em 30 dias` : "") +
     k(cSt.empSem ? "warn" : "", "eLista", cSt.empSem, "Empresas sem gestor", `de ${cSt.emp ?? "–"} empresa(s)`) +
-    k(cSt.gaSem ? "warn" : "", "gLista", cSt.gaSem, "Gerências sem gestor", `de ${cSt.ga ?? "–"} gerência(s)`);
+    k("", "bLista", cSt.base, "Base de gestores", "linhas por GA / GG / centro de custo") +
+    k("", "vLista", cSt.pessoas, "Pessoas com gestor próprio", cSt.nao ? `${cSt.nao} não apareceram nos embarques` : "exceções");
 }
 $("#cKpis").addEventListener("click", e => { const b = e.target.closest(".kpi"); if (!b) return;
-  const el = document.getElementById(b.dataset.a); if (b.dataset.a === "vLista") el.querySelectorAll("details").forEach(d => { if (d.dataset.sem) d.open = true; });
+  const el = document.getElementById(b.dataset.a), d = el.closest("details"); if (d) d.open = true;
   el.scrollIntoView({ behavior: "smooth", block: "start" }); });
 
-// ---- cadastro em massa// ---- cadastro em massa pessoa -> gestor (texto colado do Excel: tab, ; ou ,)
-// ordem importa: "E-mail do gestor", "Nome do gestor" e "Gerência geral" tem que cair antes de "nome" e "gerência"
-const V_COLS = [["matricula", /matr|chapa|^re$|registro/i], ["rfid", /rfid|crach|cart[aã]o|tag/i], ["gestor_email", /mail/i],
-  ["gestor_nome", /gestor|supervisor|respons/i], ["gg", /geral|^gg$/i], ["area", /ger[eê]ncia|área|area|setor|^ga$/i],
-  ["nome", /nome|colaborador|funcion/i], ["empresa", /empresa|contratada|fornecedor/i]];
-const V_ORDEM = ["matricula", "rfid", "nome", "empresa", "area", "gg", "gestor_email", "gestor_nome"];   // ordem do modelo Excel
+// ---- leitura de planilha / texto colado: as colunas sao achadas pelo titulo (ordem do modelo quando nao tem titulo)
 const emailOk = e => /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(e);
-let vLinhas = [], vEmpresasArq = [];   // vEmpresasArq = aba "Gestor por empresa" da planilha subida
-function vParse(txt) {
-  const lin = txt.split(/\r?\n/).filter(l => l.trim());
-  if (!lin.length) return [];
-  const sep = lin[0].includes("\t") ? "\t" : lin[0].includes(";") ? ";" : ",";
-  const cel = l => l.split(sep).map(c => c.trim().replace(/^"|"$/g, ""));
-  const h = cel(lin[0]);
-  // titulo = primeira linha sem nenhum numero de matricula nem e-mail e com alguma palavra das colunas
-  const temTitulo = !h.some(c => /^\d{3,}$/.test(c) || c.includes("@")) && h.some(c => V_COLS.some(([, re]) => re.test(c)));
-  let mapa = V_ORDEM;
-  if (temTitulo) mapa = h.map(c => { const k = V_COLS.find(([, re]) => re.test(c)); return k ? k[0] : null; });
-  const todos = { empresa: $("#vEmp").value.trim(), area: $("#vArea").value.trim(), gestor_nome: $("#vGn").value.trim(), gestor_email: $("#vGe").value.trim() };
-  return lin.slice(temTitulo ? 1 : 0).map(l => {
-    const o = {}; cel(l).forEach((c, i) => { if (mapa[i] && c && !o[mapa[i]]) o[mapa[i]] = c; });
-    // e-mail colado em qualquer coluna conta como e-mail do gestor
-    if (!o.gestor_email) { const m = cel(l).find(c => emailOk(c)); if (m) o.gestor_email = m; }
-    // gestor geral so entra em quem nao tem e-mail proprio (nao mistura nome de um com e-mail de outro)
-    if (!o.gestor_email && todos.gestor_email) { o.gestor_email = todos.gestor_email; o.gestor_nome = o.gestor_nome || todos.gestor_nome; }
-    for (const k of ["empresa", "area"]) if (todos[k] && !o[k]) o[k] = todos[k];
-    o._erro = !o.matricula && !o.nome ? "sem matrícula e sem nome" : o.gestor_email && !emailOk(o.gestor_email) ? "e-mail inválido"
-      : !o.gestor_email && !o.area && !o.empresa ? "sem e-mail do gestor, sem empresa e sem gerência" : "";
-    return o;
-  });
+// ordem importa: "E-mail do gestor", "Nome do gestor" e "Gerência geral" tem que cair antes de "nome" e "gerência"
+const COLS = {
+  pessoas: [[["matricula", /matr|chapa|^re$|registro/i], ["rfid", /rfid|crach|cart[aã]o|tag/i], ["gestor_email", /mail/i],
+    ["gestor_nome", /gestor|supervisor|respons/i], ["gg", /geral|^gg$/i], ["area", /ger[eê]ncia|área|area|setor|^ga$/i],
+    ["nome", /nome|colaborador|funcion/i], ["empresa", /empresa|contratada|fornecedor/i]],
+    ["matricula", "rfid", "nome", "empresa", "area", "gg", "gestor_email", "gestor_nome"]],
+  empresas: [[["gestor_email", /mail/i], ["cargo", /cargo|fun[cç][aã]o/i], ["empresa", /empresa|contratada|fornecedor/i], ["gestor_nome", /gestor|nome|respons/i]],
+    ["empresa", "gestor_nome", "cargo", "gestor_email"]],
+  base: [[["email", /mail/i], ["centrocusto", /custo|^cc$/i], ["gg", /geral|^gg$|\(gg\)/i], ["ga", /ger[eê]ncia|área|area|^ga$|\(ga\)/i], ["nome", /nome|gestor/i]],
+    ["nome", "email", "ga", "gg", "centrocusto"]],
+};
+function mapear(linhas, tipo) {
+  const [cols, ordem] = COLS[tipo];
+  const ls = linhas.map(l => l.map(c => String(c ?? "").trim())).filter(l => l.some(Boolean));
+  if (!ls.length) return [];
+  const h = ls[0];
+  const temTitulo = !h.some(c => /^\d{3,}$/.test(c) || c.includes("@")) && h.some(c => cols.some(([, re]) => re.test(c)));
+  const mapa = temTitulo ? h.map(c => { const k = cols.find(([, re]) => re.test(c)); return k ? k[0] : null; }) : ordem;
+  return ls.slice(temTitulo ? 1 : 0).map(l => { const o = {}; l.forEach((c, i) => { if (mapa[i] && c && !o[mapa[i]]) o[mapa[i]] = c; }); return o; });
 }
-$("#vPrev").addEventListener("click", () => {
-  if (!gSenha) { $("#vMsg").textContent = "Abra com a senha de gestores primeiro."; return; }
-  vLinhas = vParse($("#vCola").value);
-  const ok = vLinhas.filter(o => !o._erro), ruins = vLinhas.length - ok.length;
-  const empOk = vEmpresasArq.filter(e => e.empresa && emailOk(e.gestor_email || "")), empRuins = vEmpresasArq.length - empOk.length;
-  if (!vLinhas.length && !vEmpresasArq.length) { $("#vMsg").textContent = "Suba a planilha ou cole as linhas."; $("#vPrevia").innerHTML = ""; $("#vSalvar").hidden = true; return; }
-  $("#vMsg").innerHTML = `${ok.length} pessoa(s) prontas${ruins ? ` · <span class="v-err">${ruins} com problema (não serão salvas)</span>` : ""}` +
-    (vEmpresasArq.length ? ` · ${empOk.length} gestor(es) de empresa${empRuins ? ` · <span class="v-err">${empRuins} sem empresa ou e-mail válido</span>` : ""}` : "");
-  $("#vSalvar").hidden = !ok.length && !empOk.length;
-  $("#vSalvar").textContent = "Salvar " + [ok.length && ok.length + " pessoa(s)", empOk.length && empOk.length + " gestor(es) de empresa"].filter(Boolean).join(" e ");
-  $("#vPrevia").innerHTML = (vEmpresasArq.length ? `<div class="gl-wrap"><table class="gl"><tr><th>Empresa</th><th>Gestor</th><th>Cargo</th><th>E-mail</th><th></th></tr>` +
-    vEmpresasArq.map(e => `<tr><td data-l="Empresa">${esc(e.empresa || "")}</td><td data-l="Gestor">${esc(e.gestor_nome || "")}</td><td data-l="Cargo">${esc(e.cargo || "")}</td><td data-l="E-mail">${esc(e.gestor_email || "")}</td>
-      <td>${e.empresa && emailOk(e.gestor_email || "") ? '<span class="v-ok">ok</span>' : '<span class="v-err">sem empresa ou e-mail válido</span>'}</td></tr>`).join("") + "</table></div>" : "") +
-    (vLinhas.length ? `<div class="gl-wrap"><table class="gl"><tr><th>Matrícula</th><th>RFID</th><th>Nome</th><th>Empresa</th><th>GA / GG</th><th>Gestor</th><th></th></tr>` +
-    vLinhas.slice(0, 200).map(o => `<tr><td data-l="Matrícula">${esc(o.matricula || "")}</td><td data-l="RFID">${esc(o.rfid || "")}</td><td data-l="Nome">${esc(o.nome || "")}</td><td data-l="Empresa">${esc(o.empresa || "")}</td>
-      <td data-l="GA / GG">${esc(o.area || "")}${o.gg ? "<br>" + esc(o.gg) : ""}</td><td data-l="Gestor">${esc(o.gestor_nome || "")}${o.gestor_email ? "<br>" + esc(o.gestor_email) : ""}</td>
-      <td>${o._erro ? `<span class="v-err">${esc(o._erro)}</span>` : '<span class="v-ok">ok</span>'}</td></tr>`).join("") + "</table></div>" +
-    (vLinhas.length > 200 ? `<p class="muted">Mostrando 200 de ${vLinhas.length}.</p>` : "") : "");
-});
-$("#vSalvar").addEventListener("click", async () => {
-  const ok = vLinhas.filter(o => !o._erro).map(({ _erro, ...o }) => o);
-  const emps = vEmpresasArq.filter(e => e.empresa && emailOk(e.gestor_email || ""));
-  $("#vSalvar").disabled = true; $("#vMsg").textContent = "Salvando…";
-  try {
-    for (const e of emps) await api("rpc/salvar_gestor_empresa", { senha: gSenha, p_empresa: e.empresa, p_nome: e.gestor_nome || null, p_cargo: e.cargo || null, p_email: e.gestor_email, p_ativo: true });
-    const r = ok.length ? await api("rpc/importar_vinculos", { senha: gSenha, p_linhas: ok }) : { salvos: 0, erros: [] };
-    $("#vMsg").innerHTML = `<span class="v-ok">${r.salvos} pessoa(s)${emps.length ? " e " + emps.length + " gestor(es) de empresa" : ""} salvos.</span>${r.erros.length ? ` <span class="v-err">${r.erros.length} recusada(s): ${esc(r.erros.slice(0, 5).map(e => "linha " + e.linha + " " + e.motivo).join("; "))}</span>` : ""}`;
-    $("#vPrevia").innerHTML = ""; $("#vCola").value = ""; $("#vSalvar").hidden = true; vEmpresasArq = []; vincLoad(true); empLoad(true);
-  } catch (err) { $("#vMsg").innerHTML = `<span class="v-err">Não salvou: ${esc(err.message)} (rodou o lotacao-v4.sql?)</span>`; }
-  $("#vSalvar").disabled = false;
-});
-// Subir planilha: le no navegador (SheetJS, carregado so quando precisa). Aba Pessoas vai para a caixa; aba Gestor por empresa fica separada.
+const texto2linhas = txt => { const lin = txt.split(/\r?\n/).filter(l => l.trim()); if (!lin.length) return [];
+  const sep = lin[0].includes("\t") ? "\t" : lin[0].includes(";") ? ";" : ","; return lin.map(l => l.split(sep).map(c => c.trim().replace(/^"|"$/g, ""))); };
+const ERRO = {
+  pessoas: o => !o.matricula && !o.nome ? "sem matrícula e sem nome" : o.gestor_email && !emailOk(o.gestor_email) ? "e-mail inválido"
+    : !o.gestor_email && !o.area && !o.empresa ? "sem e-mail do gestor, sem empresa e sem gerência" : "",
+  empresas: o => !o.empresa ? "sem empresa" : !emailOk(o.gestor_email || "") ? "e-mail vazio ou inválido" : "",
+  base: o => !emailOk(o.email || "") ? "e-mail vazio ou inválido" : !o.ga && !o.gg && !o.centrocusto ? "sem gerência e sem centro de custo" : "",
+};
+let imp = { empresas: [], base: [], pessoas: [] };
+
+// Subir planilha: le no navegador (SheetJS, carregado so quando precisa). Cada aba do modelo vai para a sua tabela.
 let xlsxLib = null;
 async function carregaXlsx() {
   if (xlsxLib) return xlsxLib;
   // copia local (mesmo site do painel, abre na rede da Hydro); se faltar, tenta o CDN
   const carrega = src => new Promise((ok, erro) => { const sc = document.createElement("script"); sc.src = src; sc.onload = ok; sc.onerror = erro; document.head.appendChild(sc); });
   try { await carrega("xlsx.full.min.js"); } catch (e) {
-    try { await carrega("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"); } catch (e2) { throw new Error("não carregou o leitor de Excel; copie e cole as linhas na caixa"); } }
+    try { await carrega("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"); } catch (e2) { throw new Error("não carregou o leitor de Excel; copie e cole as linhas"); } }
   return (xlsxLib = window.XLSX);
 }
-$("#vArq").addEventListener("change", async e => {
+$("#cArq").addEventListener("change", async e => {
   const f = e.target.files[0]; if (!f) return;
-  if (!gSenha) { $("#vMsg").textContent = "Abra com a senha de gestores primeiro."; e.target.value = ""; return; }
-  $("#vMsg").textContent = "Lendo planilha…";
+  if (!senhaOk) { $("#cMsg").textContent = "Abra com a senha de gestores primeiro."; e.target.value = ""; return; }
+  $("#cMsg").textContent = "Lendo planilha…";
   try {
     const X = await carregaXlsx();
     const wb = X.read(await f.arrayBuffer(), { type: "array", raw: false });
-    const aba = re => wb.SheetNames.find(n => re.test(n.normalize("NFD").replace(/[\u0300-\u036f]/g, "")));
-    const pes = aba(/pessoa/i) || wb.SheetNames.find(n => !/empresa|como/i.test(n));
-    $("#vCola").value = pes ? X.utils.sheet_to_csv(wb.Sheets[pes], { FS: "\t", blankrows: false, rawNumbers: false }) : "";
-    const emp = aba(/empresa/i);
-    vEmpresasArq = emp ? X.utils.sheet_to_json(wb.Sheets[emp], { header: 1, raw: false, blankrows: false }).slice(1)
-      .map(r => ({ empresa: String(r[0] || "").trim(), gestor_nome: String(r[1] || "").trim(), cargo: String(r[2] || "").trim(), gestor_email: String(r[3] || "").trim() }))
-      .filter(r => r.empresa || r.gestor_email) : [];
-    $("#vPrev").click();
-  } catch (err) { $("#vMsg").innerHTML = `<span class="v-err">Não consegui ler: ${esc(err.message)}</span>`; }
+    const sem = n => n.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    imp = { empresas: [], base: [], pessoas: [] };
+    for (const n of wb.SheetNames) {
+      const tipo = /empresa/.test(sem(n)) ? "empresas" : /base|gestor/.test(sem(n)) ? "base" : /pessoa/.test(sem(n)) ? "pessoas" : null;
+      if (!tipo) continue;
+      imp[tipo] = mapear(X.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: false, blankrows: false }), tipo);
+    }
+    if (!imp.empresas.length && !imp.base.length && !imp.pessoas.length) throw new Error("não achei as abas do modelo (Gestor por empresa, Base de gestores, Pessoas)");
+    previa();
+  } catch (err) { $("#cMsg").innerHTML = `<span class="v-err">Não consegui ler: ${esc(err.message)}</span>`; }
   e.target.value = "";
 });
-// Gestor por empresa: lista as empresas da planilha + as ja cadastradas, editavel
+// Colar pessoas (sem planilha), com dados para todas as linhas
+$("#vPrev").addEventListener("click", () => {
+  if (!senhaOk) { $("#cMsg").textContent = "Abra com a senha de gestores primeiro."; return; }
+  const todos = { empresa: $("#vEmp").value.trim(), area: $("#vArea").value.trim(), gestor_nome: $("#vGn").value.trim(), gestor_email: $("#vGe").value.trim() };
+  imp = { empresas: [], base: [], pessoas: mapear(texto2linhas($("#vCola").value), "pessoas").map(o => {
+    if (!o.gestor_email && todos.gestor_email) { o.gestor_email = todos.gestor_email; o.gestor_nome = o.gestor_nome || todos.gestor_nome; }
+    for (const k of ["empresa", "area"]) if (todos[k] && !o[k]) o[k] = todos[k];
+    return o; }) };
+  previa(); $("#cPrevia").scrollIntoView({ behavior: "smooth" });
+});
+const tabela = (cab, linhas) => `<div class="gl-wrap"><table class="gl"><tr>${cab.map(c => `<th>${c}</th>`).join("")}</tr>${linhas.join("")}</table></div>`;
+const okTd = er => `<td>${er ? `<span class="v-err">${esc(er)}</span>` : '<span class="v-ok">ok</span>'}</td>`;
+function previa() {
+  const n = t => imp[t].filter(o => !ERRO[t](o)).length, ruim = t => imp[t].length - n(t);
+  const partes = [["empresas", "empresa(s)"], ["base", "gestor(es) na base"], ["pessoas", "pessoa(s)"]].filter(([t]) => imp[t].length);
+  if (!partes.length) { $("#cMsg").textContent = "Nada para importar."; $("#cPrevia").innerHTML = ""; $("#cSalvar").hidden = true; return; }
+  $("#cMsg").innerHTML = partes.map(([t, nome]) => `${n(t)} ${nome}${ruim(t) ? ` <span class="v-err">(${ruim(t)} com problema, não serão salvas)</span>` : ""}`).join(" · ");
+  const tot = partes.reduce((s, [t]) => s + n(t), 0);
+  $("#cSalvar").hidden = !tot; $("#cSalvar").textContent = "Salvar " + partes.filter(([t]) => n(t)).map(([t, nome]) => n(t) + " " + nome).join(" e ");
+  const lim = a => a.slice(0, 200);
+  $("#cPrevia").innerHTML =
+    (imp.empresas.length ? "<h4>Vínculo por empresa</h4>" + tabela(["Empresa", "Gestor", "Cargo", "E-mail", ""], lim(imp.empresas).map(o =>
+      `<tr><td data-l="Empresa">${esc(o.empresa || "")}</td><td data-l="Gestor">${esc(o.gestor_nome || "")}</td><td data-l="Cargo">${esc(o.cargo || "")}</td><td data-l="E-mail">${esc(o.gestor_email || "")}</td>${okTd(ERRO.empresas(o))}</tr>`)) : "") +
+    (imp.base.length ? "<h4>Base de gestores</h4>" + tabela(["Gestor", "E-mail", "GA", "GG", "Centro de custo", ""], lim(imp.base).map(o =>
+      `<tr><td data-l="Gestor">${esc(o.nome || "")}</td><td data-l="E-mail">${esc(o.email || "")}</td><td data-l="GA">${esc(o.ga || "")}</td><td data-l="GG">${esc(o.gg || "")}</td><td data-l="Centro de custo">${esc(o.centrocusto || "")}</td>${okTd(ERRO.base(o))}</tr>`)) : "") +
+    (imp.pessoas.length ? "<h4>Pessoas</h4>" + tabela(["Matrícula", "RFID", "Nome", "Empresa", "GA / GG", "Gestor", ""], lim(imp.pessoas).map(o =>
+      `<tr><td data-l="Matrícula">${esc(o.matricula || "")}</td><td data-l="RFID">${esc(o.rfid || "")}</td><td data-l="Nome">${esc(o.nome || "")}</td><td data-l="Empresa">${esc(o.empresa || "")}</td>
+      <td data-l="GA / GG">${esc(o.area || "")}${o.gg ? "<br>" + esc(o.gg) : ""}</td><td data-l="Gestor">${esc(o.gestor_nome || "")}${o.gestor_email ? "<br>" + esc(o.gestor_email) : ""}</td>${okTd(ERRO.pessoas(o))}</tr>`)) : "") +
+    (Math.max(imp.empresas.length, imp.base.length, imp.pessoas.length) > 200 ? '<p class="muted">Mostrando até 200 linhas de cada parte.</p>' : "");
+}
+$("#cSalvar").addEventListener("click", async () => {
+  const ok = t => imp[t].filter(o => !ERRO[t](o));
+  $("#cSalvar").disabled = true; $("#cMsg").textContent = "Salvando…";
+  const res = [];
+  try {
+    for (const e of ok("empresas")) await api("rpc/salvar_gestor_empresa", { senha: gSenha, p_empresa: e.empresa, p_nome: e.gestor_nome || null, p_cargo: e.cargo || null, p_email: e.gestor_email, p_ativo: true });
+    if (ok("empresas").length) res.push(ok("empresas").length + " empresa(s)");
+    for (const [t, fn, nome] of [["base", "importar_gestores_base", "gestor(es) na base"], ["pessoas", "importar_vinculos", "pessoa(s)"]]) {
+      if (!ok(t).length) continue;
+      const r = await api("rpc/" + fn, { senha: gSenha, p_linhas: ok(t) });
+      res.push(r.salvos + " " + nome + (r.erros.length ? ` <span class="v-err">(${r.erros.length} recusada(s): ${esc(r.erros.slice(0, 3).map(e => "linha " + e.linha + " " + e.motivo).join("; "))})</span>` : ""));
+    }
+    $("#cMsg").innerHTML = `<span class="v-ok">Salvo:</span> ${res.join(" · ")}`;
+    $("#cPrevia").innerHTML = ""; $("#vCola").value = ""; $("#cSalvar").hidden = true; imp = { empresas: [], base: [], pessoas: [] };
+    cadLoad(true);
+  } catch (err) { $("#cMsg").innerHTML = `<span class="v-err">Parou no meio: ${esc(err.message)}</span>${res.length ? " (já salvo: " + res.join(" · ") + ")" : ""}`; }
+  $("#cSalvar").disabled = false;
+});
+
+// ---- 1. vinculo por empresa: so empresa -> gestor (sem pessoas)
 async function empLoad(ok) {
   if (!ok) { $("#eLista").textContent = "Abra com a senha para ver."; return; }
   try {
     const l = await api("rpc/empresas_lista", { senha: gSenha });
     cSt.emp = l.length; cSt.empSem = l.filter(e => !e.gestor_email || !e.ativo).length; cadKpis();
     l.push({ empresa: "", pessoas: 0, novo: true });
-    $("#eLista").innerHTML = `<div class="gl-wrap"><table class="gl"><tr><th>Empresa</th><th>Pessoas</th><th>Gestor</th><th>Cargo</th><th>E-mail</th><th>Envia</th><th></th></tr>` +
-      l.map((e, i) => `<tr data-i="${i}"><td data-l="Empresa">${e.novo ? '<input type="text" class="en" placeholder="Nova empresa">' : esc(e.empresa)}</td><td data-l="Pessoas">${e.pessoas}</td>
+    $("#eLista").innerHTML = `<div class="bar" style="margin:6px 0"><label>Buscar empresa<input id="eBusca" type="search" placeholder="nome da empresa"></label></div>` +
+      tabela(["Empresa", "Passageiros (30 dias)", "Gestor", "Cargo", "E-mail", "Envia", "", ""], l.map((e, i) =>
+      `<tr data-i="${i}" data-n="${esc((e.empresa || "").toLowerCase())}"><td data-l="Empresa">${e.novo ? '<input type="text" class="en" placeholder="Nova empresa">' : `<b>${esc(e.empresa)}</b>`}</td><td data-l="Passageiros">${e.pessoas}</td>
         <td data-l="Gestor"><input type="text" class="egn" value="${esc(e.gestor_nome || "")}"></td>
         <td data-l="Cargo"><input type="text" class="ec" value="${esc(e.cargo || "")}" placeholder="Gestor de contrato" list="cargos"></td>
         <td data-l="E-mail"><input type="email" class="ee" value="${esc(e.gestor_email || "")}"></td>
-        <td data-l="Envia"><input type="checkbox" class="ea" ${e.ativo || e.novo ? "checked" : ""}></td>
-        <td><button type="button" class="btn es">${e.novo ? "Incluir" : "Salvar"}</button></td></tr>`).join("") +
-      `</table></div><datalist id="cargos"><option>Gestor de contrato</option><option>Gerente</option><option>Supervisor</option><option>Coordenador</option></datalist>`;
+        <td data-l="Envia"><input type="checkbox" class="ea" ${e.ativo || e.novo || !e.gestor_email ? "checked" : ""}></td>
+        <td><button type="button" class="btn es">${e.novo ? "Incluir" : "Salvar"}</button></td>
+        <td>${e.gestor_email ? '<button type="button" class="btn er" title="Tirar o gestor desta empresa">✕</button>' : ""}</td></tr>`)) +
+      `<datalist id="cargos"><option>Gestor de contrato</option><option>Gerente</option><option>Supervisor</option><option>Coordenador</option></datalist>`;
+    $("#eBusca").oninput = ev => { const q = ev.target.value.trim().toLowerCase(); $("#eLista").querySelectorAll("tr[data-i]").forEach(tr => tr.hidden = q && !tr.dataset.n.includes(q) && tr.dataset.n !== ""); };
     $("#eLista").onclick = async ev => {
-      const b = ev.target.closest(".es"); if (!b) return;
+      const b = ev.target.closest(".es, .er"); if (!b) return;
       const tr = b.closest("tr"), e = l[+tr.dataset.i], nome = e.novo ? tr.querySelector(".en").value.trim() : e.empresa;
+      if (b.classList.contains("er")) {
+        if (!confirm(`Tirar o gestor da empresa ${nome}? As pessoas dela voltam a seguir a base de gestores.`)) return;
+        try { await api("rpc/remover_gestor_empresa", { senha: gSenha, p_empresa: nome }); cadLoad(true); } catch (err) { alert("Não removeu: " + err.message); }
+        return;
+      }
       if (!nome) { alert("Digite o nome da empresa."); return; }
       b.disabled = true; b.textContent = "…";
       try {
         await api("rpc/salvar_gestor_empresa", { senha: gSenha, p_empresa: nome, p_nome: tr.querySelector(".egn").value, p_cargo: tr.querySelector(".ec").value,
           p_email: tr.querySelector(".ee").value, p_ativo: tr.querySelector(".ea").checked });
-        b.textContent = "Salvo ✓"; if (e.novo) empLoad(true); vincLoad(true);
+        b.textContent = "Salvo ✓"; if (e.novo) empLoad(true); semLoad(true);
       } catch (err) { b.textContent = e.novo ? "Incluir" : "Salvar"; alert("Não salvou: " + err.message); }
       b.disabled = false;
     };
   } catch (err) { $("#eLista").textContent = "Erro: " + err.message + " (rodou o lotacao-v4.sql?)"; }
 }
-// pessoas ja vinculadas, agrupadas por empresa + gestor. "Não apareceu" = matricula/nome nao bate com nenhum embarque de 30 dias.
+
+// ---- 2. base de gestores (GA / GG / centro de custo)
+async function baseLoad(ok) {
+  if (!ok) { $("#bLista").textContent = "Abra com a senha para ver."; return; }
+  try {
+    const l = await api("rpc/gestores_base_lista", { senha: gSenha });
+    cSt.base = l.length; cadKpis();
+    l.push({ novo: true, ativo: true, pessoas: 0 });
+    const inp = (cls, v, ph = "") => `<input type="text" class="${cls}" value="${esc(v || "")}" placeholder="${ph}">`;
+    $("#bLista").innerHTML = tabela(["Gestor", "E-mail", "Gerência de área (GA)", "Gerência geral (GG)", "Centro de custo", "Passageiros (30 dias)", "Envia", "", ""], l.map((b, i) =>
+      `<tr data-i="${i}"><td data-l="Gestor">${inp("bn", b.nome)}</td><td data-l="E-mail"><input type="email" class="be" value="${esc(b.email || "")}"></td>
+        <td data-l="GA">${b.novo ? inp("bga", "", "GA") : esc(b.ga || "")}</td><td data-l="GG">${b.novo ? inp("bgg", "", "GG") : esc(b.gg || "")}</td>
+        <td data-l="Centro de custo">${b.novo ? inp("bcc", "", "centro de custo") : esc(b.centrocusto || "")}</td><td data-l="Passageiros">${b.novo ? "" : b.pessoas}</td>
+        <td data-l="Envia"><input type="checkbox" class="ba" ${b.ativo ? "checked" : ""}></td>
+        <td><button type="button" class="btn bs">${b.novo ? "Incluir" : "Salvar"}</button></td>
+        <td>${b.novo ? "" : '<button type="button" class="btn br" title="Remover da base">✕</button>'}</td></tr>`));
+    $("#bLista").onclick = async ev => {
+      const bt = ev.target.closest(".bs, .br"); if (!bt) return;
+      const tr = bt.closest("tr"), b = l[+tr.dataset.i];
+      try {
+        if (bt.classList.contains("br")) {
+          if (!confirm(`Remover ${b.nome || b.email} (${[b.ga, b.gg, b.centrocusto].filter(Boolean).join(" / ")}) da base?`)) return;
+          await api("rpc/remover_gestor_base", { senha: gSenha, p_id: b.id }); cadLoad(true); return;
+        }
+        bt.disabled = true; bt.textContent = "…";
+        if (b.novo) {
+          const r = await api("rpc/importar_gestores_base", { senha: gSenha, p_linhas: [{ nome: tr.querySelector(".bn").value, email: tr.querySelector(".be").value,
+            ga: tr.querySelector(".bga").value, gg: tr.querySelector(".bgg").value, centrocusto: tr.querySelector(".bcc").value }] });
+          if (r.erros.length) throw new Error(r.erros[0].motivo);
+          cadLoad(true); return;
+        }
+        await api("rpc/salvar_gestor_base", { senha: gSenha, p_id: b.id, p_nome: tr.querySelector(".bn").value, p_email: tr.querySelector(".be").value, p_ativo: tr.querySelector(".ba").checked });
+        bt.textContent = "Salvo ✓"; semLoad(true);
+      } catch (err) { bt.textContent = b.novo ? "Incluir" : "Salvar"; alert("Não salvou: " + err.message); }
+      bt.disabled = false;
+    };
+  } catch (err) { $("#bLista").textContent = "Erro: " + err.message + " (rodou o lotacao-v4.sql?)"; }
+}
+
+// ---- 3. quem embarcou e ainda nao tem gestor (sem nomes): mostra o que falta cadastrar
+async function semLoad(ok) {
+  if (!ok) { $("#sgLista").textContent = "Abra com a senha para ver."; return; }
+  try {
+    const l = await api("rpc/sem_gestor_lista", { senha: gSenha });
+    cSt.totPes = l.reduce((s, r) => s + r.pessoas, 0); cSt.semPes = l.reduce((s, r) => s + r.pessoas - r.com_gestor, 0); cadKpis();
+    const v = l.filter(r => r.pessoas > r.com_gestor);
+    $("#sgLista").innerHTML = !v.length ? '<div class="msg">Todo mundo que embarcou nos últimos 30 dias tem gestor.</div>' :
+      `<p class="base">${cSt.semPes} de ${cSt.totPes} passageiros sem gestor. Clique na linha para cadastrar o gestor da empresa.</p>` +
+      tabela(["Empresa (TFleet)", "GA", "GG", "Centro de custo", "Sem gestor"], v.map(r =>
+        `<tr class="click" data-e="${esc(r.empresa || "")}"><td data-l="Empresa"><b>${esc(r.empresa || "sem empresa")}</b></td><td data-l="GA">${esc(r.ga || "")}</td><td data-l="GG">${esc(r.gg || "")}</td>
+        <td data-l="Centro de custo">${esc(r.centrocusto || "")}</td><td data-l="Sem gestor"><b>${r.pessoas - r.com_gestor}</b> de ${r.pessoas}</td></tr>`));
+    $("#sgLista").onclick = ev => { const tr = ev.target.closest("tr.click"); if (!tr || !tr.dataset.e) return;
+      const linha = [...$("#eLista").querySelectorAll("tr[data-i]")].find(x => x.dataset.n === tr.dataset.e.toLowerCase());
+      $("#eLista").closest("details").open = true;
+      (linha || $("#eLista")).scrollIntoView({ behavior: "smooth", block: "center" });
+      const campo = linha ? linha.querySelector(".egn") : null; if (campo) setTimeout(() => campo.focus(), 400); };
+  } catch (err) { $("#sgLista").textContent = "Erro: " + err.message + " (rodou o lotacao-v4.sql?)"; }
+}
+
+// ---- 4. pessoas com gestor proprio (excecoes), agrupadas por GA / GG / empresa / gestor
 async function vincLoad(ok) {
-  if (!ok) { $("#vLista").textContent = "Abra com a senha para ver as pessoas já vinculadas."; return; }
+  if (!ok) { $("#vLista").textContent = "Abra com a senha para ver."; return; }
   try {
     const l = await api("rpc/vinculos_lista", { senha: gSenha });
-    cSt.pessoas = l.length; cSt.nao = l.filter(p => !p.embarques).length; cSt.semGestor = l.filter(p => !p.email_final).length; cadKpis();
-    if (!l.length) { $("#vLista").textContent = "Ninguém cadastrado ainda."; return; }
-    // um grupo por GA / GG / empresa / gestor final: mostra a vinculacao completa e abre a lista de pessoas
+    cSt.pessoas = l.length; cSt.nao = l.filter(p => !p.embarques).length; cadKpis();
+    if (!l.length) { $("#vLista").textContent = "Ninguém cadastrado individualmente."; return; }
     const grupos = {};
     for (const v of l) { const k = [v.area || "", v.gg || "", (v.empresa || "").toUpperCase(), v.email_final || ""].join("|"); (grupos[k] = grupos[k] || []).push(v); }
-    $("#vLista").innerHTML = `<p class="base">${l.length} pessoa(s) cadastradas, agrupadas por gerência de área / gerência geral / empresa / gestor. Clique para ver as pessoas.</p>` + Object.entries(grupos).map(([k, ps]) => {
+    $("#vLista").innerHTML = `<p class="base">${l.length} pessoa(s), agrupadas por gerência de área / gerência geral / empresa / gestor. Clique para ver as pessoas.</p>` + Object.entries(grupos).map(([k, ps]) => {
       const [ga, gg, emp, em] = k.split("|"), nao = ps.filter(p => !p.embarques).length, p0 = ps[0];
-      return `<details${em ? "" : ' data-sem="1"'}><summary><b>${esc(ga || "sem GA")}</b> / ${esc(gg || "sem GG")} · <b>${esc(emp || "sem empresa")}</b> → ${em ? `${esc(p0.nome_final || "")} ${esc(em)} <span class="tag">via ${esc(p0.origem)}</span>` : '<span class="v-err">sem gestor</span>'} · ${ps.length} pessoa(s)${nao ? ` · <span class="v-err">${nao} não apareceram nos embarques</span>` : ""}</summary>
-        <div class="gl-wrap"><table class="gl"><tr><th>Matrícula</th><th>RFID</th><th>Nome</th><th>GA / GG</th><th>Embarques 30 dias</th></tr>` +
-        ps.map(p => `<tr><td data-l="Matrícula">${esc(p.matricula || "")}</td><td data-l="RFID">${esc(p.rfid || "")}</td><td data-l="Nome">${esc(p.nome || "")}</td><td data-l="GA / GG">${esc(p.area || "")}<br><span class="muted">${esc(p.gg || "")}</span></td>
-          <td data-l="Embarques 30 dias">${p.embarques ? p.embarques + " (último " + esc(String(p.ultimo_embarque).split("-").reverse().join("/")) + ")" : '<span class="v-err">não apareceu</span>'}</td></tr>`).join("") +
-        `</table></div><button type="button" class="btn vRem" data-k="${esc(k)}">Remover estas ${ps.length}</button></details>`;
+      return `<details${em ? "" : ' data-sem="1"'}><summary><b>${esc(ga || "sem GA")}</b> / ${esc(gg || "sem GG")} · <b>${esc(emp || "sem empresa")}</b> → ${em ? `${esc(p0.nome_final || "")} ${esc(em)} <span class="tag">via ${esc(p0.origem)}</span>` : '<span class="v-err">sem gestor</span>'} · ${ps.length} pessoa(s)${nao ? ` · <span class="v-err">${nao} não apareceram nos embarques</span>` : ""}</summary>` +
+        tabela(["Matrícula", "RFID", "Nome", "GA / GG", "Embarques 30 dias"], ps.map(p => `<tr><td data-l="Matrícula">${esc(p.matricula || "")}</td><td data-l="RFID">${esc(p.rfid || "")}</td><td data-l="Nome">${esc(p.nome || "")}</td><td data-l="GA / GG">${esc(p.area || "")}<br><span class="muted">${esc(p.gg || "")}</span></td>
+          <td data-l="Embarques 30 dias">${p.embarques ? p.embarques + " (último " + esc(String(p.ultimo_embarque).split("-").reverse().join("/")) + ")" : '<span class="v-err">não apareceu</span>'}</td></tr>`)) +
+        `<button type="button" class="btn vRem" data-k="${esc(k)}">Remover estas ${ps.length}</button></details>`;
     }).join("");
     $("#vLista").onclick = async e => {
       const b = e.target.closest(".vRem"); if (!b) return;
-      const ps = grupos[b.dataset.k]; if (!confirm(`Remover ${ps.length} pessoa(s) do cadastro? Elas voltam a seguir o gestor da gerência da TFleet.`)) return;
-      try { await api("rpc/remover_vinculos", { senha: gSenha, p_chaves: ps.map(p => p.chave) }); vincLoad(true); }
+      const ps = grupos[b.dataset.k]; if (!confirm(`Remover ${ps.length} pessoa(s) do cadastro individual? Elas voltam a seguir a empresa / base de gestores.`)) return;
+      try { await api("rpc/remover_vinculos", { senha: gSenha, p_chaves: ps.map(p => p.chave) }); cadLoad(true); }
       catch (err) { alert("Não removeu: " + err.message); }
     };
   } catch (err) { $("#vLista").textContent = "Erro: " + err.message + " (rodou o lotacao-v4.sql?)"; }
 }
+function cadLoad(ok) { empLoad(ok); baseLoad(ok); semLoad(ok); vincLoad(ok); }
+
+// confere a senha no Supabase e carrega o que tem nome / e-mail
 async function gestLoad() {
   $("#gMsg").textContent = "Carregando…";
-  try {
-    const l = await api("rpc/gerencias_lista", { senha: gSenha || null, dias: +$("#fDias").value });
-    const ok = l.length ? l[0].senha_ok : false;
-    senhaOk = ok; respLoad(ok); vincLoad(ok); empLoad(ok); foraLoad(ok);
-    cSt.ga = l.length; cSt.gaSem = l.filter(g => !g.email || !g.ativo).length; cadKpis();
-    $("#gMsg").textContent = gSenha && !ok ? "Senha incorreta." : (ok ? "Pode editar." : "Sem senha: só leitura.");
-    if (!l.length) { $("#gLista").innerHTML = '<div class="msg">Nenhuma gerência ainda. Elas aparecem quando a coleta de embarques começar a gravar.</div>'; return; }
-    $("#gLista").innerHTML = `<div class="gl-wrap"><table class="gl"><tr><th>Gerência (GA)</th><th>Passag.</th><th>Fora da linha<br>recorr. / event.</th><th>Gestor</th><th>E-mail</th><th>Envia</th><th></th></tr>` +
-      l.map((g, i) => `<tr data-i="${i}"><td>${esc(g.ga)}<br><span class="muted">${esc(g.gg || "")}</span></td><td data-l="Passageiros">${g.passageiros}</td><td data-l="Fora da linha (recorr. / event.)">${g.fora_recorrentes} / ${g.fora_eventuais}</td>
-        <td data-l="Gestor"><input type="text" class="gn" value="${esc(g.nome || "")}" ${ok ? "" : "disabled"}></td>
-        <td data-l="E-mail"><input type="email" class="ge" value="${esc(g.email || "")}" ${ok ? "" : "disabled"}></td>
-        <td data-l="Envia"><input type="checkbox" class="ga" ${g.ativo ? "checked" : ""} ${ok ? "" : "disabled"}></td>
-        <td>${ok ? '<button type="button" class="btn gs">Salvar</button>' : ""}</td></tr>`).join("") + "</table></div>";
-    $("#gLista").onclick = async e => {
-      const b = e.target.closest(".gs"); if (!b) return;
-      const tr = b.closest("tr"), g = l[+tr.dataset.i];
-      b.disabled = true; b.textContent = "…";
-      try {
-        await api("rpc/salvar_gestor", { senha: gSenha, p_ga: g.ga, p_gg: g.gg, p_nome: tr.querySelector(".gn").value,
-          p_email: tr.querySelector(".ge").value, p_ativo: tr.querySelector(".ga").checked });
-        b.textContent = "Salvo ✓";
-      } catch (err) { b.textContent = "Salvar"; alert("Não salvou: " + err.message); }
-      b.disabled = false;
-    };
-  } catch (err) { $("#gMsg").textContent = "Erro: " + err.message + " (rodou o lotacao-gestores.sql?)"; }
+  if (!gSenha) { senhaOk = false; $("#gMsg").textContent = "Digite a senha de gestores."; cadLoad(false); respLoad(false); foraLoad(false); return; }
+  try { await api("rpc/gestores_base_lista", { senha: gSenha }); senhaOk = true; }
+  catch (err) { senhaOk = false; $("#gMsg").textContent = /senha/i.test(err.message) ? "Senha incorreta." : "Erro: " + err.message + " (rodou o lotacao-v4.sql?)"; }
+  if (senhaOk) $("#gMsg").textContent = "Pode editar.";
+  cadLoad(senhaOk); respLoad(senhaOk); foraLoad(senhaOk);
 }
+
 // abas: a senha de gestores so aparece nas abas que tem nome/e-mail
 let senhaOk = false, gestCarregado = false;
 document.querySelector(".tabs").addEventListener("click", e => {
