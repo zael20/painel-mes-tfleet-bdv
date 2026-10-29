@@ -1,0 +1,196 @@
+{
+ "id": "ocorrAvisos00001",
+ "name": "Avisos de resolucao no WhatsApp",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 2
+      }
+     ]
+    }
+   },
+   "name": "A cada 2 minutos",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__SUPABASE_URL__/rest/v1/rpc/avisos_pendentes",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\"p_limite\": 1}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Avisos pendentes",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    220,
+    300
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Um item por aviso. Lista vazia (desligado, fora do expediente, limite por hora) = fluxo para aqui.\nconst r = $input.first().json || {};\nreturn (r.avisos || []).map(a => ({ json: a }));\n"
+   },
+   "name": "Separar avisos",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__EVOLUTION_URL__/message/sendText/__INSTANCIA__",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ number: $json.grupo_jid, text: $json.texto, delay: 1500, quoted: { key: { id: $json.quoted_id, remoteJid: $json.grupo_jid, fromMe: false, participant: $json.autor_jid }, message: { conversation: $json.quoted_texto } } }) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Responder no grupo",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    300
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credEvolution001",
+     "name": "Evolution API"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Resposta da Evolution: deu certo se voltou a chave da mensagem enviada.\nconst a = $('Separar avisos').item.json;\nconst r = $json || {};\nconst ok = !!(r.key && r.key.id);\nconst erro = ok ? null : String(r.error?.message || r.message || r.error || JSON.stringify(r)).slice(0, 500);\nreturn { json: { p_id: a.id, p_ok: ok, p_erro: erro } };\n",
+    "mode": "runOnceForEachItem"
+   },
+   "name": "Resultado",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__SUPABASE_URL__/rest/v1/rpc/aviso_marcar",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Marcar avisada",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1100,
+    300
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "A cada 2 minutos": {
+   "main": [
+    [
+     {
+      "node": "Avisos pendentes",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Avisos pendentes": {
+   "main": [
+    [
+     {
+      "node": "Separar avisos",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Separar avisos": {
+   "main": [
+    [
+     {
+      "node": "Responder no grupo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Responder no grupo": {
+   "main": [
+    [
+     {
+      "node": "Resultado",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Resultado": {
+   "main": [
+    [
+     {
+      "node": "Marcar avisada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "none",
+  "saveDataErrorExecution": "all"
+ },
+ "pinData": {}
+}

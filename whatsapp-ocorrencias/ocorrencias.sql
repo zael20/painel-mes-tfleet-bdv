@@ -683,3 +683,85 @@ begin
       where x.tag = o.tag order by x.data_vistoria desc, x.ts desc limit 1) v on true$j$ else '' end);
   execute 'grant select on public.v_ocorrencias_cruzadas to anon, authenticated';
 end $$;
+
+-- ---------------------------------------------------------------- AVISO NO GRUPO quando a ocorrencia e resolvida
+-- O n8n (fluxo "Avisos de resolucao", a cada 2 min) pede avisos_pendentes() e responde EM CIMA da 1a mensagem do relato:
+--   "✅ Antonio, a ocorrencia do carro 76 (contagem de passageiros) foi resolvida em 29/10 as 10:30.
+--    Solucao: Bluetooth nao estava ligado."
+-- So ocorrencias do WhatsApp ao vivo (nao o historico), relatadas e resolvidas a partir de whatsapp_avisos.desde,
+-- que ninguem ja avisou no grupo. So no horario do expediente e no maximo max_por_hora (protege o numero de bloqueio).
+-- COMECA DESLIGADO. Ligar:  update public.whatsapp_avisos set ligado = true;
+create table if not exists public.whatsapp_avisos (
+  id            smallint primary key default 1 check (id = 1),
+  ligado        boolean not null default false,
+  desde         timestamptz not null default '2026-10-29 00:00-03',
+  max_por_hora  integer not null default 10 check (max_por_hora between 1 and 60)
+);
+insert into public.whatsapp_avisos (id) values (1) on conflict (id) do nothing;
+alter table public.whatsapp_avisos enable row level security;
+drop policy if exists "painel le avisos" on public.whatsapp_avisos;
+create policy "painel le avisos" on public.whatsapp_avisos for select to anon, authenticated using (true);
+drop policy if exists "painel liga avisos" on public.whatsapp_avisos;
+create policy "painel liga avisos" on public.whatsapp_avisos for update to anon, authenticated using (true) with check (true);
+revoke all on public.whatsapp_avisos from anon;
+grant select, update on public.whatsapp_avisos to anon, authenticated;
+
+alter table public.ocorrencias
+  add column if not exists aviso_enviado_em timestamptz,
+  add column if not exists aviso_status     text,      -- enviado | erro | null = ainda nao
+  add column if not exists aviso_erro       text;
+
+create or replace function public.categoria_texto(p text) returns text
+language sql immutable as $$
+  select case p when 'carregamento' then 'carregamento' when 'abrir_viagem' then 'abrir viagem'
+                when 'contagem_passageiros' then 'contagem de passageiros' when 'internet_chip' then 'internet / chip'
+                when 'celular_defeito' then 'celular com defeito' when 'suporte' then 'suporte'
+                when 'som_musica' then 'som / musica' else 'problema' end;
+$$;
+
+create or replace function public.avisos_pendentes(p_limite integer default 1) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare c whatsapp_avisos; e expediente; n integer; agora timestamp := now() at time zone 'America/Belem';
+begin
+  select * into c from whatsapp_avisos where id = 1;
+  if not found or not c.ligado then return jsonb_build_object('avisos', '[]'::jsonb, 'motivo', 'desligado'); end if;
+  select * into e from expediente where id = 1;
+  if found and (agora::time not between e.inicio and e.fim
+       or (extract(isodow from agora) = 6 and not e.conta_sabado) or (extract(isodow from agora) = 7 and not e.conta_domingo)
+       or (not e.conta_feriado and exists (select 1 from feriados f where f.dia = agora::date))) then
+    return jsonb_build_object('avisos', '[]'::jsonb, 'motivo', 'fora do expediente');
+  end if;
+  select count(*) into n from ocorrencias where aviso_status = 'enviado' and aviso_enviado_em > now() - interval '1 hour';
+  if n >= c.max_por_hora then return jsonb_build_object('avisos', '[]'::jsonb, 'motivo', 'limite por hora'); end if;
+  return jsonb_build_object('avisos', coalesce((select jsonb_agg(x) from (
+    select o.id, m.grupo_jid, split_part(m.msg_id, '#', 1) as quoted_id, m.autor_jid,
+           left(coalesce(nullif(m.texto,''), nullif(m.transcricao,''), '[' || m.tipo || ']'), 200) as quoted_texto,
+           '✅ ' || coalesce(
+              initcap(lower(split_part(public.nome_chave(coalesce(nullif(trim(r.nome),''),
+                     case when public.nome_valido(o.relatado_por) then o.relatado_por end)), ' ', 1))) || ', a',
+              'A') ||
+           ' ocorrência do carro ' || coalesce(o.tag, '?') || ' (' || public.categoria_texto(o.categoria) || ') foi resolvida em ' ||
+           to_char(o.resolvido_em at time zone 'America/Belem', 'DD/MM "às" HH24:MI') || '.' ||
+           coalesce(E'\nSolução: ' || nullif(trim(o.solucao), ''), '') as texto
+    from ocorrencias o
+    cross join lateral (select w.* from whatsapp_msgs w where w.ocorrencia_id = o.id and w.grupo_jid like '%@g.us'
+                         order by w.ts limit 1) m
+    left join relatores r on r.phone = o.reporter_phone
+    where o.status = 'resolvida' and o.aviso_status is null and o.origem = 'whatsapp'
+      and coalesce(o.primeira_msg_em, o.criado_em) >= c.desde and o.resolvido_em >= c.desde
+      and not exists (select 1 from whatsapp_msgs w where w.ocorrencia_id = o.id and w.acao_ia = 'resolve')  -- ja avisaram no grupo
+    order by o.resolvido_em
+    limit least(greatest(p_limite, 1), c.max_por_hora - n)) x), '[]'::jsonb), 'motivo', 'ok');
+end $$;
+revoke all on function public.avisos_pendentes(integer) from public, anon, authenticated;
+grant execute on function public.avisos_pendentes(integer) to service_role;
+
+-- o n8n marca depois de tentar (erro nao repete sozinho; para tentar de novo: update ocorrencias set aviso_status = null where id = N)
+create or replace function public.aviso_marcar(p_id bigint, p_ok boolean, p_erro text default null) returns void
+language sql security definer set search_path = public as $$
+  update ocorrencias set aviso_enviado_em = now(), aviso_status = case when p_ok then 'enviado' else 'erro' end,
+         aviso_erro = case when p_ok then null else left(p_erro, 500) end
+   where id = p_id;
+$$;
+revoke all on function public.aviso_marcar(bigint, boolean, text) from public, anon, authenticated;
+grant execute on function public.aviso_marcar(bigint, boolean, text) to service_role;
