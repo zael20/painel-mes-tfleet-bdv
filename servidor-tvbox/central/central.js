@@ -175,7 +175,7 @@
   }
   function abrirConfigFluxo(f) {
     var corpo = limpar($("cf-corpo"));
-    corpo.appendChild(el("p", { classe: "vazio", texto: "carregando o fluxo (pode levar uns 20 segundos na TV Box)..." }));
+    corpo.appendChild(el("p", { classe: "vazio", texto: "carregando o fluxo (alguns segundos)..." }));
     $("cf-titulo").textContent = f.nome;
     $("cf-visual").href = linkN8n("/workflow/" + f.id);
     $("cf-json").value = "";

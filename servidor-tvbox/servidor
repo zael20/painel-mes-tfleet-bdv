@@ -154,6 +154,25 @@ print(json.dumps({'ok': True, 'esperado': esperado, 'instancias': [{'nome': i.ge
   fluxo-exportar)
     root "$@"
     [ -n "${2:-}" ] || { echo "Informe o id do fluxo"; exit 1; }
+    # le direto do banco do n8n (1 segundo); se falhar, usa o CLI do n8n (pode passar de 1 minuto na TV Box)
+    export SV_DB="$(docker volume inspect -f '{{.Mountpoint}}' servidor_n8n_data 2>/dev/null)/database.sqlite"
+    python3 - "$2" 2>/dev/null <<'PY' && exit 0
+import json, os, sqlite3, sys
+c = sqlite3.connect(f"file:{os.environ['SV_DB']}?mode=ro", uri=True)
+c.row_factory = sqlite3.Row
+r = c.execute("select * from workflow_entity where id = ?", (sys.argv[1],)).fetchone()
+if r is None: sys.exit(1)
+r = dict(r)
+wf = {"id": r["id"], "name": r["name"], "active": False}
+for k in ("nodes", "connections", "settings", "staticData", "pinData", "meta"):
+    v = r.get(k)
+    if isinstance(v, str):
+        try: v = json.loads(v)
+        except ValueError: pass
+    if v is not None: wf[k] = v
+if not isinstance(wf.get("nodes"), list): sys.exit(1)
+print(json.dumps([wf], ensure_ascii=False))
+PY
     chown -R 1000:1000 "$DIR/importar"
     $DC exec -T n8n n8n export:workflow --id="$2" --output="/importar/.exportado-$2.json" >/dev/null 2>&1 \
       || { echo "Falhou exportar o fluxo $2" >&2; exit 1; }
