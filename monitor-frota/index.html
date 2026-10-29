@@ -1619,7 +1619,7 @@ function renderOcorr() {
         ${o.reincidencias > 0 ? `<span class="pill warn">relatado ${o.reincidencias + 1}×</span>` : ""}
         ${o.origem === "retroativo" ? `<span class="label">histórico do grupo</span>` : ""}</div>
       <div class="prob">${esc(o.problema)}</div>
-      <div class="sub">#${o.id} · ${esc(o.relatado_por || "?")} · ${fmtTime(ocQuando(o))} · ${quando}</div>
+      <div class="sub">#${o.id} · ${esc(o.relator_exibir || o.relatado_por || "?")} · ${fmtTime(ocQuando(o))} · ${quando}</div>
       <div class="oc-cross">${ocCross(o).map(([c, t]) => `<span class="${c}">${esc(t)}</span>`).join("")}</div>
     </article>`;
   }).join("") + (list.length > MAX ? `<div class="empty">Mostrando ${MAX} de ${list.length}. Use os filtros de carro ou problema para ver o resto.</div>` : "")

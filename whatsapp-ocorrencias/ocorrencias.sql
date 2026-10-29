@@ -479,6 +479,110 @@ do $$ begin
 end $$;
 select public.resolver_ocorrencias_por_vistoria() as ocorrencias_baixadas_pela_vistoria;   -- passada unica no que ja existe
 
+-- ---------------------------------------------------------------- cruzamento com as VIAGENS da API TFleet (tabela viagens, da lotacao)
+-- 1) Ocorrencia sem carro, mas com nome de verdade no WhatsApp ("Francisco"): procura a viagem que esse motorista
+--    abriu no dia, na hora do relato. Se for um carro so, a ocorrencia ganha o carro (tag_fonte = 'viagem').
+-- 2) Ocorrencia com carro: guarda quem estava dirigindo o carro na hora (motorista_viagem, viagem_linha).
+--    O painel/app usa esse nome quando o WhatsApp nao tem nome (".", emoji, so o numero).
+-- A API so guarda ~7 dias e a coleta comecou em 26/10: casos mais antigos ficam sem viagem.
+alter table public.ocorrencias
+  add column if not exists motorista_viagem text,
+  add column if not exists viagem_linha     text,
+  add column if not exists tag_fonte        text;   -- null = relato/IA; 'viagem' = achado pela viagem do motorista
+
+-- nome sem acento, maiusculo, so letras: "Francisco Chagas 🚍" -> 'FRANCISCO CHAGAS'
+create or replace function public.nome_chave(t text) returns text
+language sql immutable as $$
+  select nullif(trim(regexp_replace(translate(upper(coalesce(t,'')), 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ', 'AAAAAEEEEIIIIOOOOOUUUUCN'),
+                                   '[^A-Z]+', ' ', 'g')), '');
+$$;
+-- tem cara de nome? (pelo menos 3 letras e nao e telefone)
+create or replace function public.nome_valido(t text) returns boolean
+language sql immutable as $$
+  select length(coalesce(public.nome_chave(t),'')) >= 3 and coalesce(t,'') !~ '^\s*\+?[\d\s().-]{8,}\s*$';
+$$;
+-- todas as palavras do nome do WhatsApp (3+ letras) aparecem no nome do motorista da API
+create or replace function public.nome_bate(p_whats text, p_api text) returns boolean
+language sql immutable as $$
+  select coalesce(bool_and(w = any(string_to_array(public.nome_chave(p_api), ' '))), false)
+  from unnest(string_to_array(public.nome_chave(p_whats), ' ')) w
+  where length(w) >= 3 and w not in ('DAS','DOS','MOTORISTA','MOT','SR','SRA','BUS','ONIBUS');
+$$;
+
+create or replace function public.completar_pela_viagem(p_oc bigint) returns void
+language plpgsql security definer set search_path = public as $$
+declare o record; v_ts timestamptz; v_dia date; v_tag text; n int; v record; v_orig bigint := p_oc;
+begin
+  if to_regclass('public.viagens') is null then return; end if;
+  select * into o from ocorrencias where id = p_oc and status in ('aberta','em_andamento','historico','resolvida');
+  if not found then return; end if;
+  v_ts := coalesce(o.primeira_msg_em, o.criado_em);
+  v_dia := (v_ts at time zone 'America/Belem')::date;
+
+  -- 1) sem carro: pelo nome de quem relatou
+  if o.tag is null and public.nome_valido(o.relatado_por) then
+    select count(distinct public.normaliza_tag(x.frota)), min(public.normaliza_tag(x.frota)) into n, v_tag from viagens x
+     where x.data_local = v_dia and x.frota is not null and public.nome_bate(o.relatado_por, x.motorista)
+       and v_ts between x.saida_ts - interval '30 minutes' and coalesce(x.chegada_ts, x.saida_ts + interval '6 hours') + interval '1 hour';
+    if n <> 1 then   -- nenhuma viagem cobrindo a hora: qualquer viagem do motorista no dia, se for um carro so
+      select count(distinct public.normaliza_tag(x.frota)), min(public.normaliza_tag(x.frota)) into n, v_tag from viagens x
+       where x.data_local = v_dia and x.frota is not null and public.nome_bate(o.relatado_por, x.motorista);
+    end if;
+    if n = 1 and v_tag is not null then
+      p_oc := public.vincular_carro(p_oc, v_tag);
+      if p_oc = v_orig then update ocorrencias set tag_fonte = 'viagem' where id = p_oc; end if;
+      select * into o from ocorrencias where id = p_oc;
+    end if;
+  end if;
+
+  -- 2) com carro: quem dirigia o carro na hora do relato (ou a viagem mais perto no mesmo dia, ate 12 h)
+  if o.tag is not null and o.motorista_viagem is null then
+    select x.motorista, x.linha into v from viagens x
+     where x.data_local = v_dia and public.normaliza_tag(x.frota) = o.tag and coalesce(trim(x.motorista),'') <> ''
+       and abs(extract(epoch from x.saida_ts - v_ts)) < 12 * 3600
+     order by (v_ts between x.saida_ts - interval '30 minutes' and coalesce(x.chegada_ts, x.saida_ts + interval '6 hours') + interval '1 hour') desc,
+              abs(extract(epoch from x.saida_ts - v_ts))
+     limit 1;
+    if found then
+      update ocorrencias set motorista_viagem = left(v.motorista, 80), viagem_linha = left(v.linha, 80) where id = o.id;
+    end if;
+  end if;
+end $$;
+revoke all on function public.completar_pela_viagem(bigint) from public, anon, authenticated;
+
+create or replace function public.ocorrencias_viagem_gatilho() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare r record;
+begin
+  if tg_table_name = 'ocorrencias' then
+    perform public.completar_pela_viagem(new.id);
+  else   -- chegou/atualizou viagem: tenta as ocorrencias daquele dia que ainda estao sem carro ou sem motorista
+    for r in select id from ocorrencias
+              where (tag is null or (motorista_viagem is null and tag = public.normaliza_tag(new.frota)))
+                and (coalesce(primeira_msg_em, criado_em) at time zone 'America/Belem')::date = new.data_local loop
+      perform public.completar_pela_viagem(r.id);
+    end loop;
+  end if;
+  return null;
+end $$;
+drop trigger if exists ocorrencias_viagem on public.ocorrencias;
+create trigger ocorrencias_viagem after insert or update of tag on public.ocorrencias
+  for each row when (new.tag is null or new.motorista_viagem is null)
+  execute function public.ocorrencias_viagem_gatilho();
+do $$ begin
+  if to_regclass('public.viagens') is not null then
+    execute 'drop trigger if exists viagem_completa_ocorrencias on public.viagens';
+    execute 'create trigger viagem_completa_ocorrencias after insert or update of frota, motorista, saida_ts, chegada_ts on public.viagens
+               for each row execute function public.ocorrencias_viagem_gatilho()';
+  end if;
+end $$;
+-- passada unica no que ja existe
+do $$ declare r record; begin
+  for r in select id from public.ocorrencias where tag is null or motorista_viagem is null loop
+    perform public.completar_pela_viagem(r.id);
+  end loop;
+end $$;
+
 -- ---------------------------------------------------------------- cruzamento: RELATO x MONITOR x VISTORIA
 -- Para cada ocorrencia: ultimo sinal do monitor daquele onibus e ultima vistoria (com o item ligado a categoria).
 -- O monitor identifica o onibus por device_name (numero digitado no admin); comparamos pela tag padronizada.
@@ -516,6 +620,11 @@ begin
                 else 'baixa' end as prioridade,
            r.nome      as reporter_nome,        -- nome dado no app; vazio = use relatado_por (nome do WhatsApp)
            r.matricula as reporter_matricula,
+           -- nome para mostrar: cadastrado no app > nome do WhatsApp (se for nome) > motorista da viagem do carro (API)
+           coalesce(nullif(trim(r.nome),''), case when public.nome_valido(o.relatado_por) then o.relatado_por end,
+                    o.motorista_viagem, o.relatado_por) as relator_exibir,
+           case when nullif(trim(r.nome),'') is not null then 'cadastro' when public.nome_valido(o.relatado_por) then 'whatsapp'
+                when o.motorista_viagem is not null then 'viagem' end as relator_fonte,
            -- horas de expediente do relato ate a baixa (aberta: ate agora)
            public.horas_uteis(coalesce(o.primeira_msg_em, o.criado_em),
                               case when o.status in ('resolvida','descartada') then coalesce(o.resolvido_em, o.atualizado_em)
