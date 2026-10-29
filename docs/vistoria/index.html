@@ -1361,7 +1361,8 @@ function fromOc(r) {
     urg: r.urgencia, prio: r.prioridade || r.urgencia, ini: r.primeira_msg_em || r.criado_em, fim: r.status === "resolvida" ? (r.resolvido_em || r.atualizado_em) : null,
     por: r.resolvido_por, sol: r.solucao, phone: ph, perfil: r.relatado_por || "", reinc: r.reincidencias || 0, origem: r.origem,
     vistId: r.vistoria_id, bt: r.bt_causa, monSinal: r.mon_ultimo_sinal, demo: !!r.demo,
-    relNome: r.reporter_nome || null, relMat: r.reporter_matricula || null, bhSrv: r.status === "resolvida" && r.horas_uteis != null ? +r.horas_uteis : null };
+    relNome: r.reporter_nome || null, relMat: r.reporter_matricula || null,
+    relExibir: r.relator_exibir || null, relFonte: r.relator_fonte || null, tagFonte: r.tag_fonte || null, motViagem: r.motorista_viagem || null, linha: r.viagem_linha || null, bhSrv: r.status === "resolvida" && r.horas_uteis != null ? +r.horas_uteis : null };
 }
 function isOpenOc(o) { return o.status === "aberta" || o.status === "em_andamento"; }
 function ocList() { return (ocRows || (IS_PREVIEW ? demoOc() : [])).map(fromOc).filter(function (o) { return o.status !== "descartada"; }); }
@@ -1370,7 +1371,10 @@ function relOf(o) { var k = relKey(o), r = k && relMap[k]; if (r) return r; if (
 function relTxt(o) {
   var r = relOf(o);
   if (r && (r.nome || r.matricula)) return (r.nome || "") + (r.matricula ? (r.nome ? " · " : "") + "mat. " + r.matricula : "");
-  return (o.perfil || "Sem nome") + (o.phone ? " · " + fmtPhone(o.phone) : "");
+  // relator_exibir (view): cadastro > nome do WhatsApp > motorista da viagem; sem a view, o motorista da viagem e a reserva
+  var nm = o.relExibir || o.perfil || (o.motViagem ? o.motViagem + " (viagem)" : "") || "Sem nome";
+  if (o.relFonte === "viagem" && o.relExibir) nm += " (viagem)";
+  return nm + (o.phone ? " · " + fmtPhone(o.phone) : "");
 }
 function ocOpenMin(o) { return bhMin(o.ini, o.fim || new Date().toISOString()); }
 function ocResMin(o) { return o.fim ? (o.bhSrv != null ? Math.round(o.bhSrv * 60) : bhMin(o.ini, o.fim)) : null; }
@@ -1444,7 +1448,7 @@ function ocRow(o) {
   var st = OC_ST[o.status] || [o.status, ""];
   var side = isOpenOc(o) ? agoShort(o.ini) + " · " + fmtBhShort(ocOpenMin(o)) : o.fim ? "em " + fmtBhShort(ocResMin(o)) : fmtDate(todayBelemOf(o.ini));
   return { tag: o.tag || "?", side: side, go: function () { openOc(o.id); },
-    main: [el("span", { class: "badge " + st[1], text: st[0] }), " ", o.problema, el("span", { class: "hint", text: " · " + relTxt(o) })] };
+    main: [el("span", { class: "badge " + st[1], text: st[0] }), o.tagFonte === "viagem" ? " " : null, o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null, " ", o.problema, el("span", { class: "hint", text: " · " + relTxt(o) })] };
 }
 function byOld(a, b) { return a.ini < b.ini ? -1 : 1; }
 function byNew(a, b) { return a.ini < b.ini ? 1 : -1; }
@@ -1524,7 +1528,9 @@ function paintOcSheet(id) {
   $("shTitle").textContent = "Carro " + (o.tag || "?") + " · " + (OC_CAT[o.cat] || o.cat);
   var st = OC_ST[o.status] || [o.status, ""];
   b.appendChild(el("div", { class: "field" }, [el("div", { class: "rec-h" }, [el("span", { class: "badge " + st[1], text: st[0] }), o.prio ? el("span", { class: "badge " + (o.prio === "alta" ? "nok" : o.prio === "media" ? "warn" : ""), text: "prioridade " + o.prio }) : null,
+    o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null,
     o.demo ? el("span", { class: "badge warn", text: "exemplo da prévia" }) : null]), el("b", { style: "font-size:18px", text: o.problema }),
+    o.tagFonte === "viagem" ? el("span", { class: "hint", text: "O relato não dizia o carro: ele foi achado pela viagem que o motorista abriu" + (o.linha ? " (linha " + o.linha + ")" : "") + ". Confira." }) : null,
     o.reinc ? el("span", { class: "hint", text: "Relatado de novo " + plural(o.reinc, "vez", "vezes") + " enquanto estava aberta." }) : null]));
   b.appendChild(el("div", { class: "facts" }, [
     el("div", { class: "fact" }, [el("b", { text: fmtDT(o.ini).slice(0, 8) }), el("span", { text: "aberta às " + fmtDT(o.ini).slice(-5) + " · " + agoTxt(o.ini) })]),
@@ -1534,7 +1540,9 @@ function paintOcSheet(id) {
   ]));
   // quem relatou
   var r = relOf(o), rb = el("div", { class: "card" }, [el("h3", { text: "Quem relatou" }),
-    el("div", {}, [el("b", { text: r && (r.nome || r.matricula) ? relTxt(o) : (o.perfil || "Sem nome no WhatsApp") }),
+    el("div", {}, [el("b", { text: r && (r.nome || r.matricula) ? relTxt(o) : (o.relExibir || o.perfil || o.motViagem || "Sem nome no WhatsApp") }),
+      o.relFonte ? el("div", { class: "hint", text: "Nome vem de: " + ({ cadastro: "cadastro neste app", whatsapp: "perfil do WhatsApp", viagem: "motorista da viagem (API TFleet)" }[o.relFonte] || o.relFonte) }) : null,
+      o.motViagem && o.motViagem !== o.relExibir ? el("div", { class: "hint", text: "Motorista da viagem: " + o.motViagem + (o.linha ? " · linha " + o.linha : "") }) : null,
       el("div", { class: "hint", text: (o.phone ? fmtPhone(o.phone) : "número não registrado") + (r && (r.nome || r.matricula) && o.perfil ? " · no WhatsApp: " + o.perfil : "") })])]);
   var fN = el("input", { class: "text", placeholder: "Nome (opcional)", maxlength: "80", value: r && r.nome || "" }), fM = el("input", { class: "text", placeholder: "Matrícula", inputmode: "numeric", maxlength: "20", value: r && r.matricula || "" });
   var sv = el("button", { type: "button", class: "btn", text: r ? "Salvar alteração" : "Nomear esta pessoa" });
