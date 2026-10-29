@@ -149,7 +149,10 @@
 
   // conversa exportada do WhatsApp (.txt sem midia ou .zip com midia): vai para importar/ em pedacos de 512 KB
   // (o .zip pode ter centenas de MB) e o comando roda no terminal, para ver o andamento
-  function enviarArquivoGrande(arquivo, destino, aoAvancar) {
+  // Envia em partes de 8 MB, cada uma num canal proprio que fecha antes da proxima: assim o
+  // cockpit-bridge nunca guarda o arquivo inteiro na memoria (com 1 canal so, um zip de 500 MB
+  // ficava ~800 MB presos na RAM da box). No fim junta as partes com cat.
+  function enviarParte(blob, destino) {
     return new Promise(function (resolve, reject) {
       var canal = cockpit.channel({ payload: "fsreplace1", path: destino, superuser: "require", binary: true });
       var pos = 0, PEDACO = 512 * 1024, terminou = false;
@@ -157,16 +160,30 @@
         if (opts && opts.problem) reject(new Error(opts.message || opts.problem)); else if (terminou) resolve();
       });
       function proximo() {
-        if (pos >= arquivo.size) { terminou = true; canal.control({ command: "done" }); return; }
-        arquivo.slice(pos, pos + PEDACO).arrayBuffer().then(function (buf) {
+        if (pos >= blob.size) { terminou = true; canal.control({ command: "done" }); return; }
+        blob.slice(pos, pos + PEDACO).arrayBuffer().then(function (buf) {
           canal.send(new Uint8Array(buf));
           pos += buf.byteLength;
-          aoAvancar(Math.round(100 * pos / arquivo.size));
           setTimeout(proximo, 0);
         }, reject);
       }
       proximo();
     });
+  }
+  function enviarArquivoGrande(arquivo, destino, aoAvancar) {
+    var PARTE = 8 * 1048576, total = Math.max(1, Math.ceil(arquivo.size / PARTE)), i = 0;
+    function proxima() {
+      if (i >= total) {
+        return cockpit.spawn(["sh", "-c", 'cat "$1".parte* > "$1.tmp" && mv "$1.tmp" "$1"; r=$?; rm -f "$1".parte*; exit $r', "sh", destino],
+          { superuser: "require", err: "message" });
+      }
+      var nome = destino + ".parte" + String(i).padStart(5, "0");
+      return enviarParte(arquivo.slice(i * PARTE, (i + 1) * PARTE), nome).then(function () {
+        i++; aoAvancar(Math.round(100 * Math.min(arquivo.size, i * PARTE) / arquivo.size));
+        return proxima();
+      });
+    }
+    return cockpit.spawn(["sh", "-c", 'rm -f "$1".parte*', "sh", destino], { superuser: "require" }).then(proxima);
   }
   function importarHistorico(arquivo) {
     var ext = /\.zip$/i.test(arquivo.name) ? "zip" : /\.txt$/i.test(arquivo.name) ? "txt" : null;
