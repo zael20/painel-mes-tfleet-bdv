@@ -271,6 +271,11 @@ button.kpi:hover, .open button:hover, .legend button:hover { border-color: var(-
 .open button.late { border: 2px solid var(--nok); }
 .col .slowp { background: var(--warn); }
 .col .oldp { background: var(--idle); }
+.badge.orig-whatsapp { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.badge.orig-retroativo { background: var(--idle-bg); color: var(--idle); }
+.badge.orig-manual { background: color-mix(in srgb, var(--bar) 16%, transparent); color: var(--bar); }
+.monobs { display: block; margin-top: 3px; font-size: 13px; color: var(--bar); }
+.notice.mon { background: color-mix(in srgb, var(--bar) 12%, var(--surface)); color: var(--fg); border-left: 4px solid var(--bar); }
 .col { position: relative; }
 .col .abmark { position: absolute; left: 0; right: 0; height: 2px; background: var(--fg); }
 .msg { display: grid; gap: 2px; border-top: 1px solid var(--grid); padding-top: 8px; }
@@ -1363,9 +1368,11 @@ function fromOc(r) {
     por: r.resolvido_por, sol: r.solucao, phone: ph, perfil: r.relatado_por || "", reinc: r.reincidencias || 0, origem: r.origem,
     vistId: r.vistoria_id, bt: r.bt_causa, monSinal: r.mon_ultimo_sinal, demo: !!r.demo,
     relNome: r.reporter_nome || null, relMat: r.reporter_matricula || null,
-    ct: r.conta_no_tempo != null ? !!r.conta_no_tempo : null,
+    ct: r.conta_no_tempo != null ? !!r.conta_no_tempo : null, obsMon: r.observacao_monitor || null,
     relExibir: r.relator_exibir || null, relFonte: r.relator_fonte || null, tagFonte: r.tag_fonte || null, motViagem: r.motorista_viagem || null, linha: r.viagem_linha || null, bhSrv: r.status === "resolvida" && r.horas_uteis != null ? +r.horas_uteis : null };
 }
+var OC_ORIG = { whatsapp: "WhatsApp · motorista", retroativo: "Histórico do grupo", manual: "Aberta por você" };
+function origBadge(o) { return OC_ORIG[o.origem] ? el("span", { class: "badge orig-" + o.origem, text: OC_ORIG[o.origem] }) : null; }
 function isOpenOc(o) { return o.status === "aberta" || o.status === "em_andamento"; }
 function ocList() { return (ocRows || (IS_PREVIEW ? demoOc() : [])).map(fromOc).filter(function (o) { return o.status !== "descartada"; }); }
 function relKey(o) { return o.phone || (o.perfil ? "nome:" + o.perfil : ""); }
@@ -1399,7 +1406,8 @@ function demoOc() { // so na previa: exemplos para ver a tela; nunca vao para o 
     out.push({ id: -100 - i, tag: tags[Math.floor(rnd() * tags.length)] || "80", categoria: cat, problema: probs[cat], status: st, urgencia: cat === "carregamento" ? "alta" : "media",
       relatado_por: p[1], reporter_phone: p[0], primeira_msg_em: new Date(ini).toISOString(), criado_em: new Date(ini).toISOString(),
       resolvido_em: fim ? new Date(fim).toISOString() : null, resolvido_por: fim ? (rnd() < .6 ? "vistoria" : "Mizael") : null,
-      solucao: fim ? "Cabo trocado na vistoria" : null, conta_no_tempo: i % 5 !== 0, demo: true });
+      solucao: fim ? "Cabo trocado na vistoria" : null, conta_no_tempo: i % 5 !== 0, origem: i % 7 === 3 ? "retroativo" : i % 9 === 4 ? "manual" : "whatsapp",
+      observacao_monitor: cat === "contagem_passageiros" && i % 2 ? "Monitor Frota: provavelmente o Bluetooth do celular estava desligado (exemplo da prévia), por isso o leitor não registrou." : null, demo: true });
   }
   return out;
 }
@@ -1454,7 +1462,8 @@ function ocRow(o) {
   var st = OC_ST[o.status] || [o.status, ""];
   var side = isOpenOc(o) ? agoShort(o.ini) + " · " + fmtBhShort(ocOpenMin(o)) : o.fim ? (ocCt(o) ? "em " + fmtBhShort(ocResMin(o)) : "resolv. " + fmtDate(todayBelemOf(o.fim))) : fmtDate(todayBelemOf(o.ini));
   return { tag: o.tag || "?", side: side, go: function () { openOc(o.id); },
-    main: [el("span", { class: "badge " + st[1], text: st[0] }), o.tagFonte === "viagem" ? " " : null, o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null, " ", o.problema, el("span", { class: "hint", text: " · " + relTxt(o) })] };
+    main: [el("span", { class: "badge " + st[1], text: st[0] }), " ", origBadge(o), o.tagFonte === "viagem" ? " " : null, o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null, " ", o.problema, el("span", { class: "hint", text: " · " + relTxt(o) }),
+      o.obsMon ? el("span", { class: "monobs", text: o.obsMon.length > 110 ? o.obsMon.slice(0, 107) + "…" : o.obsMon }) : null] };
 }
 function byOld(a, b) { return a.ini < b.ini ? -1 : 1; }
 function byNew(a, b) { return a.ini < b.ini ? 1 : -1; }
@@ -1535,7 +1544,7 @@ function paintOcSheet(id) {
   $("shTitle").textContent = "Carro " + (o.tag || "?") + " · " + (OC_CAT[o.cat] || o.cat);
   var st = OC_ST[o.status] || [o.status, ""];
   b.appendChild(el("div", { class: "field" }, [el("div", { class: "rec-h" }, [el("span", { class: "badge " + st[1], text: st[0] }), o.prio ? el("span", { class: "badge " + (o.prio === "alta" ? "nok" : o.prio === "media" ? "warn" : ""), text: "prioridade " + o.prio }) : null,
-    o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null,
+    origBadge(o), o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null,
     o.demo ? el("span", { class: "badge warn", text: "exemplo da prévia" }) : null]), el("b", { style: "font-size:18px", text: o.problema }),
     o.tagFonte === "viagem" ? el("span", { class: "hint", text: "O relato não dizia o carro: ele foi achado pela viagem que o motorista abriu" + (o.linha ? " (linha " + o.linha + ")" : "") + ". Confira." }) : null,
     o.reinc ? el("span", { class: "hint", text: "Relatado de novo " + plural(o.reinc, "vez", "vezes") + " enquanto estava aberta." }) : null]));
@@ -1567,6 +1576,7 @@ function paintOcSheet(id) {
   if (o.bt) ev.push("Monitor (18h antes do relato): " + ({ bluetooth_desligado: "Bluetooth desligado", leitor_desconectado: "leitor desconectado", nao_rodou: "ônibus não rodou", bluetooth_ok: "Bluetooth OK", sem_dados: "sem dados" }[o.bt] || o.bt));
   if (o.monSinal) ev.push("Último sinal do celular: " + fmtDT(o.monSinal));
   var lv = o.tag && lastChecked(o.tag); if (lv) ev.push("Última vistoria: " + fmtDate(lv.dia) + " · " + resTxt(lv));
+  if (o.obsMon) b.appendChild(el("div", { class: "notice mon", text: o.obsMon }));
   if (ev.length) b.appendChild(el("div", { class: "card" }, [el("h3", { text: "Cruzamento" })].concat(ev.map(function (t) { return el("div", { class: "hint", text: t }); }))));
   // acoes
   var act = el("div", { class: "addrow", style: "flex-wrap:wrap" });
