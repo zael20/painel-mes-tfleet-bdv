@@ -1,6 +1,6 @@
 {
-  "name": "Vistoria BDV",
-  "short_name": "Vistoria",
+  "name": "CHECK BDV",
+  "short_name": "CHECK BDV",
   "description": "Checklist de vistoria dos celulares dos ônibus, funciona sem internet",
   "lang": "pt-BR",
   "start_url": "./",
@@ -10,8 +10,23 @@
   "background_color": "#eef2f4",
   "theme_color": "#14324a",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
