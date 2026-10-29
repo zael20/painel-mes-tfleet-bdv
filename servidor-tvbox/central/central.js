@@ -147,14 +147,36 @@
     }).catch(function (e) { saida("✖ " + (e.message || e) + "\n", true); });
   }
 
-  // conversa exportada do WhatsApp (.txt): vai para importar/ e o comando roda no terminal, para ver o andamento
+  // conversa exportada do WhatsApp (.txt sem midia ou .zip com midia): vai para importar/ em pedacos de 512 KB
+  // (o .zip pode ter centenas de MB) e o comando roda no terminal, para ver o andamento
+  function enviarArquivoGrande(arquivo, destino, aoAvancar) {
+    return new Promise(function (resolve, reject) {
+      var canal = cockpit.channel({ payload: "fsreplace1", path: destino, superuser: "require", binary: true });
+      var pos = 0, PEDACO = 512 * 1024, terminou = false;
+      canal.addEventListener("close", function (ev, opts) {
+        if (opts && opts.problem) reject(new Error(opts.message || opts.problem)); else if (terminou) resolve();
+      });
+      function proximo() {
+        if (pos >= arquivo.size) { terminou = true; canal.control({ command: "done" }); return; }
+        arquivo.slice(pos, pos + PEDACO).arrayBuffer().then(function (buf) {
+          canal.send(new Uint8Array(buf));
+          pos += buf.byteLength;
+          aoAvancar(Math.round(100 * pos / arquivo.size));
+          setTimeout(proximo, 0);
+        }, reject);
+      }
+      proximo();
+    });
+  }
   function importarHistorico(arquivo) {
-    saida("▶ Enviando " + arquivo.name + "...\n");
-    arquivo.text().then(function (txt) {
-      return cockpit.file(BASE + "/importar/historico-whatsapp.txt", { superuser: "require" }).replace(txt);
+    var ext = /\.zip$/i.test(arquivo.name) ? "zip" : /\.txt$/i.test(arquivo.name) ? "txt" : null;
+    if (!ext) { saida("✖ Escolha o .zip (com mídia) ou o .txt (sem mídia) exportado do WhatsApp.\n"); return; }
+    var mb = (arquivo.size / 1048576).toFixed(1), ultimo = -10;
+    saida("▶ Enviando " + arquivo.name + " (" + mb + " MB)...\n");
+    enviarArquivoGrande(arquivo, BASE + "/importar/historico-whatsapp." + ext, function (pct) {
+      if (pct - ultimo >= 10) { ultimo = pct; saida("  " + pct + "%\n", true); }
     }).then(function () {
-      saida("Enviado. A importação roda no terminal ao lado (pode levar alguns minutos).\n", true);
-      if (!document.body.classList.contains("com-terminal")) alternarTerminal();
+      saida("Enviado. A importação roda no terminal ao lado (pode levar de minutos a algumas horas com mídia).\n", true);
       setTimeout(function () { digitarNoTerminal("sudo servidor retroativo 60\r"); }, 800);
     }).catch(function (e) { saida("✖ " + (e.message || e) + "\n", true); });
   }

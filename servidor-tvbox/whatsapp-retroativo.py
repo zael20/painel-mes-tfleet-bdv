@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-# Importa o HISTORICO do grupo de ocorrencias a partir da conversa exportada do WhatsApp (.txt, "sem midia").
-# Uso na TV Box:  sudo servidor retroativo [dias]     (padrao: 60 dias; le o .txt mais novo de /opt/servidor/importar)
+# Importa o HISTORICO do grupo de ocorrencias a partir da conversa exportada do WhatsApp.
+# Uso na TV Box:  sudo servidor retroativo [dias]     (padrao: 60 dias; le o .zip/.txt mais novo de /opt/servidor/importar)
+#
+# Aceita a exportacao "sem midia" (.txt) ou "incluir midia" (.zip). Com midia, cada audio/foto/video do periodo
+# passa antes pelo Gemini (transcricao/descricao curta, guardada em importar/.retro-midias.json para nao repetir).
 #
 # Para cada dia: manda as mensagens do dia para o Gemini (1 chamada por dia, cabe na cota gratis), que devolve as
 # ocorrencias daquele dia; grava no Supabase com origem = 'retroativo'. O que foi resolvido no proprio grupo vira
 # 'resolvida'; o resto vira 'historico' (aconteceu, mas o grupo nao registrou o desfecho) e nao entra como aberta.
 # As mensagens brutas vao para whatsapp_msgs (id "retro:..."), para consulta. Pode rodar de novo: continua de onde parou.
-import hashlib, json, os, re, sys, time, unicodedata, urllib.error, urllib.request
+import base64, hashlib, json, os, re, sys, time, urllib.error, urllib.request, zipfile
 from datetime import datetime, timedelta, timezone
 
 DIR = os.environ.get("DIR", "/opt/servidor")
@@ -17,6 +20,13 @@ GEM_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
 GRUPO = (os.environ.get("GRUPOS", "") or "retroativo").split(",")[0]
 BELEM = timezone(timedelta(hours=-3))
 ESTADO = os.path.join(DIR, "importar", ".retroativo-feito")
+CACHE_MIDIA = os.path.join(DIR, "importar", ".retro-midias.json")
+MAX_MIDIA = 19 * 1024 * 1024  # limite do envio direto ao Gemini (20 MB)
+TIPOS_MIDIA = {"opus": ("audio", "audio/ogg"), "ogg": ("audio", "audio/ogg"), "m4a": ("audio", "audio/mp4"),
+               "mp3": ("audio", "audio/mpeg"), "aac": ("audio", "audio/aac"), "wav": ("audio", "audio/wav"),
+               "mp4": ("video", "video/mp4"), "3gp": ("video", "video/3gpp"), "mov": ("video", "video/quicktime"),
+               "jpg": ("imagem", "image/jpeg"), "jpeg": ("imagem", "image/jpeg"), "png": ("imagem", "image/png"),
+               "webp": ("imagem", "image/webp")}
 CATEGORIAS = ["carregamento", "abrir_viagem", "contagem_passageiros", "internet_chip", "celular_defeito",
               "suporte", "som_musica", "outro"]
 
@@ -30,18 +40,21 @@ def erro(m): print(f"\033[31m[ERRO]\033[0m {m}", flush=True); sys.exit(1)
 # ---------------------------------------------------------------- leitura do .txt exportado (Android e iPhone)
 RE_ANDROID = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{2,4}),? (\d{1,2}):(\d{2})(?::(\d{2}))? [-–] (.*)$")
 RE_IPHONE = re.compile(r"^\[(\d{1,2})/(\d{1,2})/(\d{2,4}),? (\d{1,2}):(\d{2})(?::(\d{2}))?\] (.*)$")
+# arquivo anexado: Android "PTT-2026...-WA0001.opus (arquivo anexado)"; iPhone "<anexado: 00000012-AUDIO-....opus>"
+ANEXO = re.compile(r"^(?:<(?:anexado|attached):\s*(?P<a>[^>]+)>|(?P<b>\S+\.\w{2,5}) \((?:arquivo anexado|file attached)\))\s*(?P<leg>.*)$",
+                   re.S | re.I)
 MIDIA = re.compile(r"m[ií]dia oculta|arquivo de m[ií]dia oculto|omitid[oa]|ocultad[oa]|\(arquivo anexado\)|"
                    r"<attached:|media omitted|imagem ocultada|figurinha omitida", re.I)
 
 
-def ler_conversa(caminho):
+def ler_conversa(caminho, pasta_midia=None):
     msgs = []
     for linha in open(caminho, encoding="utf-8-sig", errors="replace"):
         linha = linha.replace("‎", "").replace(" ", " ").rstrip("\r\n")
         m = RE_IPHONE.match(linha) or RE_ANDROID.match(linha)
         if not m:
             if msgs and linha.strip():
-                msgs[-1]["texto"] = (msgs[-1]["texto"] + "\n" + linha.strip())[:4000]  # continuacao da mensagem
+                msgs[-1]["texto"] = (msgs[-1]["texto"] + "\n" + linha.strip()).strip()[:4000]  # continuacao da mensagem
             continue
         d, mes, ano, hh, mi, ss, resto = m.groups()
         ano = int(ano) + (2000 if len(ano) == 2 else 0)
@@ -52,11 +65,38 @@ def ler_conversa(caminho):
         if ": " not in resto:
             continue  # aviso do sistema (entrou, saiu, mudou o nome do grupo...)
         autor, texto = resto.split(": ", 1)
+        texto = texto.strip()
+        an = ANEXO.match(texto)
+        if an:  # arquivo exportado junto (zip "incluir midia")
+            nome = (an.group("a") or an.group("b")).strip()
+            ext = nome.rsplit(".", 1)[-1].lower()
+            tipo = TIPOS_MIDIA.get(ext, ("documento", None))[0]
+            caminho_arq = os.path.join(pasta_midia, nome) if pasta_midia else None
+            msgs.append({"local": local, "autor": autor.strip()[:80], "texto": an.group("leg").strip()[:4000],
+                         "tipo": "outro" if nome.upper().startswith("STK-") else tipo,
+                         "arquivo": caminho_arq if caminho_arq and os.path.exists(caminho_arq) else None})
+            continue
         midia = bool(MIDIA.search(texto))
         msgs.append({"local": local, "autor": autor.strip()[:80],
-                     "texto": "[midia nao exportada]" if midia else texto.strip()[:4000],
+                     "texto": "[midia nao exportada]" if midia else texto[:4000],
                      "tipo": "outro" if midia else "texto"})
     return msgs
+
+
+def abrir_exportacao(arquivo):
+    """Devolve (txt, pasta_das_midias). Um .zip e extraido em importar/historico/."""
+    if not arquivo.lower().endswith(".zip"):
+        return arquivo, None
+    destino = os.path.join(DIR, "importar", "historico")
+    with zipfile.ZipFile(arquivo) as z:
+        nomes = [n for n in z.namelist() if not n.endswith("/")]
+        txts = [n for n in nomes if n.lower().endswith(".txt")]
+        if not txts:
+            erro("O .zip nao tem a conversa (.txt). Exporte de novo pelo WhatsApp.")
+        info(f"Extraindo {len(nomes)} arquivos do .zip...")
+        z.extractall(destino)
+    principal = max(txts, key=lambda n: z.getinfo(n).file_size)
+    return os.path.join(destino, principal), os.path.dirname(os.path.join(destino, principal))
 
 
 def normaliza_tag(t):
@@ -105,6 +145,50 @@ resolucoes, neste dia, de problemas da lista PENDENTES DE DIAS ANTERIORES. Nao i
 """
 
 
+class SemCota(Exception):
+    pass
+
+
+def ler_midia(m, cache):
+    """Transcreve audio / descreve foto e video com o Gemini (1 vez por arquivo)."""
+    arq = m.get("arquivo")
+    if not arq:
+        return None
+    chave = os.path.basename(arq)
+    if chave in cache:
+        return cache[chave]
+    ext = arq.rsplit(".", 1)[-1].lower()
+    if m["tipo"] not in ("audio", "video", "imagem") or ext not in TIPOS_MIDIA or os.path.getsize(arq) > MAX_MIDIA:
+        return None
+    pedido = ("Este arquivo veio de um grupo de WhatsApp sobre problemas nos celulares dos onibus (app BDV, "
+              "carregamento, leitor de passageiros, internet, suporte). Em portugues, em ate 2 frases: "
+              + ("transcreva o que a pessoa fala." if m["tipo"] == "audio" else
+                 "descreva o que aparece que importa para o problema (numero do onibus, tela de erro, cabo, suporte...)."))
+    corpo = {"contents": [{"parts": [{"text": pedido},
+             {"inline_data": {"mime_type": TIPOS_MIDIA[ext][1], "data": base64.b64encode(open(arq, "rb").read()).decode()}}]}],
+             "generationConfig": {"temperature": 0.1}}
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEM_MODEL}:generateContent"
+    for tentativa in range(5):
+        try:
+            r = pedir(url, corpo, {"x-goog-api-key": GEM_KEY}, tempo=180)
+            txt = r["candidates"][0]["content"]["parts"][0]["text"].strip()[:1000]
+            cache[chave] = txt
+            json.dump(cache, open(CACHE_MIDIA, "w"), ensure_ascii=False)
+            time.sleep(4)
+            return txt
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 500, 503):
+                espera = 60 * (tentativa + 1)
+                aviso(f"Gemini ocupado/sem cota ({e.code}); esperando {espera} s...")
+                time.sleep(espera)
+                continue
+            aviso(f"Nao consegui ler {chave} ({e.code}); segue sem ela.")
+            return None
+        except (KeyError, IndexError, ValueError, OSError):
+            return None
+    raise SemCota()  # cota do dia acabou: para sem marcar o dia, e continua dele na proxima vez
+
+
 def gemini(dia, linhas, pendentes):
     texto = (PROMPT + f"\nDIA: {dia}\nPENDENTES DE DIAS ANTERIORES: {json.dumps(pendentes, ensure_ascii=False)}\n"
              + "MENSAGENS:\n" + "\n".join(linhas))
@@ -146,12 +230,13 @@ def hora_ts(dia, hhmm, padrao):
 def main():
     dias = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 60
     pasta = os.path.join(DIR, "importar")
-    txts = sorted((os.path.join(pasta, f) for f in os.listdir(pasta) if f.lower().endswith(".txt")),
+    exps = sorted((os.path.join(pasta, f) for f in os.listdir(pasta) if f.lower().endswith((".txt", ".zip"))),
                   key=os.path.getmtime)
-    if not txts:
-        erro(f"Nenhum .txt em {pasta}. Na Central: bloco WhatsApp > Importar historico (.txt).")
-    arquivo = txts[-1]
-    msgs = ler_conversa(arquivo)
+    if not exps:
+        erro(f"Nenhum .zip/.txt em {pasta}. Na Central: bloco WhatsApp > Importar historico.")
+    arquivo = exps[-1]
+    txt, pasta_midia = abrir_exportacao(arquivo)
+    msgs = ler_conversa(txt, pasta_midia)
     if not msgs:
         erro("Nao reconheci nenhuma mensagem no arquivo. E a conversa exportada do WhatsApp (sem midia)?")
     ultimo = max(m["local"] for m in msgs).date()
@@ -161,6 +246,10 @@ def main():
     for m in msgs:
         por_dia.setdefault(m["local"].date(), []).append(m)
     feitos = set(open(ESTADO).read().split()) if os.path.exists(ESTADO) else set()
+    cache = json.load(open(CACHE_MIDIA)) if os.path.exists(CACHE_MIDIA) else {}
+    n_midia = sum(1 for m in msgs if m.get("arquivo"))
+    if n_midia:
+        info(f"{n_midia} audios/fotos/videos no periodo: a IA le cada um antes (pode levar bem mais tempo).")
     ok(f"Arquivo: {os.path.basename(arquivo)} | {len(msgs)} mensagens de {inicio:%d/%m/%Y} a {ultimo:%d/%m/%Y} "
        f"| {len(por_dia)} dias com conversa ({len([d for d in por_dia if d.isoformat() in feitos])} ja importados)")
 
@@ -175,18 +264,31 @@ def main():
         lista = por_dia[dia]
         if dia.isoformat() in feitos:
             continue
+        # 0) midias do dia: transcricao/descricao vira texto para a IA do dia
+        for m in lista:
+            m["transcricao"] = ler_midia(m, cache)
+            if m["tipo"] in ("audio", "video", "imagem", "documento") and not m["transcricao"] and not m["texto"]:
+                m["texto"] = f"[{m['tipo']} sem leitura]"
         # 1) mensagens brutas (nao duplica: id fixo pelo conteudo)
         brutas = []
         for m in lista:
             ts = m["local"].astimezone(timezone.utc).isoformat()
-            mid = "retro:" + hashlib.sha1(f"{ts}|{m['autor']}|{m['texto']}".encode()).hexdigest()[:24]
+            base = m["texto"] + "|" + os.path.basename(m.get("arquivo") or "")
+            mid = "retro:" + hashlib.sha1(f"{ts}|{m['autor']}|{base}".encode()).hexdigest()[:24]
             brutas.append({"msg_id": mid, "ts": ts, "grupo_jid": GRUPO, "autor_nome": m["autor"],
-                           "tipo": m["tipo"], "texto": m["texto"], "acao_ia": "ignorar"})
+                           "tipo": m["tipo"], "texto": m["texto"] or None, "transcricao": m.get("transcricao"),
+                           "acao_ia": "ignorar"})
         for i in range(0, len(brutas), 500):
             sb("whatsapp_msgs?on_conflict=msg_id", brutas[i:i + 500], prefer="resolution=ignore-duplicates,return=minimal")
 
         # 2) IA: ocorrencias do dia
-        linhas = [f"{m['local']:%H:%M} {m['autor']}: {m['texto'][:500]}" for m in lista]
+        def linha_ia(m):
+            m["texto"] = m["texto"].strip()
+            t = m["texto"][:500]
+            if m.get("transcricao"):
+                t = (t + " " if t else "") + f"[{m['tipo']}: {m['transcricao'][:500]}]"
+            return f"{m['local']:%H:%M} {m['autor']}: {t}"
+        linhas = [linha_ia(m) for m in lista if m["texto"].strip() or m.get("transcricao")]  # figurinha sem texto fica de fora
         res = {"ocorrencias": [], "resolve_anteriores": []}
         for i in range(0, len(linhas), 400):  # dia muito movimentado vai em partes
             r = gemini(dia.strftime("%d/%m/%Y"), linhas[i:i + 400], pendentes[-40:])
@@ -254,5 +356,7 @@ if __name__ == "__main__":
         main()
     except urllib.error.HTTPError as e:
         erro(f"{e.code} em {e.url}: {e.read().decode(errors='replace')[:300]}")
+    except SemCota:
+        aviso("A cota gratis do Gemini acabou por hoje. Rode de novo amanha: continua de onde parou.")
     except KeyboardInterrupt:
         aviso("Parado. Rode de novo para continuar de onde parou.")
