@@ -34,6 +34,7 @@ servidor atualizar-script  -> atualiza este comando a partir do GitHub
 servidor whatsapp          -> liga o fluxo de ocorrencias (Supabase, Gemini, grupo)
 servidor retroativo [dias] -> importa o historico do grupo (.txt exportado) para o Supabase
 servidor acessos           -> mostra os enderecos e a chave da Evolution
+servidor acesso-publico ligar|desligar -> Central pela internet com login (PC da empresa sem Tailscale)
 servidor tela              -> resumo do servidor numa tela so (o mesmo da tela HDMI)
 servidor tela-ligar        -> mostra esse resumo sozinho na TV ligada no HDMI (login fica no Alt+F2)
 servidor tela-desligar     -> volta a tela HDMI para o login normal
@@ -248,6 +249,40 @@ PY
     [ -f "$DIR/config.env" ] || { echo "Configure o WhatsApp antes:  sudo servidor whatsapp"; exit 1; }
     [ -f "$DIR/whatsapp-retroativo.py" ] || curl -fsSL "$RAW/whatsapp-retroativo.py" -o "$DIR/whatsapp-retroativo.py"
     ( set -a; source "$DIR/config.env"; set +a; DIR=$DIR python3 "$DIR/whatsapp-retroativo.py" "${2:-60}" )
+    ;;
+  acesso-publico)
+    # Central pela internet (PC da empresa sem Tailscale): Tailscale Funnel -> https://<nome>.<tailnet>.ts.net
+    # So o Cockpit (porta 9090) fica exposto, protegido pelo login do Linux. n8n e Evolution continuam so na rede/Tailscale.
+    root "$@"
+    case "${2:-status}" in
+      ligar)
+        echo "ATENCAO: a tela de login da Central vai ficar aberta na internet."
+        echo "A senha do usuario $(logname 2>/dev/null || echo zael) precisa ser FORTE (12+ caracteres, so dele, nunca usada em outro lugar)."
+        read -r -p "Ja trocou a senha com 'passwd'? (s/n) " r
+        [ "$r" = s ] || { echo "Rode primeiro:  passwd   (e depois este comando de novo)"; exit 1; }
+        NOME=$(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null)
+        [ -n "$NOME" ] || { aviso "Tailscale nao esta conectado (rode: sudo tailscale up --hostname=servidor-frota)"; exit 1; }
+        LAN=$(hostname -I | awk '{print $1}'); TS=$(tailscale ip -4 2>/dev/null | head -1)
+        mkdir -p /etc/cockpit
+        [ -f /etc/cockpit/cockpit.conf ] && cp /etc/cockpit/cockpit.conf /etc/cockpit/cockpit.conf.bak
+        cat > /etc/cockpit/cockpit.conf <<CONF
+[WebService]
+Origins = https://$NOME https://$LAN:9090 https://$TS:9090 https://$NOME:9090 https://localhost:9090
+LoginTitle = Central da Frota
+CONF
+        echo "Na primeira vez o Tailscale pode mostrar um link para AUTORIZAR o Funnel: abra, aprove e rode de novo."
+        tailscale funnel --bg https+insecure://localhost:9090 || exit 1
+        ok "Central na internet:  https://$NOME"
+        echo "Abre no PC da empresa sem instalar nada. Login: seu usuario e senha da box. Ao terminar, clique em Sessao > Sair."
+        echo "Para tirar da internet:  sudo servidor acesso-publico desligar"
+        echo "Reiniciando o Cockpit em 5 s (esta pagina vai cair; entre de novo)..."
+        sleep 5; systemctl restart cockpit.socket cockpit.service 2>/dev/null
+        ;;
+      desligar)
+        tailscale funnel reset && ok "Central fora da internet (continua pela rede de casa e pelo Tailscale)" ;;
+      *)
+        tailscale funnel status 2>/dev/null || echo "Acesso publico desligado." ;;
+    esac
     ;;
   acessos)    root "$@"; cat "$DIR/ACESSOS.txt" ;;
   estado-cache)
