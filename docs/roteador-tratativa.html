@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Tratativa do roteador</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#17212b">
+<style>
+/* Pagina aberta pelo botao "Registrar tratativa" do resumo diario do roteador. Mostra o uso e grava quem tratou e o que foi feito. */
+:root { --bg: #eef1f4; --panel: #fff; --ink: #17212b; --muted: #5b6875; --line: #d5dce3; --accent: #0d6c8c; --accent-soft: #e0eff4; --good: #2e7d32; --good-soft: #e8f5e9; --warn: #b26a00; --warn-soft: #fff4e0; --crit: #c62828; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742; --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f; --warn: #e7a443; --warn-soft: #36280f; --crit: #f07b72; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742; --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f; --warn: #e7a443; --warn-soft: #36280f; --crit: #f07b72; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+header { background: #17212b; color: #fff; padding: 16px; }
+header small { color: #93a1ae; letter-spacing: .06em; font-size: 12px; }
+header h1 { margin: 2px 0 0; font-size: 20px; }
+main { max-width: 560px; margin: 0 auto; padding: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.nome { font-size: 20px; font-weight: 700; }
+.muted { color: var(--muted); font-size: 14px; }
+.dados { display: grid; grid-template-columns: 110px 1fr; gap: 4px 10px; margin: 12px 0 0; font-size: 15px; }
+.dados dt { color: var(--muted); }
+.dados dd { margin: 0; }
+fieldset { border: 0; padding: 0; margin: 16px 0 0; }
+legend { font-weight: 700; margin-bottom: 8px; }
+.opt { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.opt input { width: 20px; height: 20px; accent-color: var(--accent); }
+label.campo { display: block; font-weight: 700; margin-top: 14px; }
+input[type=text], textarea { width: 100%; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 6px; }
+textarea { min-height: 100px; }
+button { width: 100%; margin-top: 14px; font-family: inherit; font-weight: 600; font-size: 16px; padding: 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+button:disabled { opacity: .6; }
+.ok { background: var(--good-soft); color: var(--good); border-radius: 10px; padding: 12px 16px; font-weight: 600; }
+.err { color: var(--crit); margin-top: 10px; }
+</style>
+</head>
+<body>
+<header><small>MONITOR FROTA · ROTEADOR</small><h1>Tratativa do uso de roteador</h1></header>
+<main><div id="app" class="card">Carregando…</div></main>
+<script>
+// Conexao publica do painel: a pagina so consegue ver/gravar o uso do token do link.
+const CONFIG = { url: "https://orhuxmsrdnugpogvtnbg.supabase.co", key: "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL" };
+const OPCOES = [
+  ["MOTORISTA_ORIENTADO", "Motorista orientado / advertido"],
+  ["USO_AUTORIZADO", "Uso autorizado (operação, manutenção, teste)"],
+  ["PASSAGEIRO", "Usado por passageiro (orientado)"],
+  ["FALHA", "Falha do aparelho / ligou sozinho"],
+  ["NAO_IDENTIFICADO", "Não foi possível identificar quem usou"],
+  ["OUTRO", "Outro"]];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const hora = d => d ? new Date(d).toLocaleString("pt-BR", { timeZone: "America/Belem", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
+const dur = (a, b) => { const m = Math.round((new Date(b) - new Date(a)) / 60000); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}min` : `${m}min`; };
+const lerNome = () => { try { return localStorage.getItem("tratativa-nome") || ""; } catch (e) { return ""; } };
+const gravarNome = v => { try { localStorage.setItem("tratativa-nome", v); } catch (e) {} };
+
+async function rpc(fn, body) {
+  const r = await fetch(CONFIG.url + "/rest/v1/rpc/" + fn, { method: "POST",
+    headers: { apikey: CONFIG.key, Authorization: "Bearer " + CONFIG.key, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const txt = await r.text();
+  if (!r.ok) { let m = txt; try { m = JSON.parse(txt).message || txt; } catch (e) {} throw new Error(m); }
+  return txt ? JSON.parse(txt) : null;
+}
+
+(async () => {
+  const token = new URLSearchParams(location.search).get("t");
+  if (!/^[0-9a-f-]{36}$/i.test(token || "")) { $("#app").textContent = "Link inválido. Abra pelo botão do e-mail."; return; }
+  let u;
+  try { u = (await rpc("roteador_ver", { p_token: token }))[0]; } catch (e) { $("#app").textContent = "Não consegui carregar: " + e.message; return; }
+  if (!u) { $("#app").textContent = "Uso não encontrado ou link expirado."; return; }
+  $("#app").innerHTML = `
+    <div class="nome">Carro ${esc(u.carro)}</div>
+    <dl class="dados">
+      <dt>Período</dt><dd>${u.ligado ? hora(u.ligado) + " → " : "até "}${hora(u.desligado)}${u.ligado ? ` <span class="muted">(${dur(u.ligado, u.desligado)})</span>` : ""}</dd>
+      <dt>Consumo</dt><dd><b>${u.mb != null ? Number(u.mb).toLocaleString("pt-BR") + " MB" : "—"}</b> pelo roteador</dd>
+    </dl>
+    ${u.tratado_em ? `<div class="ok" style="margin-top:12px">Já tratado em ${hora(u.tratado_em)} por ${esc(u.tratado_por)}. Pode corrigir abaixo.</div>` : ""}
+    <form id="f">
+      <fieldset><legend>O que foi feito?</legend>
+        ${OPCOES.map(([k, t]) => `<label class="opt"><input type="radio" name="r" value="${k}" ${k === u.tratativa ? "checked" : ""}> ${t}</label>`).join("")}
+      </fieldset>
+      <label class="campo" for="obs">Descreva a tratativa (evidência)</label>
+      <textarea id="obs" maxlength="1000" placeholder="Ex.: conversei com o motorista Fulano às 17h, ele confirmou que ligou para o passageiro usar; orientado sobre a regra.">${esc(u.observacao || "")}</textarea>
+      <label class="campo" for="por">Quem tratou</label>
+      <input id="por" type="text" maxlength="120" placeholder="Seu nome" value="${esc(u.tratado_por || lerNome())}">
+      <button id="b">Registrar tratativa</button>
+      <div id="e" class="err"></div>
+    </form>`;
+  $("#f").addEventListener("submit", async e => {
+    e.preventDefault();
+    const r = $('input[name="r"]:checked')?.value, obs = $("#obs").value.trim(), por = $("#por").value.trim();
+    if (!r) { $("#e").textContent = "Escolha o que foi feito."; return; }
+    if (obs.length < 5) { $("#e").textContent = "Descreva o que foi feito."; $("#obs").focus(); return; }
+    if (por.length < 3) { $("#e").textContent = "Informe quem tratou."; $("#por").focus(); return; }
+    $("#b").disabled = true; $("#b").textContent = "Enviando…"; $("#e").textContent = "";
+    try {
+      await rpc("roteador_tratar", { p_token: token, p_tratativa: r, p_por: por, p_obs: obs });
+      gravarNome(por);
+      $("#app").innerHTML = `<div class="ok">Tratativa registrada. Obrigado!</div>
+        <p class="muted">Carro ${esc(u.carro)} · ${esc(OPCOES.find(o => o[0] === r)[1])}<br>${esc(obs)}<br>— ${esc(por)}</p>`;
+    } catch (err) { $("#b").disabled = false; $("#b").textContent = "Registrar tratativa"; $("#e").textContent = "Não registrou: " + err.message; }
+  });
+})();
+</script>
+</body>
+</html>

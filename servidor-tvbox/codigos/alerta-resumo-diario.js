@@ -6,6 +6,9 @@
 // tambem de sinal de que o servidor esta vivo).
 // eventId = -1 de proposito: o no "Marcar enviado" roda sem marcar nada
 // (o resumo usa a janela de 24 h, nao depende de alert_sent).
+// Tratativa: cada uso ganha um botao "Registrar tratativa" (pagina roteador-tratativa.html,
+// tabela roteador_tratativas no Supabase - rodar roteador-tratativa.sql). Usos de dias
+// anteriores ainda sem tratativa aparecem no fim do e-mail. Sem o SQL, sai sem botoes.
 // ============================================================================
 
 const cfg = $('⚙️ CONFIG').first().json;
@@ -14,6 +17,7 @@ const KEY = String(cfg.supabaseServiceKey || '');
 const TF_ACESSO = String(cfg.tfleetAcesso || '');
 const TF_TOKEN  = String(cfg.tfleetToken  || '');
 const JANELA_H = Number(cfg.resumoHoras || 24); // janela do resumo (horas)
+const TRAT_URL = String(cfg.tratativaUrl || 'https://zael20.github.io/painel-mes-tfleet-bdv/roteador-tratativa.html');
 const MIN_MOVE_M   = Number(cfg.minMoveMeters   || 150);
 
 const H = { apikey: KEY, Authorization: 'Bearer ' + KEY };
@@ -200,7 +204,7 @@ for (const ev of offs) {
     }
 
     usos.push({
-      carro: frota || devId, mb, offMs,
+      id: ev.id, carro: frota || devId, mb, offMs,
       periodo: onTs ? `${fmtBelem(onTs)} → ${fmtBelem(offTs).slice(6)}` : `ate ${fmtBelem(offTs)}`,
       duracao: onTs ? dur(offMs - onMs) : '—',
       local, carga, motorista,
@@ -210,7 +214,37 @@ for (const ev of offs) {
   }
 }
 
-// ---- 4) monta o e-mail unico ----
+// ---- 4) tratativas: cria o link de cada uso e busca os pendentes de dias anteriores ----
+let TRAT = null, pendentes = [];
+try {
+  const ids = usos.map((u) => u.id);
+  if (ids.length) {
+    await http({ method: 'POST', url: SB + '/rest/v1/roteador_tratativas?on_conflict=event_id', json: true,
+      headers: { ...H, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: ids.map((id) => ({ event_id: id })) });
+  }
+  const rows = ids.length
+    ? await sbGet('roteador_tratativas?event_id=in.(' + ids.join(',') + ')&select=event_id,token,tratado_em,tratado_por')
+    : [];
+  TRAT = Object.fromEntries((rows || []).map((r) => [r.event_id, r]));
+  const desde7 = new Date(Date.now() - 7 * 864e5).toISOString();
+  pendentes = await sbGet('roteador_tratativas?tratado_em=is.null&criado_em=gte.' + encodeURIComponent(desde7) +
+    (ids.length ? '&event_id=not.in.(' + ids.join(',') + ')' : '') +
+    '&select=event_id,token,events(device_id,device_name,ts,detail)&order=criado_em.asc');
+  if (!Array.isArray(pendentes)) pendentes = [];
+} catch (e) { TRAT = null; pendentes = []; } // sem o SQL da tratativa: e-mail sai sem botoes
+
+const btnTrat = (token, txt) =>
+  `<a href="${TRAT_URL}?t=${token}" style="display:inline-block;background:#0d6c8c;color:#fff;text-decoration:none;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap;">${txt}</a>`;
+const celTrat = (u) => {
+  const t = TRAT && TRAT[u.id];
+  if (!t) return '<span style="color:#888;">—</span>';
+  return t.tratado_em
+    ? `<span style="color:#2e7d32;font-weight:600;">✔ ${esc(t.tratado_por || 'tratado')}</span>`
+    : btnTrat(t.token, 'Registrar tratativa');
+};
+
+// ---- 5) monta o e-mail unico ----
 const hoje = fmtBelem(agoraIso).slice(0, 5);
 const fmtMb = (v) => (Math.round(v * 10) / 10).toLocaleString('pt-BR');
 const totalMb = usos.reduce((s, u) => s + u.mb, 0);
@@ -225,7 +259,19 @@ const porCarro = carros.map((c) => {
 
 const linhas = usos.map((u) =>
   `<tr><td style="${td}"><b>${esc(u.carro)}</b></td><td style="${td}">${u.periodo}<br><span style="color:#888;">${u.duracao}</span></td>` +
-  `<td style="${td}"><b>${fmtMb(u.mb)}</b></td><td style="${td}">${u.local}</td><td style="${td}">${u.carga}</td><td style="${td}">${u.motorista}</td></tr>`).join('');
+  `<td style="${td}"><b>${fmtMb(u.mb)}</b></td><td style="${td}">${u.local}</td><td style="${td}">${u.carga}</td><td style="${td}">${u.motorista}</td>` +
+  (TRAT ? `<td style="${td}">${celTrat(u)}</td>` : '') + '</tr>').join('');
+
+const blocoPend = pendentes.length === 0 ? '' :
+  `<div style="margin-top:20px;padding:12px 14px;background:#fff4e0;border-radius:8px;">
+     <div style="font-size:14px;font-weight:700;color:#b26a00;">Ainda sem tratativa (dias anteriores): ${pendentes.length}</div>
+     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;">` +
+  pendentes.map((p) => {
+    const e = p.events || {};
+    const mb = Number((e.detail || {}).mb_usados);
+    return `<tr><td style="${td}"><b>${esc(e.device_name || e.device_id || '')}</b></td><td style="${td}">${e.ts ? fmtBelem(e.ts) : ''}</td>` +
+      `<td style="${td}">${isFinite(mb) ? fmtMb(mb) + ' MB' : ''}</td><td style="${td}">${btnTrat(p.token, 'Registrar tratativa')}</td></tr>`;
+  }).join('') + '</table></div>';
 
 const corpo = usos.length === 0
   ? `<p style="font-size:15px;">Nenhum uso de roteador nas ultimas ${JANELA_H} h. 👍</p>`
@@ -235,14 +281,14 @@ const corpo = usos.length === 0
        <tr><td style="padding:4px 0;color:#555;">Consumo total</td><td><b>${fmtMb(totalMb)} MB</b></td></tr>
      </table>
      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-       <tr style="background:#f5f7fa;text-align:left;"><th style="padding:8px 6px;">Carro</th><th style="padding:8px 6px;">Periodo</th><th style="padding:8px 6px;">MB</th><th style="padding:8px 6px;">Local</th><th style="padding:8px 6px;">Carga</th><th style="padding:8px 6px;">Motorista</th></tr>
+       <tr style="background:#f5f7fa;text-align:left;"><th style="padding:8px 6px;">Carro</th><th style="padding:8px 6px;">Periodo</th><th style="padding:8px 6px;">MB</th><th style="padding:8px 6px;">Local</th><th style="padding:8px 6px;">Carga</th><th style="padding:8px 6px;">Motorista</th>${TRAT ? '<th style="padding:8px 6px;">Tratativa</th>' : ''}</tr>
        ${linhas}
      </table>
      <p style="font-size:12px;color:#8c6d3f;margin-top:12px;">Motorista com "?" e apenas sugestao pelo cruzamento de horario com as viagens do dia; nao confirma quem ligou o roteador.</p>`;
 
-const subject = usos.length
+const subject = (usos.length
   ? `📶 Resumo do roteador ${hoje} — ${usos.length} uso(s), ${carros.length} carro(s), ${fmtMb(totalMb)} MB`
-  : `📶 Resumo do roteador ${hoje} — nenhum uso`;
+  : `📶 Resumo do roteador ${hoje} — nenhum uso`) + (pendentes.length ? ` · ${pendentes.length} sem tratativa` : '');
 
 const html =
 `<div style="font-family:Arial,Helvetica,sans-serif;max-width:760px;margin:auto;color:#222;">
@@ -252,6 +298,7 @@ const html =
   </div>
   <div style="border:1px solid #e5e5e5;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px;">
     ${corpo}
+    ${blocoPend}
     <div style="margin-top:16px;font-size:12px;color:#999;">Monitor Frota · resumo automatico do servidor da TV Box.</div>
   </div>
 </div>`;
