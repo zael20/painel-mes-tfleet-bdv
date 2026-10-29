@@ -270,6 +270,7 @@ button.kpi:hover, .open button:hover, .legend button:hover { border-color: var(-
 .open .a { font: 500 12px var(--font-data); color: var(--muted); white-space: nowrap; }
 .open button.late { border: 2px solid var(--nok); }
 .col .slowp { background: var(--warn); }
+.col .oldp { background: var(--idle); }
 .col { position: relative; }
 .col .abmark { position: absolute; left: 0; right: 0; height: 2px; background: var(--fg); }
 .msg { display: grid; gap: 2px; border-top: 1px solid var(--grid); padding-top: 8px; }
@@ -480,7 +481,7 @@ button.kpi:hover, .open button:hover, .legend button:hover { border-color: var(-
     <div class="card">
       <h3>Resolvidas por semana</h3>
       <div class="sub">Toque numa coluna para ver as ocorrências da semana.</div>
-      <div class="legend"><span style="--c: var(--ok)">em até 1 dia útil</span><span style="--c: var(--warn)">mais de 1 dia útil</span><span style="--c: var(--fg)">abertas na semana (traço)</span></div>
+      <div class="legend"><span style="--c: var(--ok)">em até 1 dia útil</span><span style="--c: var(--warn)">mais de 1 dia útil</span><span style="--c: var(--idle)">antigas (fora do tempo)</span><span style="--c: var(--fg)">abertas na semana (traço)</span></div>
       <div class="cols-wrap"><div class="cols" id="ocWeeks"></div></div>
       <div class="cols-ax" id="ocWeeksAx"></div>
     </div>
@@ -1323,7 +1324,7 @@ function refreshAll() {
 var OC_CAT = { carregamento: "Carregamento", abrir_viagem: "Abrir viagem", contagem_passageiros: "Contagem de passageiros",
   internet_chip: "Internet / chip", celular_defeito: "Celular com defeito", suporte: "Suporte", som_musica: "Som / música", outro: "Outro" };
 var OC_ST = { aberta: ["Aberta", "nok"], em_andamento: ["Em andamento", "warn"], resolvida: ["Resolvida", "res"], descartada: ["Descartada", ""], historico: ["Sem desfecho", ""] };
-var EXP = { ini: 7.5, fim: 17, sab: false, dom: false, fer: false, feriados: {} };
+var EXP = { ini: 8, fim: 17, sab: false, dom: false, fer: false, feriados: {}, desde: "2026-10-29T03:00:00Z" };
 try { var ex0 = JSON.parse(ls("vb_exped") || "null"); if (ex0) EXP = ex0; } catch (e) {}
 function bhDia() { return Math.round((EXP.fim - EXP.ini) * 60); }   // 570 min = 1 dia util no padrao
 var ocRows = null, ocAt = null, ocMsgs = {}, relMap = {}, relServer = null, ocFilt = ls("vb_oc_filt") || "open", ocQ = "", ocDays = 90;
@@ -1347,7 +1348,7 @@ function fmtBh(m) {
   if (m < 60) return m + " min úteis";
   var h = m / 60; return (h < 10 ? h.toFixed(1).replace(".", ",") : String(Math.round(h))) + " h úteis";
 }
-function fmtBhShort(m) { if (m == null) return "—"; if (m < 60) return m + "min"; var h = m / 60; return (h < 10 ? h.toFixed(1).replace(".", ",") : String(Math.round(h))) + "h"; }
+function fmtBhShort(m) { if (m == null) return "—"; if (m < 60) return m + "min"; var h = m / 60; return (h < 10 ? h.toFixed(1).replace(/\.0$/, "").replace(".", ",") : String(Math.round(h))) + "h"; }
 function agoTxt(iso) { var m = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000)); return m < 60 ? "há " + m + " min" : m < 1440 ? "há " + Math.round(m / 60) + " h" : "há " + plural(Math.round(m / 1440), "dia", "dias"); }
 function agoShort(iso) { var m = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000)); return m < 60 ? m + "min" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
 function phoneOf(jid) { if (!jid) return ""; var s = String(jid); if (/@lid$/.test(s)) return "lid:" + s.split("@")[0]; return s.split("@")[0].replace(/\D/g, ""); }
@@ -1362,6 +1363,7 @@ function fromOc(r) {
     por: r.resolvido_por, sol: r.solucao, phone: ph, perfil: r.relatado_por || "", reinc: r.reincidencias || 0, origem: r.origem,
     vistId: r.vistoria_id, bt: r.bt_causa, monSinal: r.mon_ultimo_sinal, demo: !!r.demo,
     relNome: r.reporter_nome || null, relMat: r.reporter_matricula || null,
+    ct: r.conta_no_tempo != null ? !!r.conta_no_tempo : null,
     relExibir: r.relator_exibir || null, relFonte: r.relator_fonte || null, tagFonte: r.tag_fonte || null, motViagem: r.motorista_viagem || null, linha: r.viagem_linha || null, bhSrv: r.status === "resolvida" && r.horas_uteis != null ? +r.horas_uteis : null };
 }
 function isOpenOc(o) { return o.status === "aberta" || o.status === "em_andamento"; }
@@ -1377,6 +1379,10 @@ function relTxt(o) {
   return nm + (o.phone ? " · " + fmtPhone(o.phone) : "");
 }
 function ocOpenMin(o) { return bhMin(o.ini, o.fim || new Date().toISOString()); }
+// tempo so conta nas metricas (media, mediana, % em 1 dia util) para relato novo: conta_no_tempo da view,
+// ou, sem a view, origem diferente de retroativo e relato a partir de expediente.metricas_desde
+function ocCt(o) { return o.ct != null ? o.ct : o.origem !== "retroativo" && (!EXP.desde || new Date(o.ini) >= new Date(EXP.desde)); }
+function ocTimeMin(o) { return ocCt(o) ? ocResMin(o) : null; }
 function ocResMin(o) { return o.fim ? (o.bhSrv != null ? Math.round(o.bhSrv * 60) : bhMin(o.ini, o.fim)) : null; }
 function porTxt(p) { return !p ? "—" : p === "vistoria" ? "Vistoria (CHECK BDV)" : p === "painel" ? "Painel" : p; }
 function demoOc() { // so na previa: exemplos para ver a tela; nunca vao para o servidor
@@ -1393,7 +1399,7 @@ function demoOc() { // so na previa: exemplos para ver a tela; nunca vao para o 
     out.push({ id: -100 - i, tag: tags[Math.floor(rnd() * tags.length)] || "80", categoria: cat, problema: probs[cat], status: st, urgencia: cat === "carregamento" ? "alta" : "media",
       relatado_por: p[1], reporter_phone: p[0], primeira_msg_em: new Date(ini).toISOString(), criado_em: new Date(ini).toISOString(),
       resolvido_em: fim ? new Date(fim).toISOString() : null, resolvido_por: fim ? (rnd() < .6 ? "vistoria" : "Mizael") : null,
-      solucao: fim ? "Cabo trocado na vistoria" : null, demo: true });
+      solucao: fim ? "Cabo trocado na vistoria" : null, conta_no_tempo: i % 5 !== 0, demo: true });
   }
   return out;
 }
@@ -1412,7 +1418,7 @@ function fetchOc() {
     var e = x[0][0]; if (!e) return;
     function hh(t) { var p = String(t).split(":"); return +p[0] + (+p[1] || 0) / 60; }
     var f = {}; x[1].forEach(function (r) { f[r.dia] = 1; });
-    EXP = { ini: hh(e.inicio), fim: hh(e.fim), sab: !!e.conta_sabado, dom: !!e.conta_domingo, fer: !!e.conta_feriado, feriados: f, srv: true };
+    EXP = { ini: hh(e.inicio), fim: hh(e.fim), sab: !!e.conta_sabado, dom: !!e.conta_domingo, fer: !!e.conta_feriado, feriados: f, desde: e.metricas_desde || null, srv: true };
     ls("vb_exped", JSON.stringify(EXP));
   }).catch(function () {});
   // a view cruzada traz prioridade e evidencias; se nao existir, usa a tabela
@@ -1446,7 +1452,7 @@ function patchOc(o, body, okMsg) {
 // ---- linhas para listas
 function ocRow(o) {
   var st = OC_ST[o.status] || [o.status, ""];
-  var side = isOpenOc(o) ? agoShort(o.ini) + " · " + fmtBhShort(ocOpenMin(o)) : o.fim ? "em " + fmtBhShort(ocResMin(o)) : fmtDate(todayBelemOf(o.ini));
+  var side = isOpenOc(o) ? agoShort(o.ini) + " · " + fmtBhShort(ocOpenMin(o)) : o.fim ? (ocCt(o) ? "em " + fmtBhShort(ocResMin(o)) : "resolv. " + fmtDate(todayBelemOf(o.fim))) : fmtDate(todayBelemOf(o.ini));
   return { tag: o.tag || "?", side: side, go: function () { openOc(o.id); },
     main: [el("span", { class: "badge " + st[1], text: st[0] }), o.tagFonte === "viagem" ? " " : null, o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null, " ", o.problema, el("span", { class: "hint", text: " · " + relTxt(o) })] };
 }
@@ -1460,19 +1466,19 @@ function paintOc() {
   var resP = all.filter(function (o) { return o.fim && ocInPer(o.fim); }), abP = all.filter(function (o) { return ocInPer(o.ini); });
   var perTxt = ocDays ? "Últimos " + ocDays + " dias" : "Todo o histórico";
   $("ocSrc").textContent = ocRows ? "Servidor, atualizado " + fmtDT(ocAt) + "." : IS_PREVIEW ? "Prévia: ocorrências de EXEMPLO, só para ver a tela." : "Ainda sem dados do servidor (precisa de internet uma vez).";
-  var mins = resP.map(ocResMin).filter(function (m) { return m != null; }).sort(function (a, b) { return a - b; });
+  var mins = resP.map(ocTimeMin).filter(function (m) { return m != null; }).sort(function (a, b) { return a - b; });
   var avg = mins.length ? Math.round(mins.reduce(function (a, x) { return a + x; }, 0) / mins.length) : null, med = mins.length ? mins[Math.floor(mins.length / 2)] : null;
   var in1 = mins.filter(function (m) { return m <= bhDia(); }).length;
   var old2 = open.filter(function (o) { return ocOpenMin(o) > 2 * bhDia(); }).length;
   var k = $("ocKpis"); k.textContent = "";
   [[String(open.length), "abertas agora" + (old2 ? " · " + old2 + " há +2 dias úteis" : ""), open.length > 0, function () { openList("Ocorrências abertas", "Mais antigas primeiro", function () { return ocList().filter(isOpenOc).sort(byOld).map(ocRow); }, "ocorrência"); }],
    [String(resP.length), "resolvidas · " + abP.length + " abertas no período", false, function () { openList("Resolvidas", perTxt, function () { return resP.slice().sort(function (a, b) { return a.fim < b.fim ? 1 : -1; }).map(ocRow); }, "ocorrência"); }],
-   [fmtBhShort(avg), "tempo médio de resolução (mediana " + fmtBhShort(med) + ")", false, function () { openList("Tempo de resolução", perTxt + ", mais demoradas primeiro", function () { return resP.slice().sort(function (a, b) { return ocResMin(b) - ocResMin(a); }).map(ocRow); }, "ocorrência"); }],
-   [mins.length ? Math.round(in1 * 100 / mins.length) + "%" : "—", "resolvidas em até 1 dia útil", false, function () { openList("Resolvidas em até 1 dia útil", perTxt, function () { return resP.filter(function (o) { return ocResMin(o) <= bhDia(); }).sort(byNew).map(ocRow); }, "ocorrência"); }]
+   [mins.length ? fmtBhShort(avg) : "sem dados", mins.length ? "tempo médio de resolução (mediana " + fmtBhShort(med) + ", " + plural(mins.length, "caso", "casos") + ")" : "tempo médio: ainda sem relatos novos resolvidos", false, function () { openList("Tempo de resolução", perTxt + ", só relatos novos, mais demoradas primeiro", function () { return resP.filter(function (o) { return ocTimeMin(o) != null; }).sort(function (a, b) { return ocTimeMin(b) - ocTimeMin(a); }).map(ocRow); }, "ocorrência"); }],
+   [mins.length ? Math.round(in1 * 100 / mins.length) + "%" : "sem dados", "resolvidas em até 1 dia útil", false, function () { openList("Resolvidas em até 1 dia útil", perTxt + ", só relatos novos", function () { return resP.filter(function (o) { var m = ocTimeMin(o); return m != null && m <= bhDia(); }).sort(byNew).map(ocRow); }, "ocorrência"); }]
   ].forEach(function (x) { var bt = el("button", { type: "button", class: "kpi" + (x[2] ? " alert" : "") }, [el("b", { text: x[0] }), el("span", { text: x[1] })]); bt.addEventListener("click", x[3]); k.appendChild(bt); });
   function hm(h) { return String(Math.floor(h)).padStart(2, "0") + ":" + String(Math.round(h % 1 * 60)).padStart(2, "0"); }
   var dias = EXP.sab && EXP.dom ? "todos os dias" : EXP.sab ? "segunda a sábado" : EXP.dom ? "domingo a sexta" : "segunda a sexta";
-  $("ocBh").textContent = "Horas úteis: " + hm(EXP.ini) + " às " + hm(EXP.fim) + ", " + dias + (EXP.fer ? "" : ", sem feriados") + ". 1 dia útil = " + fmtBhShort(bhDia()) + "." + (EXP.srv ? "" : " (Regra padrão; o servidor ainda não respondeu.)");
+  $("ocBh").textContent = "Horas úteis: " + hm(EXP.ini) + " às " + hm(EXP.fim) + ", " + dias + (EXP.fer ? "" : ", sem feriados") + ". 1 dia útil = " + fmtBhShort(bhDia()) + "." + (EXP.desde ? " Tempo médio e % só contam relatos a partir de " + fmtDT(EXP.desde).slice(0, 8) + "; os antigos entram só na quantidade." : "") + (EXP.srv ? "" : " (Regra padrão; o servidor ainda não respondeu.)");
   // lista
   var q = normTag(ocQ), L = (ocFilt === "open" ? open : ocFilt === "res" ? all.filter(function (o) { return o.fim; }) : all)
     .filter(function (o) { return !q || o.tag === q; }).sort(ocFilt === "open" ? byOld : byNew);
@@ -1485,18 +1491,19 @@ function paintOc() {
   // resolvidas por semana: verde = ate 1 dia util, laranja = mais
   function weekOfIso(iso) { var dn = dayNum(todayBelemOf(iso)); return dn - (new Date(dn * 86400000).getUTCDay() + 6) % 7; }
   function wd(w) { var d = new Date(w * 86400000); return String(d.getUTCDate()).padStart(2, "0") + "/" + String(d.getUTCMonth() + 1).padStart(2, "0"); }
-  var wk = {}; resP.forEach(function (o) { var w = weekOfIso(o.fim), e = wk[w] = wk[w] || { fast: 0, slow: 0, ab: 0 }; if (ocResMin(o) <= bhDia()) e.fast++; else e.slow++; });
-  abP.forEach(function (o) { var w = weekOfIso(o.ini); (wk[w] = wk[w] || { fast: 0, slow: 0, ab: 0 }).ab++; });
+  var wk = {}; resP.forEach(function (o) { var w = weekOfIso(o.fim), e = wk[w] = wk[w] || { fast: 0, slow: 0, ab: 0, old: 0 }; var m = ocTimeMin(o); if (m == null) e.old++; else if (m <= bhDia()) e.fast++; else e.slow++; });
+  abP.forEach(function (o) { var w = weekOfIso(o.ini); (wk[w] = wk[w] || { fast: 0, slow: 0, ab: 0, old: 0 }).ab++; });
   var ws = Object.keys(wk).map(Number).sort(function (a, b) { return a - b; });
   if (ws.length) { var allw = []; for (var w = ws[0]; w <= ws[ws.length - 1]; w += 7) allw.push(w); ws = allw; }
-  var wmax = Math.max.apply(null, ws.map(function (w) { var e = wk[w] || {}; return Math.max((e.fast || 0) + (e.slow || 0), e.ab || 0); }).concat(1));
+  var wmax = Math.max.apply(null, ws.map(function (w) { var e = wk[w] || {}; return Math.max((e.fast || 0) + (e.slow || 0) + (e.old || 0), e.ab || 0); }).concat(1));
   var cols = $("ocWeeks"); cols.textContent = "";
   ws.forEach(function (w) {
-    var e = wk[w] || { fast: 0, slow: 0, ab: 0 }, tot = e.fast + e.slow;
+    var e = wk[w] || { fast: 0, slow: 0, ab: 0, old: 0 }, tot = e.fast + e.slow + e.old;
     var lab = "Semana de " + wd(w) + ": " + e.ab + " abertas, " + tot + " resolvidas (" + e.fast + " em até 1 dia útil)";
     var c = el("button", { type: "button", class: "col", title: lab, "aria-label": lab });
     if (e.fast) c.appendChild(el("div", { class: "okp", style: "height:" + (e.fast * 100 / wmax) + "%" }));
     if (e.slow) c.appendChild(el("div", { class: "slowp", style: "height:" + (e.slow * 100 / wmax) + "%" }));
+    if (e.old) c.appendChild(el("div", { class: "oldp", style: "height:" + (e.old * 100 / wmax) + "%" }));
     if (e.ab) c.appendChild(el("i", { class: "abmark", style: "bottom:" + (e.ab * 100 / wmax) + "%" }));
     c.addEventListener("click", function () { openList("Semana de " + wd(w), "Abertas ou resolvidas na semana (segunda a domingo)", function () {
       return ocList().filter(function (o) { return weekOfIso(o.ini) === w || (o.fim && weekOfIso(o.fim) === w); }).sort(byNew).map(ocRow); }, "ocorrência"); });
@@ -1508,7 +1515,7 @@ function paintOc() {
   function group(list, keyFn, labelFn, box, cls, key) {
     var g = {}; list.forEach(function (o) { var kk = keyFn(o); if (!kk) return; (g[kk] = g[kk] || []).push(o); });
     var rows = Object.keys(g).map(function (kk) {
-      var it = g[kk], rm = it.map(ocResMin).filter(function (m) { return m != null; });
+      var it = g[kk], rm = it.map(ocTimeMin).filter(function (m) { return m != null; });
       var av = rm.length ? Math.round(rm.reduce(function (a, x) { return a + x; }, 0) / rm.length) : null, op = it.filter(isOpenOc).length;
       return { k: kk, label: labelFn(kk, it), v: it.length, extra: [op ? plural(op, "aberta", "abertas") : null, av != null ? "média " + fmtBhShort(av) : null].filter(Boolean).join(" · "),
         onClick: function () { openList(labelFn(kk, it), perTxt, function () { return it.slice().sort(byNew).map(ocRow); }, "ocorrência"); } };
@@ -1534,7 +1541,7 @@ function paintOcSheet(id) {
     o.reinc ? el("span", { class: "hint", text: "Relatado de novo " + plural(o.reinc, "vez", "vezes") + " enquanto estava aberta." }) : null]));
   b.appendChild(el("div", { class: "facts" }, [
     el("div", { class: "fact" }, [el("b", { text: fmtDT(o.ini).slice(0, 8) }), el("span", { text: "aberta às " + fmtDT(o.ini).slice(-5) + " · " + agoTxt(o.ini) })]),
-    o.fim ? el("div", { class: "fact" }, [el("b", { text: fmtBhShort(ocResMin(o)) }), el("span", { text: "para resolver (horas úteis)" })])
+    o.fim ? el("div", { class: "fact" }, [el("b", { text: fmtBhShort(ocResMin(o)) }), el("span", { text: "para resolver (horas úteis)" + (ocCt(o) ? "" : " · fora das métricas: caso antigo") })])
           : el("div", { class: "fact" }, [el("b", { text: fmtBhShort(ocOpenMin(o)) }), el("span", { text: "aberta (horas úteis)" })]),
     o.fim ? el("div", { class: "fact" }, [el("b", { text: fmtDT(o.fim).slice(0, 8) }), el("span", { text: "resolvida " + agoTxt(o.fim) })]) : null
   ]));
