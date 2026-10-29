@@ -983,10 +983,19 @@ function prune() { // guarda so as 60 ultimas enviadas no celular
   return all().then(function (list) { var sent = list.filter(function (r) { return r.state === "sent"; }); return Promise.all(sent.slice(60).map(function (r) { return del(r.id); })); });
 }
 var COLS = "id,tag,ts,data_vistoria,local,status,item_app,item_chip,item_cabo,item_leitor,item_suporte,item_celular,ocorrencias,observacao,acao,fotos,origem,pendentes";
+// O Supabase devolve no maximo 1000 linhas por pedido: busca em paginas ate acabar.
+function getAll(path, page) {
+  page = page || 1000; var out = [];
+  function next(off) {
+    return fetch(SB.url + "/rest/v1/" + path + (path.indexOf("?") >= 0 ? "&" : "?") + "limit=" + page + "&offset=" + off, { headers: hdr({}) })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (rows) { out = out.concat(rows); return rows.length < page || out.length >= 50000 ? out : next(off + rows.length); });
+  }
+  return next(0);
+}
 function fetchServer() {
   if (!navigator.onLine) return;
-  fetch(SB.url + "/rest/v1/vistorias?select=" + COLS + "&order=ts.asc&limit=20000", { headers: hdr({}) })
-    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+  getAll("vistorias?select=" + COLS + "&order=ts.asc,id.asc")
     .then(function (rows) {
       if (!rows.length) return;
       serverRows = rows; serverAt = new Date().toISOString();
@@ -1388,7 +1397,7 @@ function demoOc() { // so na previa: exemplos para ver a tela; nunca vao para o 
 function fetchOc() {
   if (!navigator.onLine) return Promise.resolve();
   function get(path) { return fetch(SB.url + "/rest/v1/" + path, { headers: hdr({}) }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
-  var msgs = get("whatsapp_msgs?select=ocorrencia_id,autor_jid,ts&ocorrencia_id=not.is.null&order=ts.asc&limit=20000").then(function (rows) {
+  var msgs = getAll("whatsapp_msgs?select=ocorrencia_id,autor_jid,ts&ocorrencia_id=not.is.null&order=ts.asc,msg_id.asc").then(function (rows) {
     var m = {}; rows.forEach(function (x) { if (!m[x.ocorrencia_id] && x.autor_jid) m[x.ocorrencia_id] = phoneOf(x.autor_jid); }); ocMsgs = m;
   }).catch(function () {});
   var rel = get("relatores?select=*").then(function (rows) {
@@ -1403,8 +1412,8 @@ function fetchOc() {
     ls("vb_exped", JSON.stringify(EXP));
   }).catch(function () {});
   // a view cruzada traz prioridade e evidencias; se nao existir, usa a tabela
-  var oc = get("v_ocorrencias_cruzadas?select=*&order=criado_em.desc&limit=3000")
-    .catch(function () { return get("ocorrencias?select=*&order=criado_em.desc&limit=3000"); })
+  var oc = getAll("v_ocorrencias_cruzadas?select=*&order=criado_em.desc,id.desc")
+    .catch(function () { return getAll("ocorrencias?select=*&order=criado_em.desc,id.desc"); })
     .then(function (rows) { ocRows = rows; ocAt = new Date().toISOString(); });
   return Promise.all([msgs, rel, exp, oc.catch(function () {})]).then(function () {
     if (ocRows) { ocRows.forEach(function (r) { if (!r.reporter_phone && ocMsgs[r.id]) r.reporter_phone = ocMsgs[r.id]; });
