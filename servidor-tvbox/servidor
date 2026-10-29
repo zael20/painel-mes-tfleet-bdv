@@ -23,6 +23,9 @@ servidor atualizar-script  -> atualiza este comando a partir do GitHub
 servidor whatsapp          -> liga o fluxo de ocorrencias (Supabase, Gemini, grupo)
 servidor retroativo [dias] -> importa o historico do grupo (.txt exportado) para o Supabase
 servidor acessos           -> mostra os enderecos e a chave da Evolution
+servidor tela              -> resumo do servidor numa tela so (o mesmo da tela HDMI)
+servidor tela-ligar        -> mostra esse resumo sozinho na TV ligada no HDMI (login fica no Alt+F2)
+servidor tela-desligar     -> volta a tela HDMI para o login normal
 TXT
 }
 
@@ -234,5 +237,91 @@ PY
     ( set -a; source "$DIR/config.env"; set +a; DIR=$DIR python3 "$DIR/whatsapp-retroativo.py" "${2:-60}" )
     ;;
   acessos)    root "$@"; cat "$DIR/ACESSOS.txt" ;;
+  tela)
+    # resumo para a TV ligada no HDMI (e para o terminal): programas, fluxos, WhatsApp, rede, memoria
+    root "$@"
+    export SV_ST="$("$0" status-json 2>/dev/null)" SV_FL="$("$0" fluxos-json 2>/dev/null)" SV_WA="$("$0" whatsapp-json 2>/dev/null)"
+    export SV_NET="$(curl -s -o /dev/null -m 6 -w '%{http_code}' https://www.google.com 2>/dev/null)"
+    export SV_CABO="$(cat /sys/class/net/e*/operstate 2>/dev/null | head -1)"
+    python3 - <<'PY'
+import json, os, time
+V, R, A, C, N, B = "\033[32m", "\033[31m", "\033[33m", "\033[36m", "\033[0m", "\033[1m"
+def lj(k, padrao):
+    try: return json.loads(os.environ.get(k) or "")
+    except ValueError: return padrao
+st, fl, wa = lj("SV_ST", {}), lj("SV_FL", []), lj("SV_WA", {})
+ponto = lambda bom: f"{V}[ok]{N}" if bom else f"{R}[!!]{N}"
+print(f"{B}CENTRAL DA FROTA - servidor da TV Box{N}        {time.strftime('%d/%m/%Y %H:%M')}")
+print("-" * 66)
+net = (os.environ.get("SV_NET") or "")[:1] in ("2", "3")
+cabo = os.environ.get("SV_CABO") == "up"
+print(f"{ponto(cabo)} Cabo de rede   {ponto(net)} Internet   {ponto(bool(st.get('ip_tailscale')))} Tailscale (acesso de fora)")
+print(f"  Casa: https://{st.get('ip_casa', '?')}:9090    Fora: https://{st.get('ip_tailscale') or '—'}:9090")
+print()
+print(f"{B}PROGRAMAS{N}")
+nomes = {"n8n": "n8n (fluxos)", "evolution": "Evolution (WhatsApp)", "postgres": "Banco da Evolution", "redis": "Cache da Evolution"}
+for sv in st.get("servicos", []) or [{"nome": "?", "estado": "", "detalhe": "nao consegui ler o Docker"}]:
+    print(f"  {ponto(sv.get('estado') == 'running')} {nomes.get(sv.get('nome'), sv.get('nome')):<24} {sv.get('detalhe', '')}")
+print()
+print(f"{B}FLUXOS{N}")
+for f in fl or [{"nome": "nenhum fluxo (ou n8n desligado)", "ativo": False}]:
+    print(f"  {ponto(f.get('ativo'))} {f.get('nome', '')[:52]:<52} {'ligado' if f.get('ativo') else 'DESLIGADO'}")
+print()
+print(f"{B}WHATSAPP{N}  numero do servidor: +{wa.get('esperado', '?')}")
+inst = wa.get("instancias") or []
+if not inst:
+    print(f"  {ponto(False)} nenhum numero conectado (Central > WhatsApp > Abrir tela do QR)")
+for i in inst:
+    aberto = i.get("estado") == "open"
+    print(f"  {ponto(aberto)} {i.get('nome')}: {'conectado' if aberto else 'DESCONECTADO - ler o QR de novo'}  +{i.get('numero') or ''}")
+print()
+livre, total = st.get("ram_livre_mb", 0), st.get("ram_total_mb", 0)
+temp = st.get("temp_c", 0)
+cor_t = R if temp >= 75 else A if temp >= 65 else V
+cor_m = R if livre < 200 else A if livre < 400 else V
+print(f"Memoria livre: {cor_m}{livre} de {total} MB{N}   Cartao: {st.get('disco_usado_gb', '?')} de {st.get('disco_total_gb', '?')} GB"
+      f"   Temp: {cor_t}{temp} C{N}")
+print(f"Ultimo backup: {st.get('ultimo_backup') or A + 'nenhum ainda' + N}")
+print("-" * 66)
+print(f"{C}Atualiza a cada 1 minuto. Para entrar e digitar comandos: Alt+F2 (volta aqui com Alt+F1).{N}")
+PY
+    ;;
+  tela-loop)
+    root "$@"
+    printf '\033[9;0]\033[14;0]'   # nao apagar a tela por inatividade
+    while true; do t="$("$0" tela 2>&1)"; printf '\033[H\033[2J%s\n' "$t"; sleep 60; done
+    ;;
+  tela-ligar)
+    root "$@"
+    cat > /etc/systemd/system/servidor-tela.service <<'UNIT'
+[Unit]
+Description=Tela de status da Central da Frota no HDMI
+After=docker.service network-online.target
+Conflicts=getty@tty1.service
+
+[Service]
+ExecStart=/usr/local/bin/servidor tela-loop
+Environment=LANG=C.UTF-8 PYTHONIOENCODING=utf-8
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload
+    systemctl disable --now getty@tty1.service >/dev/null 2>&1
+    systemctl enable --now getty@tty2.service >/dev/null 2>&1
+    systemctl enable --now servidor-tela.service && ok "Tela de status ligada no HDMI. Para login na TV: Alt+F2"
+    ;;
+  tela-desligar)
+    root "$@"
+    systemctl disable --now servidor-tela.service >/dev/null 2>&1
+    systemctl enable --now getty@tty1.service && ok "Tela HDMI voltou para o login normal"
+    ;;
   *)          ajuda ;;
 esac
