@@ -17,7 +17,8 @@ servidor logs [servico]    -> ultimas linhas de log (n8n, evolution, postgres, r
 servidor reiniciar [serv]  -> reinicia tudo ou um servico
 servidor backup            -> salva fluxos + credenciais agora (em $DIR/backups)
 servidor importar          -> importa os .json colocados em $DIR/importar para o n8n
-servidor atualizar         -> baixa versoes novas do n8n/Evolution e reinicia
+servidor atualizar [n8n=X] [evolution=Y] -> troca a versao (com backup antes) e reinicia
+servidor versoes           -> mostra as versoes em uso
 servidor atualizar-script  -> atualiza este comando a partir do GitHub
 servidor whatsapp          -> liga o fluxo de ocorrencias (Supabase, Gemini, grupo)
 servidor acessos           -> mostra os enderecos e a chave da Evolution
@@ -59,9 +60,22 @@ case "${1:-}" in
     echo "Abra o n8n, confira as credenciais de cada fluxo e ligue o botao Publish/Active."
     ;;
   atualizar)
+    # uso: servidor atualizar [n8n=2.46.0] [evolution=v2.3.8]   (sem versao: so baixa correcoes da mesma versao)
+    # as versoes ficam fixas no .env de proposito: nada muda sozinho de madrugada e quebra um fluxo
     root "$@"
     "$0" backup
+    for a in "${@:2}"; do
+      case "$a" in
+        n8n=*)       sed -i "s/^N8N_TAG=.*/N8N_TAG=${a#n8n=}/" "$DIR/.env"; ok "n8n -> ${a#n8n=}" ;;
+        evolution=*) sed -i "s/^EVOLUTION_TAG=.*/EVOLUTION_TAG=${a#evolution=}/" "$DIR/.env"; ok "Evolution -> ${a#evolution=}" ;;
+        *) aviso "Ignorado: $a (use n8n=VERSAO ou evolution=VERSAO)" ;;
+      esac
+    done
+    grep -E '^(N8N_TAG|EVOLUTION_TAG)=' "$DIR/.env"
     $DC pull -q && $DC up -d && ok "Atualizado. Se algo quebrar, me chame: o backup de agora esta em $DIR/backups"
+    ;;
+  versoes)
+    grep -E '^(N8N_TAG|EVOLUTION_TAG)=' "$DIR/.env" 2>/dev/null || sudo grep -E '^(N8N_TAG|EVOLUTION_TAG)=' "$DIR/.env"
     ;;
   atualizar-script)
     root "$@"

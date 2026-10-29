@@ -483,6 +483,17 @@
     $("ver-logs").addEventListener("click", function () { rodar([SERVIDOR, "logs", $("log-servico").value, "120"]); });
     $("alternar-terminal").addEventListener("click", alternarTerminal);
     $("reabrir-terminal").addEventListener("click", abrirTerminal);
+    $("atualizar-versoes").addEventListener("click", function (ev) {
+      var n8n = prompt("Nova versão do n8n (a que eu te passar, ex.: 2.46.0). Deixe em branco para manter a atual:", "");
+      if (n8n === null) return;
+      var evo = prompt("Nova versão da Evolution (ex.: v2.3.8). Deixe em branco para manter a atual:", "");
+      if (evo === null) return;
+      if (!confirm("Atualizar agora? Faz backup antes e os fluxos param 1 a 3 minutos.")) return;
+      var args = [SERVIDOR, "atualizar"];
+      if (n8n.trim()) args.push("n8n=" + n8n.trim());
+      if (evo.trim()) args.push("evolution=" + evo.trim());
+      rodarComBotao(ev.target, args, "Atualizar n8n e Evolution");
+    });
     $("reiniciar-box").addEventListener("click", function () {
       if (confirm("Reiniciar a TV Box? Tudo fica fora do ar por uns 2 minutos e volta sozinho.")) rodar(["systemctl", "reboot"]);
     });
