@@ -141,7 +141,7 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
     <div class="tbl-scroll">
       <table id="ocorTbl">
         <thead><tr>
-          <th>Carro</th><th>Problema</th><th>Urgência</th><th>Última vistoria</th><th>Aberta há</th>
+          <th>Carro</th><th>Problema</th><th>Prioridade</th><th>Última vistoria</th><th>Aberta há</th>
         </tr></thead>
         <tbody><tr><td colspan="5"><div class="loading" id="ocorLoad">Carregando…</div></td></tr></tbody>
       </table>
@@ -244,11 +244,21 @@ function fail(id,foot){document.getElementById(id).textContent='—';if(foot)doc
 /* ---------- tiles ---------- */
 async function loadTiles(){
   let anyOk=false;
-  // ocorrências abertas
-  try{const n=await sbCount("v_ocorrencias_cruzadas?status=in.(aberta,em_andamento)");
-    document.getElementById('tOcor').textContent=n;
-    document.getElementById('tiles').children[0].classList.toggle('alert',n>0);
-    document.getElementById('tOcorFoot').textContent=n===0?'nada aberto 👌':'aguardando tratativa';anyOk=true;
+  // ocorrências abertas (separa graves de "a resolver" pela prioridade)
+  try{const total=await sbCount("v_ocorrencias_cruzadas?status=in.(aberta,em_andamento)");
+    document.getElementById('tOcor').textContent=total;
+    const tile=document.getElementById('tiles').children[0];
+    let graves=null;
+    try{graves=await sbCount("v_ocorrencias_cruzadas?status=in.(aberta,em_andamento)&prioridade=eq.alta");}catch(_){}
+    if(graves==null){ // view ainda sem coluna prioridade (SQL não rodado): comporta como antes
+      tile.classList.toggle('alert',total>0);
+      document.getElementById('tOcorFoot').textContent=total===0?'nada aberto 👌':'aguardando tratativa';
+    }else{
+      const aresolver=Math.max(total-graves,0);
+      tile.classList.toggle('alert',graves>0);
+      document.getElementById('tOcorFoot').textContent=total===0?'nada aberto 👌':(graves+' grave'+(graves===1?'':'s')+' · '+aresolver+' a resolver');
+    }
+    anyOk=true;
   }catch(e){fail('tOcor','tOcorFoot')}
   // vistorias hoje
   try{const n=await sbCount("vistorias?data_vistoria=eq."+ymd);
@@ -269,6 +279,9 @@ async function loadTiles(){
 
 /* ---------- tabela de ocorrências abertas ---------- */
 const URG={alta:3,media:2,baixa:1};
+const PRI={alta:3,media:2,baixa:1};
+function prio(r){return (r.prioridade||r.urgencia||'media').toLowerCase();}
+function prioPill(p){return '<span class="pill '+p+'">'+(p==='alta'?'grave':'a resolver')+'</span>';}
 function esc(s){return (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
 function since(iso){if(!iso)return '—';const d=new Date(iso),m=Math.floor((now-d)/60000);
   if(m<60)return m+' min';const h=Math.floor(m/60);if(h<24)return h+'h';return Math.floor(h/24)+'d';}
@@ -284,15 +297,14 @@ async function loadOcor(){
   const tb=document.querySelector('#ocorTbl tbody');
   try{
     let rows=await sbGet("v_ocorrencias_cruzadas?status=in.(aberta,em_andamento)&order=criado_em.desc&limit=100");
-    rows.sort((a,b)=>(URG[b.urgencia]||0)-(URG[a.urgencia]||0) || new Date(b.criado_em)-new Date(a.criado_em));
+    rows.sort((a,b)=>(PRI[prio(b)]||0)-(PRI[prio(a)]||0) || new Date(b.criado_em)-new Date(a.criado_em));
     if(!rows.length){tb.innerHTML='<tr><td colspan="5"><div class="empty">Nenhuma ocorrência aberta agora. 👌</div></td></tr>';return;}
     tb.innerHTML=rows.map(r=>{
-      const u=(r.urgencia||'media').toLowerCase();
       const prob=esc(r.problema||r.categoria||'—');
       const cat=r.categoria&&r.problema?'<div style="color:var(--muted);font-size:12px">'+esc(r.categoria.replace(/_/g,' '))+'</div>':'';
       const car=r.tag?('<span class="car">'+esc(r.tag)+'</span>'):'<span class="pill mut">sem TAG</span>';
       const reinc=(r.reincidencias&&r.reincidencias>0)?' <span class="pill mut">×'+(r.reincidencias+1)+'</span>':'';
-      return '<tr><td>'+car+reinc+'</td><td>'+prob+cat+'</td><td><span class="pill '+u+'">'+u+'</span></td><td>'+vistCell(r)+'</td><td>'+since(r.criado_em)+'</td></tr>';
+      return '<tr><td>'+car+reinc+'</td><td>'+prob+cat+'</td><td>'+prioPill(prio(r))+'</td><td>'+vistCell(r)+'</td><td>'+since(r.criado_em)+'</td></tr>';
     }).join('');
   }catch(e){
     tb.innerHTML='<tr><td colspan="5"><div class="empty">Painel de ocorrências ainda conectando. Assim que a aba for publicada, a lista aparece aqui.</div></td></tr>';
@@ -313,9 +325,9 @@ const NOKMAP={item_app:'App BDV',item_chip:'Chip',item_cabo:'Cabo/carregador',it
 const DRILL={
   tileOcor:{title:'Ocorrências abertas',sub:'Fonte: view v_ocorrencias_cruzadas · status aberta ou em andamento',
     load:async()=>{let rows=await sbGet("v_ocorrencias_cruzadas?status=in.(aberta,em_andamento)&order=criado_em.desc&limit=300");
-      rows.sort((a,b)=>(URG[b.urgencia]||0)-(URG[a.urgencia]||0)||new Date(b.criado_em)-new Date(a.criado_em));
-      return rows.map(r=>{const u=(r.urgencia||'media').toLowerCase();
-        return '<div class="drow">'+carTag(r.tag)+'<div><div>'+esc(r.problema||r.categoria||'—')+'</div><div class="meta">'+esc((r.categoria||'').replace(/_/g,' '))+'</div></div><div class="rt"><span class="pill '+u+'">'+u+'</span><div class="meta">há '+since(r.criado_em)+'</div></div></div>';}).join('');}},
+      rows.sort((a,b)=>(PRI[prio(b)]||0)-(PRI[prio(a)]||0)||new Date(b.criado_em)-new Date(a.criado_em));
+      return rows.map(r=>{
+        return '<div class="drow">'+carTag(r.tag)+'<div><div>'+esc(r.problema||r.categoria||'—')+'</div><div class="meta">'+esc((r.categoria||'').replace(/_/g,' '))+'</div></div><div class="rt">'+prioPill(prio(r))+'<div class="meta">há '+since(r.criado_em)+'</div></div></div>';}).join('');}},
   tileVist:{title:'Vistorias de hoje',sub:'Fonte: tabela vistorias · data = hoje',
     load:async()=>{let rows=await sbGet("vistorias?data_vistoria=eq."+ymd+"&select=tag,status,resultado,ts&order=ts.desc&limit=300");
       return rows.map(r=>{const res=(r.resultado||'').toUpperCase();const pill=res==='OK'?'<span class="pill ok">OK</span>':res==='NOK'?'<span class="pill nok">NOK</span>':'<span class="pill mut">—</span>';
