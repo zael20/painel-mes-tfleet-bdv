@@ -1,0 +1,1318 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vistoria BDV</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#14324a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vistoria BDV">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Ferramenta de campo: uma coluna, botoes grandes, alto contraste para usar no patio sob sol. */
+:root {
+  --bg: #eef2f4; --surface: #ffffff; --surface-2: #e3e9ed; --line: #c9d3da; --grid: #dfe5e9;
+  --fg: #12202b; --muted: #55656f; --accent: #14324a; --accent-fg: #ffffff; --bar: #2f6f9f;
+  --ok: #1d7a46; --ok-bg: #dcf1e4; --nok: #b3261e; --nok-bg: #fbe1de;
+  --warn: #9a5b00; --warn-bg: #fdefd2; --idle: #6b7780; --idle-bg: #e6eaed;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e171e; --surface: #16222b; --surface-2: #1e2d38; --line: #2c3e4b; --grid: #23333f;
+  --fg: #e6edf1; --muted: #93a4ae; --accent: #7fb6e0; --accent-fg: #08131b; --bar: #6fa9d6;
+  --ok: #5fd08e; --ok-bg: #143322; --nok: #ff8a80; --nok-bg: #3d1916;
+  --warn: #f2b45a; --warn-bg: #3a2a10; --idle: #9aa7b0; --idle-bg: #23313b; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e171e; --surface: #16222b; --surface-2: #1e2d38; --line: #2c3e4b; --grid: #23333f;
+  --fg: #e6edf1; --muted: #93a4ae; --accent: #7fb6e0; --accent-fg: #08131b; --bar: #6fa9d6;
+  --ok: #5fd08e; --ok-bg: #143322; --nok: #ff8a80; --nok-bg: #3d1916;
+  --warn: #f2b45a; --warn-bg: #3a2a10; --idle: #9aa7b0; --idle-bg: #23313b; color-scheme: dark }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.4 var(--font-body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--accent); }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--accent); color: var(--accent-fg);
+  padding-block: 10px 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-row { display: flex; align-items: center; gap: 12px; max-width: 760px; margin: 0 auto; }
+.brand { font: 700 22px/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; flex: 1; }
+.sync { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--accent-fg) 40%, transparent);
+  background: transparent; color: var(--accent-fg); border-radius: 99px; padding: 5px 12px; font-size: 14px; }
+.bar-row #installBtn { margin-left: auto; margin-right: 8px; font-weight: 600; }
+.sync .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
+.sync[data-s="pend"] .dot { background: var(--warn); }
+.sync[data-s="off"] .dot { background: var(--idle); }
+.tabs { display: flex; gap: 2px; max-width: 760px; margin: 10px auto 0; }
+.tabs button { flex: 1; border: 0; border-radius: 8px 8px 0 0; padding: 9px 2px; background: transparent; color: var(--accent-fg); opacity: .78;
+  font: 600 15px var(--font-body); min-width: 0; }
+.tabs button[aria-pressed="true"] { background: var(--bg); color: var(--fg); opacity: 1; }
+
+main { max-width: 760px; margin: 0 auto; padding-block: 16px 120px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+section.view { display: grid; gap: 18px; }
+h2 { font: 700 20px/1.1 var(--font-display); text-transform: uppercase; letter-spacing: .03em; margin: 0; text-wrap: balance; }
+h3 { font: 700 17px/1.15 var(--font-display); text-transform: uppercase; letter-spacing: .03em; margin: 0; }
+
+.field { display: grid; gap: 8px; }
+.label { font: 600 13px var(--font-body); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.label small { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.tag-row { display: flex; gap: 10px; align-items: stretch; }
+#tag { width: 120px; flex: none; font: 700 40px/1 var(--font-display); text-align: center; padding: 8px; border: 2px solid var(--line);
+  border-radius: var(--r); background: var(--surface); }
+#tag:focus { border-color: var(--accent); outline: none; }
+.last { flex: 1; min-width: 0; border-radius: var(--r); background: var(--surface-2); padding: 10px 12px; font-size: 14px; color: var(--muted);
+  display: grid; align-content: center; gap: 2px; }
+.last b { color: var(--fg); font-weight: 600; }
+.last .lnk { justify-self: start; border: 0; background: none; padding: 2px 0; color: var(--accent); font-weight: 600; text-decoration: underline; font-size: 14px; }
+.prefill { border-radius: var(--r); background: var(--ok-bg); color: var(--ok); padding: 8px 12px; font-size: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.prefill span { flex: 1; min-width: 180px; }
+.prefill button { border: 1.5px solid currentColor; background: transparent; color: inherit; border-radius: 8px; padding: 5px 10px; font-weight: 600; font-size: 14px; }
+
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.seg button { border: 2px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 12px 6px; font-weight: 600; min-height: 50px; }
+.seg button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+.seg[data-k="status"] button[data-v="VERIFICAR"][aria-pressed="true"] { background: var(--warn); border-color: var(--warn); color: #fff; }
+.seg[data-k="status"] button[data-v="NAO_VERIFICADO"][aria-pressed="true"] { background: var(--idle); border-color: var(--idle); color: #fff; }
+.seg.small button { min-height: 40px; padding: 7px 4px; font-size: 14px; }
+
+input[type="date"], textarea, .text { width: 100%; border: 2px solid var(--line); border-radius: var(--r); background: var(--surface); padding: 10px 12px; }
+textarea { min-height: 64px; resize: vertical; }
+
+.items { display: grid; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.item { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; border-top: 1px solid var(--line); }
+.item:first-child { border-top: 0; }
+.item .nm { flex: 1; font-weight: 600; min-width: 0; }
+.item .ok-nok { display: flex; gap: 6px; }
+.item .ok-nok button { width: 72px; min-height: 46px; border-radius: 8px; border: 2px solid var(--line); background: var(--surface); font: 700 17px var(--font-display); letter-spacing: .04em; color: var(--muted); }
+.item .ok-nok button[data-v="OK"][aria-pressed="true"] { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+.item .ok-nok button[data-v="NOK"][aria-pressed="true"] { background: var(--nok); border-color: var(--nok); color: #fff; }
+.item.is-nok { background: var(--nok-bg); }
+.item.is-off .nm { color: var(--muted); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1.5px solid var(--line); background: var(--surface); border-radius: 99px; padding: 8px 14px; font-size: 15px; text-align: left; }
+.chip[aria-pressed="true"] { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+.chip.add { border-style: dashed; color: var(--accent); font-weight: 600; }
+.addrow { display: flex; gap: 8px; }
+.addrow input { flex: 1; min-width: 0; }
+.addrow .btn { min-height: 44px; padding: 8px 14px; }
+
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.thumb { position: relative; aspect-ratio: 1; max-width: 100%; border-radius: 8px; overflow: hidden; background: var(--surface-2); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb .sz { position: absolute; left: 4px; bottom: 4px; background: rgba(0,0,0,.65); color: #fff; font: 500 11px var(--font-data); padding: 1px 5px; border-radius: 4px; }
+.thumb .rm { position: absolute; right: 4px; top: 4px; width: 30px; height: 30px; border-radius: 50%; border: 0; background: rgba(0,0,0,.65); color: #fff; font-size: 18px; line-height: 1; }
+.photo-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { border: 2px solid var(--accent); background: var(--surface); color: var(--accent); border-radius: var(--r); padding: 12px 16px; font-weight: 600; min-height: 50px; }
+.btn.primary { background: var(--accent); color: var(--accent-fg); }
+.btn.big { flex: 1; font-size: 17px; }
+.hint { font-size: 14px; color: var(--muted); }
+.hint.warn { color: var(--warn); font-weight: 600; }
+
+.savebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(6px); border-top: 1px solid var(--line);
+  padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.savebar-in { max-width: 760px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+.savebar .sum { font-size: 14px; color: var(--muted); min-width: 0; flex: 1; }
+.savebar .sum b { color: var(--fg); }
+.savebar .btn { min-width: 46%; font-size: 18px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(86px + env(safe-area-inset-bottom, 0px)); z-index: 30;
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 99px; font-weight: 600; max-width: calc(100% - 32px); text-align: center; }
+
+/* carros */
+.summary { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { border: 1.5px solid var(--line); background: var(--surface); border-radius: 99px; padding: 6px 12px; font-size: 14px; display: inline-flex; gap: 6px; align-items: baseline; }
+.pill b { font: 600 17px var(--font-display); }
+.pill[aria-pressed="true"] { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.car { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 10px 12px 10px 14px; display: grid; gap: 2px; position: relative; overflow: hidden; }
+.car::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--ok); }
+.car[data-age="mid"]::before { background: var(--warn); }
+.car[data-age="old"]::before { background: var(--nok); }
+.car .n { font: 700 30px/1 var(--font-display); }
+.car .d { font: 500 13px var(--font-data); color: var(--muted); font-variant-numeric: tabular-nums; }
+.car .st { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.car .cnt { position: absolute; right: 10px; top: 10px; font: 500 12px var(--font-data); color: var(--muted); }
+.badge { font: 600 12px var(--font-body); letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 5px; background: var(--idle-bg); color: var(--idle); white-space: nowrap; }
+.badge.ok { background: var(--ok-bg); color: var(--ok); }
+.badge.nok { background: var(--nok-bg); color: var(--nok); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+.src { font-size: 13px; color: var(--muted); }
+
+/* detalhe do carro */
+.sheet { position: fixed; inset: 0; z-index: 20; background: var(--bg); overflow-y: auto; overscroll-behavior: contain; }
+.sheet-h { position: sticky; top: 0; z-index: 2; background: var(--accent); color: var(--accent-fg);
+  padding-block: calc(10px + env(safe-area-inset-top, 0px)) 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.sheet-h .row { max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
+.sheet-h .t { font: 700 26px/1 var(--font-display); text-transform: uppercase; flex: 1; }
+.sheet-h button { border: 1.5px solid color-mix(in srgb, var(--accent-fg) 50%, transparent); background: transparent; color: var(--accent-fg); border-radius: 8px; padding: 7px 12px; font-weight: 600; }
+.sheet-b { max-width: 760px; margin: 0 auto; display: grid; gap: 16px; padding-block: 16px calc(32px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.fact { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; }
+.fact b { display: block; font: 700 26px/1.05 var(--font-display); font-variant-numeric: tabular-nums; }
+.fact span { font-size: 13px; color: var(--muted); }
+.strip-wrap { overflow-x: auto; padding-bottom: 4px; }
+.strip { display: flex; gap: 3px; align-items: flex-end; min-height: 30px; }
+.strip i { flex: none; width: 10px; height: 26px; border-radius: 3px; background: var(--ok); }
+.strip i.nok { background: var(--nok); }
+.strip i.ver { background: var(--warn); }
+.strip i.nv { background: var(--idle); height: 14px; }
+.strip i.res { background: var(--bar); }
+.tl-it.res::before { background: var(--bar); }
+.badge.res { background: color-mix(in srgb, var(--bar) 18%, transparent); color: var(--bar); }
+.col .resp { background: var(--bar); }
+.kpi { text-align: left; color: inherit; font: inherit; }
+button.kpi:hover, .open button:hover, .legend button:hover { border-color: var(--fg); }
+.legend button { border: 1.5px solid transparent; background: none; border-radius: 6px; padding: 2px 6px; font: inherit; color: inherit; cursor: pointer; }
+.legend button::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+.stack button { border: 0; padding: 0; min-width: 2px; cursor: pointer; }
+.col { border: 0; background: none; padding: 0; cursor: pointer; }
+.col:hover { outline: 2px solid var(--line); outline-offset: 1px; }
+.col[aria-pressed="true"] { outline: 2px solid var(--fg); outline-offset: 1px; }
+.rows { display: grid; gap: 6px; }
+.tabcount { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 99px; background: var(--nok); color: #fff; font: 700 12px/18px var(--font-body); vertical-align: 1px; }
+.alertbar { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; border: 2px solid var(--nok); background: var(--nok-bg); color: var(--nok); border-radius: var(--r); padding: 10px 14px; font-weight: 600; }
+.alertbar b { font: 700 28px/1 var(--font-display); }
+.alertbar span { flex: 1; min-width: 0; }
+.pendcard { border: 2px solid var(--nok); }
+.pendcard h3 { color: var(--nok); }
+.cham { display: grid; gap: 8px; }
+.chamc { border: 2px solid var(--warn); background: var(--warn-bg); border-radius: var(--r); padding: 10px 12px; display: grid; gap: 6px; }
+.chamc .h { font: 600 13px var(--font-body); text-transform: uppercase; letter-spacing: .05em; color: var(--warn); }
+.chamc .p { font-weight: 600; }
+.chamc .m { font-size: 13px; color: var(--muted); }
+.chamc button { justify-self: start; border: 2px solid var(--warn); background: var(--surface); color: var(--fg); border-radius: 8px; padding: 8px 12px; font-weight: 600; }
+.chamc button[aria-pressed="true"] { background: var(--bar); border-color: var(--bar); color: #fff; }
+.chamc.done { border-color: var(--bar); background: color-mix(in srgb, var(--bar) 12%, var(--surface)); }
+.pendcar { border: 2px solid var(--nok); background: var(--nok-bg); color: var(--nok); border-radius: var(--r); padding: 8px 12px; font-size: 14px; font-weight: 600; }
+.prob { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 10px 8px 14px; border-top: 1px solid var(--line); }
+.prob:first-child { border-top: 0; }
+.prob .nm { flex: 1 1 10rem; min-width: 0; font-weight: 600; }
+.prob .nm small { display: block; font-weight: 500; color: var(--nok); font-size: 12px; }
+.prob .seg2 { display: flex; gap: 6px; }
+.prob .seg2 button { min-height: 40px; padding: 6px 10px; border-radius: 8px; border: 2px solid var(--line); background: var(--surface); font-weight: 600; font-size: 14px; color: var(--muted); }
+.prob .seg2 button[data-v="res"][aria-pressed="true"] { background: var(--bar); border-color: var(--bar); color: #fff; }
+.prob .seg2 button[data-v="open"][aria-pressed="true"] { background: var(--nok); border-color: var(--nok); color: #fff; }
+.prob.is-open { background: var(--nok-bg); }
+.strip-ax { display: flex; justify-content: space-between; font: 500 12px var(--font-data); color: var(--muted); }
+.tl { display: grid; gap: 0; border-left: 2px solid var(--line); margin-left: 6px; }
+.tl-it { position: relative; padding: 0 0 14px 18px; display: grid; gap: 4px; }
+.tl-it::before { content: ""; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--ok); border: 2px solid var(--bg); }
+.tl-it.nok::before { background: var(--nok); }
+.tl-it.ver::before { background: var(--warn); }
+.tl-it.nv::before { background: var(--idle); }
+.tl-h { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.tl-h .d { font: 500 14px var(--font-data); font-variant-numeric: tabular-nums; }
+.tl-it .meta { font-size: 14px; color: var(--muted); }
+.tl-it .meta b { color: var(--fg); font-weight: 600; }
+.fotos { display: flex; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.fotos img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; display: block; }
+
+/* dashboard */
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (min-width: 640px) { .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 2px; }
+.kpi b { font: 700 34px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 13px; color: var(--muted); }
+.kpi.alert b { color: var(--nok); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.card .sub { font-size: 13px; color: var(--muted); margin-top: -6px; }
+.hbars { display: grid; gap: 4px; }
+.hbar { display: grid; grid-template-columns: minmax(0, 1fr) 8.5rem; grid-template-areas: "nm nm" "track v"; gap: 2px 10px; align-items: center; border: 0; background: none; padding: 5px 4px; border-radius: 6px; text-align: left; width: 100%; }
+.hbar:hover, .hbar[aria-expanded="true"] { background: var(--surface-2); }
+@media (min-width: 640px) { .hbar { grid-template-columns: minmax(0, 13rem) minmax(0, 1fr) 8.5rem; grid-template-areas: "nm track v"; gap: 10px; } }
+.hbar .nm { grid-area: nm; font-size: 14px; line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
+.hbar .track { grid-area: track; }
+.hbar .v { grid-area: v; text-align: right; }
+.hbar .track { height: 14px; background: var(--grid); border-radius: 0 4px 4px 0; overflow: hidden; }
+.hbar .fill { height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+.hbar .fill.nok { background: var(--nok); }
+.hbar .v { font: 500 13px var(--font-data); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.hbar .v b { color: var(--fg); }
+.drill { padding: 6px 4px 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.drill button { border: 1.5px solid var(--line); background: var(--surface); border-radius: 8px; padding: 4px 10px; font: 700 16px var(--font-display); }
+.stack { display: flex; height: 26px; border-radius: 6px; overflow: hidden; gap: 2px; }
+
+.cols-wrap { overflow-x: auto; }
+.cols { display: flex; align-items: flex-end; gap: 3px; height: 140px; border-bottom: 1px solid var(--line); padding-top: 18px; }
+.col { flex: 1 0 14px; display: flex; flex-direction: column-reverse; gap: 2px; height: 100%; position: relative; }
+.col .okp { background: var(--ok); border-radius: 0; }
+.col .nokp { background: var(--nok); border-radius: 3px 3px 0 0; }
+.col .okp:last-child { border-radius: 3px 3px 0 0; }
+.cols-ax { display: flex; justify-content: space-between; font: 500 12px var(--font-data); color: var(--muted); }
+.rank { display: grid; gap: 2px; }
+.open { display: grid; gap: 6px; }
+.open button { display: grid; grid-template-columns: 3rem minmax(0, 1fr) auto; gap: 10px; align-items: center; text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 8px 10px; }
+.open .n { font: 700 24px/1 var(--font-display); }
+.open .w { font-size: 14px; min-width: 0; }
+.open .a { font: 500 12px var(--font-data); color: var(--muted); white-space: nowrap; }
+
+/* enviadas */
+.list { display: grid; gap: 10px; }
+.rec { border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 6px; }
+.rec-h { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.rec-h .n { font: 700 24px/1 var(--font-display); }
+.rec-h .d { font: 500 13px var(--font-data); color: var(--muted); flex: 1; }
+.rec .meta { font-size: 14px; color: var(--muted); }
+.rec .err { font-size: 13px; color: var(--nok); }
+.rec .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.rec .acts button { border: 1.5px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 6px 12px; font-size: 14px; }
+.mini { display: flex; gap: 6px; }
+.mini img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
+.empty { border: 1.5px dashed var(--line); border-radius: var(--r); padding: 20px; text-align: center; color: var(--muted); }
+.settings { border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; }
+.notice { border-radius: var(--r); background: var(--warn-bg); color: var(--warn); padding: 10px 14px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+
+<header class="bar">
+  <div class="bar-row">
+    <div class="brand">Vistoria BDV</div>
+    <button class="sync" id="installBtn" type="button" hidden>Instalar app</button>
+    <button class="sync" id="syncBtn" type="button" data-s="ok" aria-label="Enviar pendentes agora"><span class="dot"></span><span id="syncTxt">Tudo enviado</span></button>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button type="button" data-view="nova" aria-pressed="true">Vistoria</button>
+    <button type="button" data-view="carros" aria-pressed="false">Carros</button>
+    <button type="button" data-view="dash" aria-pressed="false">Dashboard <span class="tabcount" id="tabPend" hidden></span></button>
+    <button type="button" data-view="enviadas" aria-pressed="false">Enviadas</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ======================= VISTORIA ======================= -->
+  <section class="view" id="v-nova">
+    <button type="button" class="alertbar" id="pendAlert" hidden></button>
+    <div class="field">
+      <span class="label">Carro (TAG)</span>
+      <div class="tag-row">
+        <input id="tag" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="00" aria-label="Número do carro">
+        <div class="last" id="lastInfo"><span>Digite o número do carro.</span></div>
+      </div>
+      <div class="prefill" id="prefill" hidden><span id="prefillTxt"></span><button type="button" id="clearBtn">Começar do zero</button></div>
+      <div class="cham" id="chamBox" hidden></div>
+    </div>
+
+    <div class="field">
+      <span class="label">Local</span>
+      <div class="seg" data-k="local">
+        <button type="button" data-v="GARAGEM" aria-pressed="true">Garagem</button>
+        <button type="button" data-v="TERMINAL" aria-pressed="false">Terminal</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="label">Situação do celular</span>
+      <div class="seg" data-k="status">
+        <button type="button" data-v="OPERANTE" aria-pressed="true">Operante</button>
+        <button type="button" data-v="VERIFICAR" aria-pressed="false">Verificar</button>
+        <button type="button" data-v="NAO_VERIFICADO" aria-pressed="false">Não verificado</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="label">Itens <small>(toque NOK no que tiver problema)</small></span>
+      <div class="items" id="items"></div>
+    </div>
+
+    <div class="field">
+      <span class="label">Ocorrências</span>
+      <div class="chips" id="ocChips"></div>
+      <div class="addrow" id="ocAdd" hidden>
+        <input class="text" id="ocInput" maxlength="80" placeholder="Escreva a ocorrência" autocomplete="off">
+        <button class="btn primary" type="button" id="ocOk">Adicionar</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="label">Fotos</span>
+      <div class="photo-btns">
+        <button class="btn primary big" type="button" id="camBtn">Bater foto</button>
+        <button class="btn" type="button" id="galBtn">Da galeria</button>
+      </div>
+      <input type="file" id="camIn" accept="image/*" capture="environment" hidden>
+      <input type="file" id="galIn" accept="image/*" multiple hidden>
+      <div class="photos" id="photos"></div>
+      <span class="hint" id="photoHint"></span>
+    </div>
+
+    <div class="field">
+      <span class="label">O que foi feito</span>
+      <div class="chips" id="acChips"></div>
+      <div class="addrow" id="acAdd" hidden>
+        <input class="text" id="acInput" maxlength="80" placeholder="Escreva o que foi feito" autocomplete="off">
+        <button class="btn primary" type="button" id="acOk">Adicionar</button>
+      </div>
+    </div>
+    <div class="field probs" id="probBox" hidden>
+      <span class="label">Situação de cada problema</span>
+      <div class="items" id="probList"></div>
+      <span class="hint">O que ficar em aberto vai para as Pendências e continua aparecendo nas próximas vistorias deste carro.</span>
+    </div>
+    <div class="field">
+      <label class="label" for="obs">Observação</label>
+      <textarea id="obs" maxlength="1000" placeholder="Ex.: tela trincada no canto superior esquerdo"></textarea>
+    </div>
+    <div class="field">
+      <label class="label" for="dataV">Data da vistoria</label>
+      <input type="date" id="dataV">
+    </div>
+  </section>
+
+  <!-- ======================= CARROS ======================= -->
+  <section class="view" id="v-carros" hidden>
+    <div class="field">
+      <h2>Última vistoria por carro</h2>
+      <span class="src" id="carSrc"></span>
+    </div>
+    <div class="summary" id="carSummary"></div>
+    <div class="legend">
+      <span style="--c: var(--ok)">até 15 dias</span>
+      <span style="--c: var(--warn)">16 a 30 dias</span>
+      <span style="--c: var(--nok)">mais de 30 dias</span>
+    </div>
+    <div class="grid" id="carGrid"></div>
+  </section>
+
+  <!-- ======================= DASHBOARD ======================= -->
+  <section class="view" id="v-dash" hidden>
+    <div class="field">
+      <h2>Visão gerencial</h2>
+      <div class="seg small" id="perSeg">
+        <button type="button" data-d="30" aria-pressed="false">30 dias</button>
+        <button type="button" data-d="90" aria-pressed="true">90 dias</button>
+        <button type="button" data-d="180" aria-pressed="false">6 meses</button>
+        <button type="button" data-d="0" aria-pressed="false">Tudo</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="src">Toque em qualquer número, barra ou cor para ver os carros e as vistorias por trás dele.</div>
+    <div class="card pendcard">
+      <h3 id="dOpenTitle">Pendências em aberto</h3>
+      <div class="sub">Problemas que ficaram em aberto na última vistoria de cada carro, mais antigos primeiro.</div>
+      <div class="open" id="dOpen"></div>
+    </div>
+    <div class="card">
+      <h3>Problemas que mais se repetem</h3>
+      <div class="sub">Quantos carros tiveram cada ocorrência no período. Toque para ver quais carros.</div>
+      <div class="hbars" id="dOc"></div>
+    </div>
+    <div class="card">
+      <h3>Itens com NOK</h3>
+      <div class="sub">Carros com pelo menos uma vistoria NOK no item, no período.</div>
+      <div class="hbars" id="dItems"></div>
+    </div>
+    <div class="card">
+      <h3>Situação da frota hoje</h3>
+      <div class="sub">Pela última vistoria de cada carro. Toque numa cor para ver os carros.</div>
+      <div class="stack" id="dStack"></div>
+      <div class="legend" id="dStackLeg"></div>
+    </div>
+    <div class="card">
+      <h3>Vistorias por semana</h3>
+      <div class="sub">Toque numa coluna para ver as vistorias da semana.</div>
+      <div class="legend"><span style="--c: var(--ok)">tudo OK</span><span style="--c: var(--bar)">NOK resolvido na hora</span><span style="--c: var(--nok)">NOK em aberto</span></div>
+      <div class="cols-wrap"><div class="cols" id="dWeeks"></div></div>
+      <div class="cols-ax" id="dWeeksAx"></div>
+    </div>
+    <div class="card">
+      <h3>Carros com mais NOK</h3>
+      <div class="sub">Vistorias com NOK no período.</div>
+      <div class="hbars" id="dRank"></div>
+    </div>
+  </section>
+
+  <!-- ======================= ENVIADAS ======================= -->
+  <section class="view" id="v-enviadas" hidden>
+    <div class="notice" id="previewNotice" hidden>Nesta prévia o envio ao servidor fica bloqueado. As vistorias ficam guardadas neste aparelho como "pendentes". No endereço definitivo elas sobem sozinhas.</div>
+    <div class="list" id="recList"></div>
+    <div class="settings">
+      <h2>Ajustes</h2>
+      <label class="field"><span class="label">Seu nome (vai em cada vistoria)</span><input class="text" id="nome" maxlength="80" autocomplete="name"></label>
+      <span class="hint" id="devInfo"></span>
+    </div>
+  </section>
+</main>
+
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="shTitle">
+  <div class="sheet-h"><div class="row">
+    <div class="t" id="shTitle">Carro</div>
+    <button type="button" id="shNew">Nova vistoria</button>
+    <button type="button" id="shClose" aria-label="Fechar">Fechar</button>
+  </div></div>
+  <div class="sheet-b" id="shBody"></div>
+</div>
+
+<div class="savebar" id="savebar">
+  <div class="savebar-in">
+    <div class="sum" id="saveSum">Carro <b>—</b></div>
+    <button class="btn primary" type="button" id="saveBtn">Salvar vistoria</button>
+  </div>
+</div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- configuracao (mesmo Supabase do Monitor Frota)
+var SB = { url: "https://orhuxmsrdnugpogvtnbg.supabase.co", key: "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL", bucket: "vistorias" };
+var TZ = "America/Belem";
+var ITEMS = [
+  ["item_app", "Aplicativo BDV"], ["item_chip", "Chip"], ["item_cabo", "Cabo / carregador"],
+  ["item_leitor", "Leitor"], ["item_suporte", "Suporte"], ["item_celular", "Celular"]
+];
+// Ocorrencias e acoes mais usadas na planilha CHECK BDV (ago/2025 a out/2026).
+var OCORRENCIAS = ["TELA TRINCADA", "BATERIA INCHADA", "CHIP SEM DADOS", "ATUALIZAÇÃO DO TRACK", "CONECTOR DE INDUÇÃO NÃO ENCONTRADO",
+  "CABO DO CARREGADOR DANIFICADO", "CELULAR NÃO ESTAVA NO VEÍCULO", "VEÍCULO FORA DA GARAGEM", "SUPORTE QUEBRADO", "LEITOR LENTO",
+  "APLICATIVO TRAVADO", "BLUETOOTH DESLIGADO"];
+var ACOES = ["CABO TROCADO", "CELULAR ATUALIZADO", "CELULAR TROCADO", "LEITOR TROCADO", "SUPORTE TROCADO", "CHIP TROCADO",
+  "CONECTOR MAGNÉTICO COLOCADO", "CARREGADOR TROCADO"];
+var MAX_SIDE = 1280, JPEG_Q = 0.72;
+var STATUS_TXT = { OPERANTE: "Operante", VERIFICAR: "Verificar", NAO_VERIFICADO: "Não verificado" };
+
+// Historico da planilha CHECK BDV copiado em 23/10/2026 (TAG 00 = testes, fora).
+// Formato: [tag, dia, hora, local G|T, status O|V|N, itens "111111" (1=OK, na ordem de ITEMS), ocorrencias "A|B", observacao, acao, id da foto no Drive]
+// Usado so enquanto o historico nao estiver no servidor (supabase/importar-historico.sql).
+var HIST = [["69","2025-08-04","2025-08-04T11:34","T","O","111111","","","","1Bg7frYKIE74CMwIb_Cf9f2fYiLslZWN0"],["88","2025-08-04","2025-08-04T11:44","T","O","111101","TELA TRINCADA","Suporte trocado e tela trincada superior esquerda","SUPORTE TROCADO","1rD7GIJBQQUAbmrlPdS8kIyC8W0o_nDoF"],["86","2025-08-04","2025-08-04T11:57","T","O","111111","TELA TRINCADA","Tela trincada inferior direito","","1RmPl06m1BBh5J8BAajwhr9QpuKf3EEV8"],["85","2025-08-04","2025-08-04T12:00","T","O","111111","","","","1DJVdhWjHkZ9_GKNJtePK94hMoyaoI5HL"],["24","2025-07-19","2025-08-05T07:54","G","O","111111","","","",""],["26","2025-07-19","2025-08-05T07:55","G","O","111111","","","",""],["27","2025-07-19","2025-08-05T07:56","G","O","111111","","","",""],["37","2025-07-19","2025-08-05T08:02","G","O","111111","","","",""],["68","2025-07-19","2025-08-05T08:33","G","O","111111","","","",""],["69","2025-07-19","2025-08-05T08:33","G","O","111111","","","",""],["73","2025-07-19","2025-08-05T08:36","G","O","111111","","","",""],["74","2025-07-19","2025-08-05T08:36","G","O","111111","","","",""],["75","2025-07-19","2025-08-05T08:37","G","O","111111","","","",""],["76","2025-07-19","2025-08-05T08:37","G","O","111111","","","",""],["77","2025-07-19","2025-08-05T08:37","G","O","111111","","","",""],["78","2025-07-19","2025-08-05T08:38","G","O","111111","","","",""],["80","2025-07-19","2025-08-05T08:38","G","O","111111","","","",""],["82","2025-07-19","2025-08-05T08:40","G","O","111111","","","",""],["84","2025-07-19","2025-08-05T08:41","G","O","111111","","","",""],["85","2025-07-19","2025-08-05T08:42","G","O","111111","","","",""],["86","2025-07-19","2025-08-05T08:45","G","O","111110","TELA TRINCADA","","","14CZQNYF4ENndwayadRO7rIOks7vx4KRP"],["87","2025-07-19","2025-08-05T08:45","G","O","111110","TELA TRINCADA","","",""],["88","2025-07-19","2025-08-05T08:47","G","O","111111","","","",""],["89","2025-07-19","2025-08-05T08:47","G","O","111111","","","",""],["91","2025-07-19","2025-08-05T08:49","G","O","111111","","","",""],["93","2025-07-19","2025-08-05T08:56","G","O","111111","","","",""],["36","2025-07-23","2025-08-05T09:15","T","O","111111","TELA TRINCADA","","CELULAR ATUALIZADO",""],["39","2025-07-23","2025-08-05T09:16","G","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["55","2025-07-23","2025-08-05T09:17","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["56","2025-07-23","2025-08-05T09:18","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["66","2025-07-23","2025-08-05T09:18","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["65","2025-07-23","2025-08-05T09:20","T","O","111111","","","",""],["67","2025-07-23","2025-08-05T09:20","T","O","111111","","","",""],["71","2025-07-23","2025-08-05T09:22","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["72","2025-07-23","2025-08-05T09:23","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["73","2025-07-23","2025-08-05T09:23","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["75","2025-07-23","2025-08-05T09:24","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["76","2025-07-23","2025-08-05T09:24","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["77","2025-07-23","2025-08-05T09:25","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["80","2025-07-23","2025-08-05T09:26","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["81","2025-07-23","2025-08-05T09:27","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["83","2025-07-23","2025-08-05T09:28","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["90","2025-07-23","2025-08-05T09:28","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["91","2025-07-23","2025-08-05T09:29","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["95","2025-07-23","2025-08-05T09:30","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["98","2025-07-23","2025-08-05T09:30","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["99","2025-07-23","2025-08-05T09:31","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["24","2025-07-25","2025-08-05T09:32","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["26","2025-07-25","2025-08-05T09:34","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["42","2025-07-25","2025-08-05T09:53","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["69","2025-08-05","2025-08-05T12:25","T","O","111111","","","","1AyjEDf84wn3Jo60KsOToCkNLOIHhQbTf"],["86","2025-08-05","2025-08-05T12:50","T","O","111111","ATUALIZAÇÃO DO TRACK|TELA TRINCADA","","","1feEc1NlAcFludwWwW5LBpLPAGwcIKwra"],["80","2025-08-05","2025-08-05T12:55","T","O","111111","","","","1ImGdrnX6jte1RAZqI0drOWa1KFEzaCwu"],["80","2025-08-05","2025-08-05T13:13","T","O","111111","","","","1F-TENTZ4TrGcVxoFE9U1q-VIeIoZ3by1"],["89","2025-08-05","2025-08-05T13:51","T","O","111111","","","","1kzh9GhNbNydx6ASPn8ZXTzxrjFvLrZaN"],["85","2025-08-05","2025-08-05T13:58","T","O","111111","TELA TRINCADA","","","1T43M7ST1y3dF_WeVequ74F_UTd68VWwV"],["42","2025-08-05","2025-08-05T14:10","T","O","111111","","","","1RWPQSJHLUlseZCOb1Dn5JdiyGXF69SC9"],["68","2025-08-05","2025-08-05T14:23","T","O","111111","","","","11W3MtbiMuT7hD2N2tnSrEl11ykjyL2yk"],["26","2025-08-05","2025-08-05T14:35","T","O","111111","","","","1s3EKIhnmZIofF1BPSqKARyNgsJ6IA0yF"],["38","2025-08-05","2025-08-05T14:42","T","V","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1GYMWxJbAokabhDrfGwCdB48rR8cLtznM"],["93","2025-08-05","2025-08-05T14:50","T","O","111111","","","CELULAR ATUALIZADO","1JNdzrFRkEDwo_QUg-28T54_76xGcfsv1"],["81","2025-08-06","2025-08-06T12:37","G","O","111111","","","","1i-kJTZqRTqJZ5WUtKb8ymnwx0c1k8WLl"],["90","2025-08-06","2025-08-06T12:39","G","O","111111","","","","1GqMRuUBL2tIkv0rb7Z8_6rw1k_Rgs3vD"],["91","2025-08-06","2025-08-06T12:40","G","O","111111","","","","1fksfamrvaSkUzp5HzxN92wA0kpEFBTjO"],["39","2025-08-06","2025-08-06T12:42","G","O","111111","","","","1l17XN-ol6PnHqxnSQ9lxW6sgD8yAPDMr"],["67","2025-08-06","2025-08-06T12:44","G","O","111111","","","","1Xqk9fzk8I_OM0JgZodNguwcTXSPcC6Im"],["35","2025-08-06","2025-08-06T12:44","G","O","111111","","","",""],["95","2025-08-06","2025-08-06T12:47","G","O","111111","","","CELULAR ATUALIZADO","1rPBFM7-V52r8qPo3imP52drDi5PDzBfu"],["80","2025-08-06","2025-08-06T12:52","G","O","111111","","","","1GC9G9s789t95jruw6WuDhGvDtnn9CVr5"],["65","2025-08-06","2025-08-06T12:54","G","O","111111","","","CELULAR ATUALIZADO","1EEO-6nsdwJ0vCuR_njEoyiR-2rwUW08O"],["83","2025-08-06","2025-08-06T12:57","G","V","110111","CABO DO CARREGADOR DANIFICADO","","","1E0bvXskmkDt-XM-5onvnnUm4ZCUL92-p"],["66","2025-08-06","2025-08-06T13:07","G","O","111110","TELA TRINCADA","","","1pVaXKgPYJlVU_2exgQllPeX9EB_Phwm5"],["38","2025-08-06","2025-08-06T13:14","G","N","100001","VEÍCULO FORA DA GARAGEM|CHIP SEM DADOS","","","1ok8AX04IFUNg2TxSKoct_SrvTyBu9zq8"],["78","2025-08-06","2025-08-06T13:17","G","O","111111","","","","1i5ynP-mXWSt3Nc8T4UXjK4pMVLS0CTaE"],["53","2025-08-06","2025-08-06T13:24","G","O","111111","","","","1MzmkqJgDYMtqkbJAvrfkxESOsXKaz7oT"],["59","2025-08-06","2025-08-06T13:27","G","V","101110","BATERIA INCHADA|CHIP SEM DADOS|TELA TRINCADA","","","1rxjHmWa0G65NqV58dkSe9Ikm5ogoNlBU"],["82","2025-08-07","2025-08-07T08:56","T","O","111111","","","CELULAR ATUALIZADO","1MlXoFPLHEGZfDJLAs5Tgjs_sxud2cgaW"],["87","2025-08-07","2025-08-07T09:05","T","O","111111","","","","17JYYLttw_8Cnb1uQ64i4qjQxUNxeuuxJ"],["53","2025-08-07","2025-08-07T09:11","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1K-OX3-yLJJ-O9lgSisW-JFBiEzkugIfa"],["74","2025-08-07","2025-08-07T09:15","T","O","111111","","","","1aWbsuINJPI6VSbxCAwtTKF22LwORWDCV"],["25","2025-08-07","2025-08-07T09:22","T","O","111111","","","CELULAR ATUALIZADO","114vDgEkhMdxdpnQg3mMA8CkP58UgFT7u"],["27","2025-08-07","2025-08-07T09:29","T","O","111111","","","","1J44lb95d2rIiMar7G2iP5jBwS4QxVKfm"],["86","2025-08-07","2025-08-07T09:32","T","O","111111","VIAGEM ABERTA","","","10SWmxOnRauWqiRZkz7DZ4VKjuriMbVj9"],["85","2025-08-07","2025-08-07T09:37","T","O","111111","","","","1mQ6Dodv1NZw9KuZFAl1YhOU_ZSs59a23"],["98","2025-08-07","2025-08-07T09:45","T","O","111111","","","","19dQ4BjCsmIr4k8o03tQHMsPegjeHE-nk"],["89","2025-08-07","2025-08-07T09:48","T","O","111111","","","","1kN3Mkq-vllDq3V84xUSaRfiqeTeMBrOC"],["24","2025-08-07","2025-08-07T09:51","T","O","111111","","","","1qMvSy0jqEotDg1Aenctvw_jvGxvcg3Px"],["38","2025-08-07","2025-08-07T09:56","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1kMGSsjSfTyyBvQCYhbn7D45smf7kupRP"],["37","2025-08-07","2025-08-07T09:59","T","O","111111","","","CELULAR ATUALIZADO","1f-I7DLkWPexycSFD0uCnNok1gAsEudfN"],["68","2025-08-07","2025-08-07T10:01","T","O","111111","","","","18x6ynLPa6F1Pnf9zO72_UBnvb6XZl16V"],["93","2025-08-07","2025-08-07T10:04","T","O","111111","","","","1yJ6rkaykFKOAHefr4SHC-F-tWdHM-vH2"],["35","2025-08-07","2025-08-07T10:08","T","O","111111","","","","1OiANMqR2MAKHmE5LQhA3B514nevAIpmV"],["88","2025-08-07","2025-08-07T10:08","T","O","111111","","","","1WCZPC8RQG21Qckm_rdv8twFKKW18BSDX"],["78","2025-07-25","2025-08-07T10:09","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["87","2025-07-25","2025-08-07T10:10","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["88","2025-07-25","2025-08-07T10:11","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["25","2025-07-28","2025-08-07T10:12","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["35","2025-07-28","2025-08-07T10:13","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["37","2025-07-28","2025-08-07T10:14","T","V","101111","ATUALIZAÇÃO DO TRACK","","",""],["59","2025-07-28","2025-08-07T10:15","T","V","101110","CHIP SEM DADOS|BATERIA INCHADA","","",""],["68","2025-07-28","2025-08-07T10:16","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["85","2025-07-28","2025-08-07T10:17","T","V","101111","CHIP SEM DADOS","","",""],["89","2025-07-28","2025-08-07T10:17","T","V","101111","CHIP SEM DADOS","","",""],["27","2025-07-29","2025-08-07T10:18","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["69","2025-07-29","2025-08-07T10:19","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["74","2025-07-29","2025-08-07T10:20","T","V","101111","CHIP SEM DADOS","","",""],["82","2025-07-29","2025-08-07T10:21","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["84","2025-07-29","2025-08-07T10:22","T","V","101111","CHIP SEM DADOS","","",""],["86","2025-07-29","2025-08-07T10:23","T","O","111111","","","",""],["93","2025-07-29","2025-08-07T10:24","T","O","111111","","","",""],["81","2025-07-30","2025-08-07T10:25","T","O","111111","","","",""],["78","2025-07-30","2025-08-07T10:26","T","O","110111","SEM CONECTOR MAGNÉTICO","","",""],["67","2025-07-30","2025-08-07T10:26","T","O","111111","","","",""],["65","2025-07-30","2025-08-07T10:27","T","O","111111","","","",""],["38","2025-07-30","2025-08-07T10:28","T","O","101111","CHIP SEM DADOS","","",""],["53","2025-07-30","2025-08-07T10:29","T","O","101111","CHIP SEM DADOS","","",""],["99","2025-07-30","2025-08-07T10:30","T","O","111111","","","",""],["91","2025-07-30","2025-08-07T10:31","T","O","111111","","","",""],["83","2025-07-30","2025-08-07T10:32","T","O","111111","","","",""],["90","2025-07-30","2025-08-07T10:33","T","O","111111","","","",""],["55","2025-07-30","2025-08-07T10:34","T","O","111111","","","",""],["80","2025-07-30","2025-08-07T10:35","T","O","111111","","","",""],["66","2025-07-30","2025-08-07T10:35","T","O","111111","","","",""],["71","2025-07-30","2025-08-07T10:36","T","O","111111","","","",""],["88","2025-07-30","2025-08-07T10:37","T","O","111111","","","",""],["84","2025-07-30","2025-08-07T10:38","T","O","111111","","","",""],["85","2025-07-30","2025-08-07T10:39","T","O","111111","","","",""],["86","2025-07-30","2025-08-07T10:40","T","O","111111","","","",""],["93","2025-07-30","2025-08-07T10:41","T","O","111111","","","",""],["95","2025-07-30","2025-08-07T10:42","T","O","111111","","","",""],["89","2025-07-30","2025-08-07T10:43","T","O","111111","","","",""],["26","2025-07-30","2025-08-07T10:44","T","O","111111","","","",""],["87","2025-07-30","2025-08-07T10:44","T","O","111111","","","",""],["25","2025-07-30","2025-08-07T10:45","T","O","111111","","","",""],["82","2025-07-30","2025-08-07T10:46","T","O","111111","","","",""],["69","2025-07-30","2025-08-07T10:47","T","O","111111","","","",""],["42","2025-07-30","2025-08-07T10:48","T","O","111111","","","",""],["75","2025-07-30","2025-08-07T10:49","T","O","111111","","","",""],["76","2025-07-30","2025-08-07T10:50","T","O","111111","","","",""],["68","2025-07-30","2025-08-07T10:51","T","O","111111","","","",""],["24","2025-07-30","2025-08-07T10:52","T","O","111111","","","",""],["81","2025-08-08","2025-08-08T14:57","G","O","111111","","","","12lexdV3KWoID-e5Iw8VHI3Anr-lPiE4c"],["95","2025-08-08","2025-08-08T14:58","G","O","111111","","","","15U_12Uvg-4oBWWDkrc1qYmbLqklJ2Dil"],["91","2025-08-08","2025-08-08T14:59","G","O","111111","","","","1OGykvDqBZJ114j-SCUSI_Joibxer3K1I"],["76","2025-08-08","2025-08-08T15:02","G","O","111111","","","CELULAR ATUALIZADO","1oTqxEYrrnXWSkDRvQmsW_njTkEEU1aOM"],["74","2025-08-08","2025-08-08T15:03","G","O","111111","","","CELULAR ATUALIZADO","1ppRQN6wVAkoX1npbiV6snmIZw39mkrkV"],["99","2025-08-08","2025-08-08T15:05","G","V","111111","VIAGEM SEM ABERTURA","","","1VCXpgrvHXRfbHyWKXopr1EpsWIgx9Qod"],["78","2025-08-08","2025-08-08T15:11","G","O","111111","","","","1gKHrsT1HPNciK-oyQ5VxdW7CnmolW0_7"],["83","2025-08-08","2025-08-08T15:12","G","O","111111","","","","1YNHaqOBEJIlrJ1iov9H0Qeat7R1rLAMp"],["67","2025-08-08","2025-08-08T15:14","G","O","111111","","","","1eIeMCXvgFo71gJ9wOH6navIzskGBc8PB"],["72","2025-08-08","2025-08-08T15:17","G","O","111111","","","CELULAR ATUALIZADO","1doJj-E68mEdThLGOI8rACGJFSXTMomqx"],["80","2025-08-08","2025-08-08T15:20","G","O","111111","","","CELULAR ATUALIZADO","1NDv-tP08U-ZcSao97iyEowo6-BXCqIuh"],["71","2025-08-08","2025-08-08T15:24","G","O","111111","","","CELULAR ATUALIZADO","1byDd0bhim6WP8rvzYa7HcmNeFTWwqaMM"],["90","2025-08-08","2025-08-08T15:26","G","O","111111","","","CELULAR ATUALIZADO","10AKYq7k8jthdrm-pc2CJIK4b8x0FsHFn"],["66","2025-08-08","2025-08-08T15:29","G","O","111110","TELA TRINCADA","","CELULAR ATUALIZADO","1XdAAA6UwdBLg_1OLaPEutd4-EKAKFPdy"],["65","2025-08-08","2025-08-08T15:32","G","O","111111","","","","1jAT7FSG-iTrdwofIj8-WMkcm2r0iLzy2"],["36","2025-08-08","2025-08-08T15:33","G","O","111110","TELA TRINCADA","","","1tUuYQRm9ZrKd3_NnK06cglJByc_aoaZI"],["39","2025-08-08","2025-08-08T15:34","G","O","111111","","","CELULAR ATUALIZADO","1IFHaRXGovUGus3b_eMoDGgDfCjXqHjH5"],["57","2025-08-08","2025-08-08T15:53","G","N","110001","VEÍCULO FORA DA GARAGEM","","","1ToODSquLiSlJWFJwLvAahPrfVyF-zNbc"],["58","2025-08-08","2025-08-08T15:54","G","N","110001","VEÍCULO FORA DA GARAGEM","","","1hi81zv_PuK6pcDorYZLGBnxJRrB0rcsF"],["38","2025-08-08","2025-08-08T15:57","G","N","100001","CHIP SEM DADOS|VEÍCULO FORA DA GARAGEM","","","1gYQUGD5IBNdokXTx7lmtg253ulgHVr5w"],["75","2025-08-11","2025-08-11T09:26","T","O","101111","CHIP SEM DADOS","","","1m0dn9CHvtjuBRVVkd0unh9VlgAyE6Qle"],["68","2025-08-11","2025-08-11T09:28","T","O","111111","","","CELULAR ATUALIZADO","1AtbYWA_pTn5EeVpQKSCjxEpvJpkW5xWF"],["36","2025-08-11","2025-08-11T09:33","T","V","111110","TELA TRINCADA","","","1RxwFE9QTXMX6hCwkKFjowWCLCijngXpv"],["69","2025-08-11","2025-08-11T10:13","T","O","111111","","","CELULAR ATUALIZADO","1QYjc354ufVF95jp-JOZjXucDqxlDA7V0"],["85","2025-08-11","2025-08-11T10:35","T","O","111111","","","","1PW8AjFuf1zQCzDrre_4OjtFL1f_jQLP3"],["25","2025-08-12","2025-08-12T09:49","T","V","111111","VIAGEM SEM ABERTURA","","","13T4sFrXvEr0afwjd0hkHZagGlAJdtKjC"],["65","2025-08-12","2025-08-12T09:51","T","O","111111","","","","1wWGStxq3MrzJ6zPqktFSzOiQUCAXlij5"],["27","2025-08-12","2025-08-12T09:55","T","O","111111","","","","1EGFd3IYkB-6DkrE7G-rBJEs9mppb6EPL"],["68","2025-08-12","2025-08-12T09:59","T","O","111111","","","","1HFxZMJP2unrsMa7wqpfDDson-BXRKyDT"],["26","2025-08-12","2025-08-12T10:35","T","O","111111","","","","1b0WkhQnvu01Egiy6x87j83LyAquZHOkh"],["38","2025-08-12","2025-08-12T10:41","T","V","101111","CHIP SEM DADOS","","","10k5qc4T2hq02U0V4_ylyrIE8Ar4cu84r"],["93","2025-08-12","2025-08-12T10:51","T","O","111111","","","","1f9LFEMDOgn4hDTMUPZUPOTzM-ZbZf1Wm"],["24","2025-08-12","2025-08-12T11:08","T","O","111111","","","CELULAR ATUALIZADO","1IUNok6_jArQSql9hevJrFr-0AtAH5YD5"],["60","2025-08-13","2025-08-13T13:44","G","V","101111","CHIP SEM DADOS","","","1s7v9DeYFaM3TU9xcsNwX4p8HQGMirH49"],["67","2025-08-13","2025-08-13T13:45","G","O","111111","","","","1Rm3NBpZx9eNuqxWhgXHVh1I8T8YBlHml"],["71","2025-08-13","2025-08-13T13:47","G","O","111111","","","","1KeJMjoDWXSKNdd7GB9sdX-grSSjlaWgg"],["72","2025-08-13","2025-08-13T13:49","G","O","111111","","","","11Utz3AUr2n4FbCmUtMwHR__MYejajU02"],["73","2025-08-13","2025-08-13T13:50","G","O","111111","","","","1EXvgTkuQBBXDPgG4TBYuuXhltuHiLe_s"],["74","2025-08-13","2025-08-13T13:51","G","O","111111","","","","1EOLwGR5_YXvz10E-Soe-YL9YRiZCLP-t"],["78","2025-08-13","2025-08-13T13:52","G","O","111111","","","","13-OfX2xSWMwXg0g1taa5yc2PqJ9b-u87"],["81","2025-08-13","2025-08-13T13:53","G","O","111111","","","","1fovrjzrepMW8qXwZVHA6FZ_wIDQXA2tL"],["83","2025-08-13","2025-08-13T13:55","G","O","111111","","","","1Xm69JVcWMsFN0j3CMEtPCv9XcgCUEEg-"],["87","2025-08-13","2025-08-13T13:56","G","O","111111","TELA TRINCADA","","","16TzkNBFBrdvJ3lv3HqYrGxYIDcb6QvoF"],["90","2025-08-13","2025-08-13T13:57","G","O","111111","","","","1DRuxkvSU0Rk2PHmGxPpWVSIRXhThW3ye"],["91","2025-08-13","2025-08-13T13:58","G","O","111111","","","","1sSMawFzGzGdzrrMU6LUdEXubyQ5D2g69"],["95","2025-08-13","2025-08-13T13:59","G","O","111111","","","","1PE0rS0zCnGYsChgSANFYyQdQBtv48SpD"],["99","2025-08-13","2025-08-13T14:00","G","O","111111","","","","1jAL7tVUYetOxAOoWK8XjKBXxHX7Nom8a"],["66","2025-08-13","2025-08-13T14:02","G","V","111011","TELA TRINCADA|LEITOR COM FREQUÊNCIA BAIXA","","","19-9HTpuUsiaXUxQ8RcwkULDVP-jxBaLp"],["53","2025-08-13","2025-08-13T14:06","G","V","101111","CHIP SEM DADOS","","","1xbm86et1_wMXeIG75ZHUi2rghDLZAurs"],["35","2025-08-13","2025-08-13T14:10","G","O","110001","VEÍCULO FORA DA GARAGEM","","","1ACOIn477FX5DfUdShOnNmJTnTISGRHTA"],["36","2025-08-18","2025-08-18T12:01","T","V","111110","TELA TRINCADA","","","1vUGvaG0DHXqXU8D5vdZFxXmYbbqvuNwW"],["42","2025-08-18","2025-08-18T12:11","T","O","111111","","","","15kZD-pr_UBUGaHbar4jOkrDj4PN78o3r"],["27","2025-08-18","2025-08-18T12:14","T","O","111111","","","","1vr9JUKl6aXz5liACi99zLMfIyEz3Wrie"],["89","2025-08-18","2025-08-18T12:17","T","O","111111","","","","1Ct9L8nT_1i4psoWaEXaIN2XLhuUuUijv"],["85","2025-08-18","2025-08-18T12:22","T","O","111111","","","","1pfB8d4daZPh7MlR72kMCQ-USGmYVohmV"],["25","2025-08-18","2025-08-18T12:26","T","O","111111","","","","1eVSJT4zcW72lDRuN8eMaOVvO73PaIU6i"],["26","2025-08-18","2025-08-18T12:28","T","O","111111","","","","1HipNjws1moj9WBrRQhi048dhIEyh_K3x"],["35","2025-08-18","2025-08-18T12:36","T","O","111111","","","","1dMSlbs5y7uI4rMJbHVUn2HcyooNwGkml"],["80","2025-08-18","2025-08-18T12:53","T","O","111111","","","","1c8yUSRXZhP_GGMJxoKJMoRHwKU0F6wu2"],["37","2025-08-18","2025-08-18T12:57","T","O","111111","","","","1ChZ8yjfVwwCzd0YrbTffzcnERqAZQMMA"],["86","2025-08-18","2025-08-18T12:59","T","O","111111","TELA TRINCADA","","","1yjqSSrSE1Aek89v94Dy4wJIPY3XFenSU"],["88","2025-08-18","2025-08-18T13:04","T","O","111111","TELA TRINCADA","","","1uGPx0EXMZWe5VtPI1hToUpYDkWCU2q7s"],["69","2025-08-18","2025-08-18T13:07","T","O","111111","","","","1mXnYZry__QyN6V9ykgV09oUKjK-McBaA"],["98","2025-08-18","2025-08-18T13:11","T","O","111111","","","","112nRh5fh8Vt2n62FwCIxwTnbaBDYralP"],["24","2025-08-18","2025-08-18T13:50","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1Hq4yJx_KIv7MyUnByoJNycWY2-I0VA4J"],["65","2025-08-18","2025-08-18T14:25","T","O","111111","","","","13p7YnbgeB6IeltRp6_VDayJF6vONvEg3"],["68","2025-08-18","2025-08-18T14:28","T","O","111111","","","","1G8Si2STAtBAMbRBlfNlNMBIY1QspscoS"],["84","2025-08-18","2025-08-18T14:51","T","O","111111","","","","1ELHwPYfGFHEITKTf6IlGSpVjauBIFLUu"],["77","2025-08-19","2025-08-19T10:11","T","O","111111","","","CABO TROCADO POR MAGNÉTICO","1atj-CM0rHOeHDvLL7gPZhDPzYgkyx4R-"],["68","2025-08-19","2025-08-19T10:47","T","O","111111","","","CABO TROCADO POR MAGNÉTICO","12_8hYrQI3ByiVNDY5gOCWsgjig8os8AO"],["39","2025-08-19","2025-08-19T10:51","T","O","111111","","","","1M7rV_fyS2qrSKYXe2vhZrFWwQdxRQIez"],["26","2025-08-19","2025-08-19T11:00","T","O","111111","","","","1l9pqULTahbhCKJnN2mTQ9AEvmcSPJNZO"],["85","2025-08-19","2025-08-19T11:02","T","O","111111","","","","1Lh-JGMIWTWfNXtc7e2hqCC9A4aGenzxl"],["27","2025-08-19","2025-08-19T11:07","T","O","111111","","","","1ppShiXmsjpBGwthfiHgLbDILBem5G-d3"],["65","2025-08-19","2025-08-19T11:18","T","O","111111","","","CABO TROCADO POR MAGNÉTICO","1NASb9CdzcLkPICfqlsNz6IUwUeZes6jJ"],["80","2025-08-19","2025-08-19T11:42","T","O","111111","","","CABO TROCADO POR MAGNÉTICO","1HdQKKSNvLW-Nt9LRfmp12qJvt36Yht1f"],["98","2025-08-19","2025-08-19T12:03","T","O","111111","","","CABO TROCADO POR MAGNÉTICO","15ZxJlD8I4uauLjkDbmZ2VWeIQqM_QDDR"],["60","2025-08-20","2025-08-20T14:21","G","V","101111","CHIP SEM DADOS","","","1RpnxZglnPiOE6uYmE9sk_RAdcd5KXQXF"],["81","2025-08-20","2025-08-20T14:22","G","O","111111","","","","1gTngUqq9pGIl8kkaI9gkjfwyIsrY2XYu"],["83","2025-08-20","2025-08-20T14:23","G","O","111111","","","","1sqNDRp4uUHvhNTEdyuGSovJCn6iWylBN"],["87","2025-08-20","2025-08-20T14:25","G","O","111111","TELA TRINCADA","","","1ZyB6hqb33xEYUZwQVZELbU7rvlOq2Ma6"],["72","2025-08-20","2025-08-20T14:28","G","O","111111","TELA TRINCADA","","","1dpuI4umLYw0xFFrXkjQ5CAIct6wCXCFV"],["37","2025-08-20","2025-08-20T14:30","G","O","111111","","","","1jUPSA5I8uD_xPJwV4Pf1JfP6greiOCFf"],["99","2025-08-20","2025-08-20T14:33","G","O","111111","","","","1rtjX7EJe6KdfEiI16zTWPYIvP_upnW48"],["67","2025-08-20","2025-08-20T14:34","G","O","111111","","","","1YcURrzddBM8TutzAikba8l55v0-Otpj_"],["90","2025-08-20","2025-08-20T14:38","G","O","111111","","","","1ZqUUhZIP_6uILvQ4cHJViMcapImX_tz1"],["26","2025-08-21","2025-08-21T08:13","T","O","111111","","","","1rDwn6hTgvTRr9gFBHBvAeYCogQmlbvH5"],["54","2025-08-22","2025-08-22T12:10","G","O","111111","","","",""],["56","2025-08-26","2025-08-26T14:23","G","V","101111","CHIP SEM DADOS","","CABO TROCADO POR MAGNÉTICO","1mMrAD9FmZV887RuwUEJyvv6HMMQA9BpH"],["87","2025-08-26","2025-08-26T14:34","G","V","111110","TELA TRINCADA","","","1Ami_GcZrT3suyiJfpaRREUIxxe1Iaf2t"],["39","2025-08-26","2025-08-26T15:01","G","O","111111","","","","1yQzJK2Q734DcQDA4PA6vWwcoZ2e2ayTl"],["99","2025-08-26","2025-08-26T15:04","G","O","111111","","","","1PosRAaTq4tOK9IOLxEblY8FcubDwLvbI"],["74","2025-08-26","2025-08-26T15:09","G","O","111111","","","","19NWQwOqX8JnnnuJc2VTwJ-X9q9qSVSeJ"],["66","2025-08-26","2025-08-26T15:11","G","V","111110","TELA TRINCADA","","","1rn99rs29fwrM915dgaS1gsCSWuRY48Ik"],["71","2025-08-26","2025-08-26T15:15","G","O","111111","SEM CONECTOR MAGNÉTICO","","","1LeStZv50Za-jxwFw2hDU1TomWLfRPy-G"],["90","2025-08-26","2025-08-26T15:16","G","O","111111","","","","1ZbCbRr975MJFxe27UbdRIQqIHBGdvaww"],["83","2025-08-26","2025-08-26T15:17","G","O","111111","","","","1QGibjyw4LHinfhMwtC8cED9I0fcImqv0"],["72","2025-08-26","2025-08-26T15:19","G","O","111111","","","","1ITJU23Bd2xPRFpI5gMtzVQ8RSkwZFYJM"],["91","2025-08-26","2025-08-26T15:20","G","O","111111","","","","1450oAymx_6g_LouGKm3zPLNWS0U3hbO4"],["84","2025-08-26","2025-08-26T15:21","G","O","111111","","","","1tT9ygPoUVa0Pe9xtjwyWuNbOxZ5zy60y"],["81","2025-08-26","2025-08-26T15:22","G","O","111111","","","","1v6q97ieNHiFXHZWXp_ifOjVrhbZsyoah"],["82","2025-08-27","2025-08-27T14:35","T","O","111111","","","CABO TROCADO POR MAGNÉTICO, LEITOR NOVO","11MWiLsHozOg94IcfbXdCX7iKa4sQswnc"],["68","2025-08-27","2025-08-27T14:39","T","O","111111","","","","1_lWZN3SqZiURPQdmzDb1ho9QnaBjytxG"],["88","2025-08-27","2025-08-27T15:27","T","O","111111","","","","1whkBdy-Vl8uzeZ6YQUI-LdnXamYLxg0c"],["80","2025-08-27","2025-08-27T15:29","T","O","111111","","","","1lb72ZZ6GYbtnqIADgoySE36gnplz-2t9"],["81","2025-08-27","2025-08-27T15:32","T","O","111111","","","","1we_eBE6KHcUqpvkQM0_IJmIaIC_T7T9C"],["86","2025-08-27","2025-08-27T15:34","T","V","111110","TELA TRINCADA","","","1Cff-9HehPaaSJIUPL0RaYFakh5NpFAom"],["93","2025-08-27","2025-08-27T15:44","T","O","111111","","","","162An_TKxJs8ijT8JNUUV6dB_JWoiXy58"],["35","2025-08-27","2025-08-27T18:30","T","V","101111","CHIP SEM DADOS","","","1NZ8FJ491O4T-TUjm7Ur3OYFTOPDTmKFo"],["81","2025-08-28","2025-08-28T10:33","T","O","111111","","","","1cK5hZibKGAAfXvZxmvsoXVH-pP1xN2Ym"],["80","2025-08-28","2025-08-28T10:38","T","O","111111","","","","1WYJiKZWWVsDFli5nn6i0aKHJgjg7mJkX"],["84","2025-08-28","2025-08-28T10:51","T","O","111111","","","","1xTw6KU9hPHEUMVrPHahMg9Sb3WiPzajR"],["36","2025-08-28","2025-08-28T11:27","T","V","111110","TELA TRINCADA","","","1tCg8B8HqiodB16fgicI-VTr0Ixs5s7JB"],["68","2025-08-28","2025-08-28T11:38","T","O","111111","","","","1rF7EDa5VNTbBGC9_Ii3xiQBsDnZJilvr"],["69","2025-08-28","2025-08-28T11:44","T","O","111111","","","","1jJ-F1Jt7sCi7dLCPl-05iJYFYz1oZteV"],["88","2025-08-28","2025-08-28T11:49","T","O","111110","TELA TRINCADA","","","1DmrISutehbALXQWKRsNwuQu1G0bo8R2k"],["86","2025-08-28","2025-08-28T11:55","T","V","111110","TELA TRINCADA","","","16BZnbA7qDQ1iCMuWWeT3zvMxjSwl_Ags"],["38","2025-08-28","2025-08-28T11:59","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1TaNopD8QCJcpSr-HT0E0KeG1TvbFZAqs"],["77","2025-08-29","2025-08-29T10:29","T","O","111111","","","","1GNywsRI_YDp8oswNbj3L_xwuq20sQMwh"],["42","2025-08-29","2025-08-29T10:36","T","O","111111","","","","1Sz1aBKaQ8dbvNLE-y86YR0-TR3b0cV5g"],["93","2025-08-29","2025-08-29T10:47","T","O","111111","","","","1Rh4v_SB-oGpjwB1Y54QGDU0_dF5NjsKz"],["36","2025-08-29","2025-08-29T10:54","T","V","111110","TELA TRINCADA","","","1gb1twwR8RFhIO-U4D3oHnq0fccgheL97"],["86","2025-08-29","2025-08-29T11:11","T","V","111110","","","","1EJHBWCewcYWtuPqF5LsJo0E-ZGxIjOKR"],["27","2025-08-29","2025-08-29T11:20","T","O","111111","","","","1cJar7WowjfekBjiTmz-Bo_RvNcF7xya-"],["35","2025-09-01","2025-09-01T10:25","T","O","101111","CHIP ESTA TRAVANDO","","",""],["71","2025-09-10","2025-09-10T12:55","G","O","111111","","","","1pqv0XOqKr83XK67rXo3nGrdyRYIhV0DU"],["65","2025-09-10","2025-09-10T13:02","G","O","111111","","","","1MgZtP7nao4inXQtEM0W9N8EBjXVj7Rg3"],["73","2025-09-10","2025-09-10T13:03","G","O","111111","","","TROCA DA CAPA DO CELULAR","1swYPHGqDh64o-bb0WVLcd_WuC4SKOrsr"],["74","2025-09-10","2025-09-10T13:05","G","O","111111","","","CELULAR ATUALIZADO","1bRgntg4_TFJqrT0LBIMYKq3nFGbEZS0D"],["81","2025-09-10","2025-09-10T13:06","G","O","111111","","","","1WmPDskR8BX_gL4a4x7yPNilbd2FgsBtx"],["66","2025-09-10","2025-09-10T13:08","G","O","111110","TELA TRINCADA","","","17BP71MSHbxx9s4RXW_q9YtN_vMfmualc"],["86","2025-09-10","2025-09-10T13:10","G","O","111110","TELA TRINCADA","","","10rht1AgfqzBYSDUy4U_Ws5_HahZUg7Og"],["90","2025-09-10","2025-09-10T13:11","G","O","111111","","","CELULAR ATUALIZADO","1XHCfPrizVnPEPrWDuf0oonaUGQLiymAu"],["83","2025-09-10","2025-09-10T13:13","G","O","111111","","","","1lHSS1kowb7frPKsqZ-3Kflpepz6gcIL_"],["99","2025-09-10","2025-09-10T13:19","G","O","111111","","","","12ra7U89Jahwu1qWw44rH6EU918Blcfqs"],["95","2025-09-10","2025-09-10T13:38","G","O","111111","CELULAR CONECTADO NO LEITOR DE OUTRO CARRO","","","1hJym1N2R2KowrPhH9lGmj5DbmOZrzSZd"],["80","2025-09-10","2025-09-10T13:45","G","O","111111","VIAGEM ABERTA","","","1jp9v3co0FMydc6mAlQAeHXCrrg0T0vMY"],["91","2025-09-10","2025-09-10T13:58","G","O","111111","","","","19r1C2LOoEehSMZB43vqCVyQ9SkCnVUig"],["82","2025-09-15","2025-09-15T09:23","T","O","111111","","","","1Qo8q2_rtLOdRmt-vnEE5JUhdzeu4KK4f"],["37","2025-09-15","2025-09-15T09:28","T","O","111111","","","","1_-exhU5kTTbPTcQmdx4v3VBcTSN9hmXz"],["78","2025-09-15","2025-09-15T09:48","T","O","111111","","","","1apEX--HpKaZBV-VrDhc3CoQZXrY9A2wH"],["36","2025-09-15","2025-09-15T11:00","T","V","111110","TELA TRINCADA","","","1p5-tx08vMhb89lFaIkj235zVgEsWuZE6"],["69","2025-09-15","2025-09-15T11:07","T","O","111111","","","","1vurZHfZ96sok-VhtnPY7ifKP9Y9TyyXh"],["88","2025-09-15","2025-09-15T11:19","T","O","111111","","","","1TIcGDIpPMDOh1BSJlLLP3m_2N-bOs77k"],["89","2025-09-15","2025-09-15T11:27","T","O","111111","","","","1dPF1ifvacy9U9Dtd1603aDi25_Q5t4ui"],["42","2025-09-15","2025-09-15T11:59","T","V","101111","CHIP SEM DADOS","","","104IKQcR5vOe0Hp6v267boBk5O-HGSehr"],["80","2025-09-16","2025-09-16T11:34","G","O","111111","","","","1fFt_B8jZgdbEcotUS9Inv1TxWDTlQuen"],["95","2025-09-16","2025-09-16T12:38","G","V","111011","LEITOR SEM FUNCIONA","","","1T9sE3AltWajNoTlLk-lxTzD1zQxRSbM9"],["81","2025-09-16","2025-09-16T12:39","G","O","111111","","","","1tddyTX-8ZnRDrBHTYVlCK-5sUVNnpSS-"],["65","2025-09-16","2025-09-16T12:40","G","O","111111","","","CELULAR ATUALIZADO","1D3FnJO0jqUzFjbnp_uTlaNTbe8rW4H5D"],["67","2025-09-16","2025-09-16T12:41","G","O","111111","","","","18tXFTjRTXCWyjEfvX8j265OVts3GUy8U"],["91","2025-09-16","2025-09-16T12:43","G","O","111111","","","","1OYVOrc1mIxuqdKDjVB9QxyoVpC7nqU5g"],["90","2025-09-16","2025-09-16T12:44","G","O","111111","","","","1ODPjbRcVFE489gg4prFiarI02osXfDHg"],["72","2025-09-16","2025-09-16T12:45","G","O","111111","","","CELULAR ATUALIZADO","1xPOdNqqwRtY-6CmcUShH7pI7XlHtBhmI"],["74","2025-09-16","2025-09-16T12:46","G","O","111111","","","CELULAR ATUALIZADO","1dSTzdB3G0eZ6sg22pTlWzaBD0rD0lKnF"],["99","2025-09-16","2025-09-16T12:48","G","O","111111","","","","1TIOaod56Neprvb6aCFy1S-kIr8iLo5MQ"],["56","2025-09-16","2025-09-16T13:00","G","O","111111","","","","15lsS-LrYe3vGAc5Q84VdptCTsKSQUU5A"],["84","2025-09-22","2025-09-22T10:47","T","O","111111","","","",""],["69","2025-09-22","2025-09-22T10:49","T","O","111111","","","",""],["25","2025-09-22","2025-09-22T10:50","T","O","111111","","","","1-IrS33q2bHSbmxfeZqljuP50exj9_Riw"],["24","2025-09-22","2025-09-22T10:53","T","O","111111","","","","1twDeiPffayo497lXYZ9Qk3LSI_0QwmHR"],["68","2025-09-22","2025-09-22T10:54","T","O","111111","","","","1X43epviqFipKednG1FMgdsCeHoso5MFb"],["85","2025-09-22","2025-09-22T10:56","T","O","111111","","","","1HUtgU8SGuop58Pw-7llKi-2n1l5HrMid"],["39","2025-09-22","2025-09-22T10:59","T","O","111111","","","","1bcBRKFxpjm8Qqcz-RNWc6XS_r8ADP91x"],["82","2025-09-22","2025-09-22T11:00","T","O","111111","","","","1bKPTxbzDvHHklqg38H5co-KgXb_Svvae"],["88","2025-09-22","2025-09-22T11:02","T","O","111110","TELA TRINCADA","","","180D64hgdgNecYMRXht6NpGcHOGFUVMFf"],["35","2025-09-22","2025-09-22T11:04","T","O","111111","","","","1tjj33ZuCqIyCC1yy01hEjGu2TpoJa9iI"],["36","2025-09-22","2025-09-22T11:04","T","O","111110","TELA TRINCADA|VIAGEM NÃO FOI ABERTA","","","1XqF8C2z1Djv8P9fy3TCRRqcKqgKm2PQx"],["90","2025-09-25","2025-09-25T12:52","G","O","111111","","","","1DSL2E-urCNE6s56-uhHIpFRSnQDWv2rN"],["91","2025-09-25","2025-09-25T13:01","G","O","111111","","","","1enzj1foYybcVGm7C6ka0r87bWMpU4md1"],["38","2025-09-25","2025-09-25T13:06","G","O","111111","","","","1tqOYyNWJhl38SmEhUrm4A5N_fNr_O9Mb"],["74","2025-09-25","2025-09-25T13:17","G","O","111111","","","","1k8iYa1S-0cOXoireV02lVrWOpBr7w_9l"],["37","2025-09-25","2025-09-25T13:19","G","O","111111","","","","125xyRE6nSRFWCvJE96FfDvinfekqd2Az"],["73","2025-09-25","2025-09-25T13:20","G","O","111111","","","","1LhKqqLHz45rmfv3ylYxejsk_khja-YOr"],["95","2025-09-25","2025-09-25T13:21","G","O","111011","LEITOR NÃO FUNCIONA","","","1hPKuANtzzR7ZgLd7ueDwMSO9ypZ3FKaj"],["83","2025-09-25","2025-09-25T13:23","G","O","111111","","","","1KnfcxHqH-f2UAb4McO_4g32csVKNjRcg"],["99","2025-09-25","2025-09-25T13:24","G","O","111111","","","","18qxodImzfjRbd0WKxWAC2q1-LV7JS7Ft"],["80","2025-09-25","2025-09-25T13:26","G","O","111111","","","","1ovg8Obc9yJXYzMTAQKwVS3nnN3TCGH3e"],["67","2025-09-25","2025-09-25T13:27","G","O","111111","","","","1GfZfZw6SL4Gf8b07gzcvHYrIdBsxNcPp"],["27","2025-09-25","2025-09-25T13:28","G","O","111111","","","","1CnEgBK45nFU2YDftVu-zXX2upN4gr-JC"],["26","2025-09-25","2025-09-25T13:29","G","O","111111","","","","1ZMw27yCjZ5wnFJVYrPSgYYWYpnX9gz1-"],["98","2025-09-25","2025-09-25T13:31","G","O","111111","","","","1PypHxpRCB9SQzvAowb-AzSkzH8HVzacp"],["27","2025-10-20","2025-10-20T09:41","T","O","111111","NÃO SUBIU A QUANTIDADE CORRETA DE PASSAGEIROS NO SISTEMA","","","1izw7ZDyCE7sLJoqC9j5tb4n99oyHoUQV"],["36","2025-10-29","2025-10-29T08:17","T","O","111111","","","","169Wd-ZseqGp_VyWO-b7NDQeLJswrDeFL"],["42","2025-10-29","2025-10-29T10:15","T","O","111111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1Gfd7gCaEo-x94O-PB4BXlNY5Cj_Iqxdf"],["71","2025-10-30","2025-10-30T12:07","T","O","110011","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1k1Y8g3bSV5fCjbFcYy1eicivpla3Rvch"],["95","2025-10-30","2025-10-30T12:08","G","O","111111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1coYdxwyUay2zAEiVLP8GjX8aFC1liala"],["90","2025-10-30","2025-10-30T12:10","G","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1500HdLNd0Vpqg5TSq1I6DVnAV2yHmW3n"],["74","2025-10-30","2025-10-30T12:10","G","O","111111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1kteZOQ7CAZIKAlZOvFKWEMQhCp2bPvM1"],["99","2025-10-30","2025-10-30T12:12","G","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1TtCoIvomgJiPqtBRCIAVeZz-8feIXk0P"],["81","2025-10-30","2025-10-30T12:16","G","O","111111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1JMSch7zgY9l5nzsVqQo_oUZpryAhqDOh"],["26","2025-11-11","2025-11-11T08:07","T","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1Kv-Q675fPBSkWCsNLS0WOYikpMRfDpaC"],["26","2025-11-17","2025-11-17T11:09","T","O","111111","","","","1Gb3fZdPbOr7C__6LFYG8IpdB-c6eRl7j"],["36","2025-11-17","2025-11-17T11:14","T","O","111111","","","","12MUN50-XSWEtpqlu0G9hqkfI2stKddab"],["87","2025-11-17","2025-11-17T11:20","T","O","111111","","","","1a18j71iWQEvT5CmhZ62oBRuwRyw1iRlr"],["24","2025-11-17","2025-11-17T11:48","T","O","111111","SUPORTE QUEBRADO","","","1oHo4Vb-LYGGvg0n615vMaoWSgrE_1C4Y"],["27","2025-11-17","2025-11-17T12:31","T","O","111111","","","","1mb2vnCcCkEtiddv9giWWzMqAZn4FY_Lh"],["27","2025-11-27","2025-11-27T20:20","G","O","110111","CABO DO CARREGADOR DANIFICADO","","","1r8rlvNoOdPVnTQjszyvD-M-dC0sAIwf5"],["77","2025-12-09","2025-12-09T12:48","T","V","100111","CHIP SEM DADOS|CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","",""],["10","2025-12-15","2025-12-15T11:43","T","O","111111","","","INSTALADO",""],["86","2025-12-15","2025-12-15T13:00","T","O","111111","","","TROCA DO CELULAR","1Ei7H6Z5AehlaMNLSYhOF_2BcSxnRQlpE"],["24","2026-01-26","2026-01-26T10:11","T","O","111101","SUPORTE QUEBRADO","","","1uhhwC5uZkB1YKhx9AEpJtKrTV3GPZM9N"],["93","2026-01-26","2026-01-26T10:13","T","O","111111","","","",""],["36","2026-02-22","2026-02-22T14:42","T","O","111111","","","",""],["80","2026-04-01","2026-04-01T10:28","T","O","111111","","","","1_YLib9Dcit9fzpVsC28Z2fcpOBgFBJnr"],["26","2026-04-01","2026-04-01T10:33","T","O","111111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO|BLUETOOTH DESLIGADO","","","1ouaUujBrcKPRFl5BDywA68jwamnUAlTg"],["35","2026-04-06","2026-04-06T11:21","T","V","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","COLOCADO CONECTOR MAGNÉTICO","1ug9OpA4BY6S55vzwkO8VUDBdR6yfnC-N"],["80","2026-04-06","2026-04-06T11:29","T","O","111111","","","","1cV-5qZ352-o1DdkP-xe_HkcVaru2Lw4v"],["25","2026-04-06","2026-04-06T11:34","T","O","111011","LEITOR SOLTO","","LEITOR COLADO","12kaRAo1KYIAPORAu53bJd6SbvgpY37ve"],["42","2026-04-06","2026-04-06T11:47","T","V","101111","BATERIA INCHADA|CHIP SEM DADOS","","CHIP TROCADO","1LPBIT-rdEgZ-LhgRX1JvVyUdNeeFHPCX"],["72","2026-04-06","2026-04-06T11:56","T","O","111101","CONECTOR DE INDUÇÃO NÃO ENCONTRADO|SUPORTE QUEBRADO","","PEDIR CABO","12fy4vclCwplGjE5HJB8ozmX_D_ghr4Rf"],["69","2026-04-06","2026-04-06T12:04","T","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","COLOCADO CONECTOR MAGNÉTICO","1LfjsF0ddSOuyUisSWWQjS7HGANyFQ8gg"],["82","2026-04-06","2026-04-06T12:07","T","O","111110","TELA TRINCADA","","","1hXb8iTzViA58x7vQMnf2d1pxxfQ7HTBV"],["68","2026-04-06","2026-04-06T12:19","T","O","111111","","","",""],["26","2026-04-06","2026-04-06T12:29","T","O","111111","CELULAR NÃO ESTAVA NO VEÍCULO","","",""],["24","2026-04-13","2026-04-13T09:15","T","O","111001","SUPORTE QUEBRADO|LEITOR QUEIMADO","","LEITOR TROCADO","1-HxSGJxxvX80M7zVkyGeHUBTPDlJoEpd"],["12","2026-04-13","2026-04-13T09:32","T","O","111111","","","",""],["25","2026-04-13","2026-04-13T10:11","T","O","111111","","","",""],["67","2026-04-13","2026-04-13T10:44","T","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","CABO TROCADO POR CONVENCIONAL","1lvbbZ5tmJ6czNgo7qWAmHLAhu9hKJweG"],["13","2026-04-13","2026-04-13T10:51","T","O","111111","","","","17uV_riLRuKcnbVwWqhU0DpRD47yACdpo"],["10","2026-04-13","2026-04-13T10:57","T","O","111111","","","","1RHTzEkygmRvisVRJaobbGmHRroRJZrMD"],["35","2026-04-13","2026-04-13T11:01","T","O","111111","","","","1UuEcAclu6VV-CWZ0CbRG5RiojYjl5ArY"],["82","2026-04-13","2026-04-13T11:34","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1wFTp9BSDQ0b28p77WMOAgIbl0BZR8oGG"],["42","2026-04-13","2026-04-13T11:55","T","O","111110","BATERIA INCHADA","","","1RQqO_dj4lWgWiEr-MYAd4lIwPTQVAnVT"],["86","2026-04-13","2026-04-13T12:00","T","O","111111","TELA TRINCADA","","","1Pjdn6T1scSzq7gHJgHYTHBJ-2p5SuIk5"],["69","2026-04-13","2026-04-13T12:02","T","O","111111","","","","1oULq3DtroXwhtfgz4e7_Y56Rxnr9tYOr"],["95","2026-04-13","2026-04-13T14:44","G","V","000000","BATERIA INCHADA","","TROCAR O CELULAR, TROCAR SUPORTE","11ECpgF8enm9HZEVhxO4ewoAB4l_kZnhQ"],["95","2026-04-13","2026-04-13T15:15","G","O","111101","SUPORTE QUEBRADO","","CELULAR NOVO",""],["72","2026-04-13","2026-04-13T15:19","G","O","111111","","","",""],["65","2026-04-13","2026-04-13T15:20","G","V","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","TROCAR O CABO",""],["80","2026-04-13","2026-04-13T15:21","G","O","111111","","","",""],["39","2026-04-13","2026-04-13T15:22","G","O","111111","","","",""],["81","2026-04-13","2026-04-13T15:24","G","O","111111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","TROCAR CABO",""],["99","2026-04-13","2026-04-13T15:25","G","O","111111","","","",""],["89","2026-04-13","2026-04-13T15:25","G","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","TROCAR CABO",""],["93","2026-04-13","2026-04-13T15:28","G","O","111111","","","",""],["74","2026-04-13","2026-04-13T15:28","G","V","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","",""],["73","2026-04-13","2026-04-13T15:29","G","V","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","TROCAR CABO",""],["75","2026-04-13","2026-04-13T15:30","G","V","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","TROCAR CABO",""],["90","2026-04-13","2026-04-13T15:43","G","N","110001","CARRO NAO ESTAVA NA GARAGEM","","",""],["71","2026-04-13","2026-04-13T15:45","G","V","111101","SUPORTE QUEBRADO","","TROCAR O SUPORTE",""],["98","2026-04-13","2026-04-13T15:47","G","O","111111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","TROCAR CABO",""],["83","2026-04-13","2026-04-13T15:52","G","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO|BATERIA INCHADA","","TROCAR CABO",""],["68","2026-04-14","2026-04-14T10:21","T","O","111111","","","","1cTyl5F5PYLZYkxdY8S_HlUz-KU2BQ4MU"],["89","2026-04-14","2026-04-14T10:23","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1hT3LQPTcy-gv4MX-BGGiFS4zwy3QaMre"],["37","2026-04-14","2026-04-14T10:26","T","O","111111","","","","1s3ae8BbKKZeO_lNHCGLk5JJIgZcIOxex"],["99","2026-04-14","2026-04-14T10:28","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1uWK08LM-y4DH7uU6Nu3TacocH-xpUMyi"],["98","2026-04-14","2026-04-14T10:36","T","O","111101","","","CABO NOVO","1fueeEmbJ6crFedjtel-k1xAIQdvZ8aR9"],["10","2026-04-14","2026-04-14T10:40","T","O","111111","","","","103VXM1rUbxadaVzCu6sfwkqnkqBEU9H9"],["69","2026-04-14","2026-04-14T10:41","T","O","111111","","","","11WxiQNjp3DTXmQwFIV42V_wXUihFklnq"],["14","2026-04-14","2026-04-14T10:43","T","O","111111","TELA TRINCADA","","","1Zokz-BK0LOATiShektwaniHiBarbrVIK"],["77","2026-04-14","2026-04-14T10:54","T","V","111110","BATERIA INCHADA|CONECTOR DE INDUÇÃO NÃO ENCONTRADO|TELA TRINCADA","","TROCAR O CELULAR","1HK0SqSE7doHveLEPX62lfDscPSDzvbkB"],["84","2026-04-14","2026-04-14T10:57","T","O","111111","","","","1a3-IT3T_PXgBbKlo_uRtNTC-umJrLnRA"],["26","2026-04-14","2026-04-14T15:01","G","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","CABO TROCADO",""],["81","2026-04-14","2026-04-14T15:30","G","O","111111","","","TROCADO SUPORTE E CABO","1D-f6z5Glvr00vOTKl8DPLdp0kwWm1x8v"],["83","2026-04-14","2026-04-14T15:47","G","O","111111","","","TROCADO CABO","1JkIiiy2nUwWzAmXm-cCd8y_PttLwXcwg"],["65","2026-04-14","2026-04-14T15:56","G","O","111111","","","","1bwJqL9oiKEXvGyNX84F92ioDmZocVolz"],["72","2026-04-14","2026-04-14T16:20","G","O","111111","","","CABO TROCADO","1ws0TrgfVgFw4MOQCDZroHPMS6_SP6-_z"],["95","2026-04-14","2026-04-14T16:39","G","O","111111","","","TROCADO SUPORTE",""],["24","2026-04-14","2026-04-14T21:28","G","O","111111","","","SUPORTE TROCADO","1BzBW5LP6HqOpH166MWBWHgyQuSgyN4ZE"],["65","2026-04-22","2026-04-22T00:00","T","O","111111","ESTAVA COM OUTRO APARELHO CONECTADO NO BLUETOOTH","","","1dl1JLZ5ShfF7MthxZeRCShoDC8lqHgdf"],["35","2026-04-22","2026-04-22T11:05","T","O","111110","BATERIA INCHADA","","",""],["88","2026-04-22","2026-04-22T11:20","T","O","111110","TELA TRINCADA","","","10Vc9c1Ypyg_wERSiommgX_vBkzCIUBwi"],["98","2026-04-22","2026-04-22T11:25","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1KhB6Usl_z9SuIARAQxlUfSizfyxBhAjD"],["86","2026-04-22","2026-04-22T11:30","T","O","111111","BLUETOOTH ESTAVA DESLIGADO","","","1JECELTrxiJS92DYb4iAuh6o3x32_osuU"],["93","2026-04-22","2026-04-22T11:33","T","O","111111","","","","1edW1GqBpnoMgw9H1WXTzKZTuxmAMQs_m"],["11","2026-04-22","2026-04-22T11:35","T","O","111111","","","",""],["37","2026-04-22","2026-04-22T11:39","T","O","111111","","","","1PyYp8y6_NYG8o_4kwCfBjOs6LCvnSuQm"],["13","2026-04-22","2026-04-22T11:42","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1N__uvcXr3v9Hnk6uATCpG46MX1V3g5Gn"],["14","2026-04-22","2026-04-22T11:44","T","O","111110","BATERIA INCHADA|TELA TRINCADA","","","1RN6SSr_yfkyyMVZ8UtP2heCG-YLxKI09"],["12","2026-04-22","2026-04-22T12:07","T","O","111111","TABLET","","",""],["85","2026-04-22","2026-04-22T12:10","T","V","111110","BATERIA INCHADA","","","1uoVstgW9hPrK4iLW8__lSBc_yIXJ3JyV"],["87","2026-04-22","2026-04-22T12:12","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1XL94yiPT-5IgOVF-PBsKZwDiIOtq9972"],["10","2026-04-22","2026-04-22T12:13","T","O","111101","SUPORTE QUEBRADO","","SUPORTE TROCADO","1JkwrFs8aNiNV6JEnpDr6_nsc0e8V6d3U"],["26","2026-04-22","2026-04-22T12:24","T","O","111111","","","","1lP9RESxWOlFXXwk0wnKbcFLJ_bjzFNJd"],["42","2026-04-22","2026-04-22T12:27","T","V","110110","BATERIA INCHADA","","","1DWUZ33B-B6Az_c1_coX3rY5GoCWwmAND"],["25","2026-04-23","2026-04-23T10:25","T","O","111111","","","","1GlLmnMHFBhPYf1KvR4fk2Zjo7k6pJCmf"],["69","2026-04-23","2026-04-23T10:29","T","O","111111","","","","1_yJhzGOU8ar8Tsqt42yaZRyxb6W6jxSG"],["68","2026-04-23","2026-04-23T12:10","T","O","111111","","","","1j2fIZNcREoXYMde11AoVnx44jIPjBqz7"],["99","2026-04-27","2026-04-27T08:42","T","O","111111","","","","1_EwS8BIJgIW8D2REry9zeh8Lwco2hakg"],["26","2026-04-27","2026-04-27T08:45","T","O","111011","LEITOR LENTO","","","1XyQr_hBXc7axuc970P4qBg_zq49H5PTO"],["67","2026-04-27","2026-04-27T08:52","T","O","111111","","","","1HEgT3bn2sVKDaGovQhV7n9L6_iIUzCuf"],["25","2026-04-27","2026-04-27T08:53","T","O","111111","","","","1g9Us18EnA4Uy7I7Q26kIjIW0np_miLIr"],["80","2026-04-27","2026-04-27T09:24","T","O","111111","","","","10WD_e5-TRuMmhCY2fctHAvsxdJxkxknL"],["93","2026-04-27","2026-04-27T09:30","T","O","111111","","","","1T7adiB0VHk7lcJBDADNkPOgS_1jXlglk"],["88","2026-04-27","2026-04-27T09:42","T","O","111111","SEM CABO DE CARREGAMENTO","","COLOCADO CABO NOVO","1P-6qweOl2-fCRhVAukyt7ycztTfMJHP3"],["82","2026-04-27","2026-04-27T10:40","T","V","111110","TELA TRINCADA","","CABO TROCADO","1WdP22SKzq5IyJE5ZI1KyUvJTGTjRSSAX"],["37","2026-04-27","2026-04-27T10:52","T","O","111111","","","","142cD0wnrurXYfEhFLaOeE50Pjftp_vT5"],["13","2026-04-27","2026-04-27T10:55","T","O","111111","","","","1IwLiSBWaFKIPgyvu5X6oBLKr8xS8ZCan"],["69","2026-04-27","2026-04-27T11:01","T","O","111111","","","","1DxFheqebPehfGRSHWATOdV-jsuFf4Xi0"],["68","2026-04-27","2026-04-27T11:05","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1hKY6czjYX01WETvWOGvdRnfjpcHgylCN"],["68","2026-05-05","2026-05-05T10:03","T","O","111111","","","","13Ewzy--FSI4klSolmd1zQhQ7SSo5uDVh"],["69","2026-05-05","2026-05-05T10:05","T","O","111111","","","","1Gxvo5Wsfpp1B_2q6thAN0ZUnmXM-786r"],["85","2026-05-05","2026-05-05T11:55","T","O","111111","TELA TRINCADA","","",""],["80","2026-05-08","2026-05-08T11:58","G","O","111111","","","",""],["68","2026-05-11","2026-05-11T10:04","T","O","111111","","","","1qHpVEl6ohncaQJnIPn9wp4GR9-3RNnXy"],["77","2026-05-11","2026-05-11T10:46","T","O","101110","BATERIA INCHADA|CHIP SEM DADOS","","CELULAR ATUALIZADO","128fOJShFWdjSYhVzUQWnHLGhQw5u_QJ5"],["90","2026-05-11","2026-05-11T10:58","T","O","111111","CAPA DE CELULAR QUEBRADA","","","1ACtvNqHPeKpSvIoQmeI20bvIrJI752sy"],["86","2026-05-11","2026-05-11T11:02","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","15aRWik--R9ITCyTfH8o1pGIcC7ByxRWI"],["93","2026-05-11","2026-05-11T11:18","T","O","111111","","","","1MLKuiS0o0hEgpeDlGZ86IuEeerYd6sZF"],["83","2026-05-11","2026-05-11T11:29","T","O","111111","BATERIA INCHADA","","","1sw1ZWTnT2BpiKaTTCoIHOc8e3u3ea6N1"],["69","2026-05-11","2026-05-11T11:30","T","O","111111","","","",""],["85","2026-05-11","2026-05-11T11:31","T","O","111111","","","",""],["35","2026-05-11","2026-05-11T11:36","T","O","111111","BATERIA INCHADA","","",""],["10","2026-05-11","2026-05-11T11:39","T","O","111111","","","",""],["36","2026-05-11","2026-05-11T12:10","T","O","111111","","","",""],["99","2026-05-12","2026-05-12T10:56","G","O","111111","","","",""],["98","2026-05-12","2026-05-12T10:56","G","O","111111","","","",""],["95","2026-05-12","2026-05-12T10:57","G","O","111111","","","",""],["93","2026-05-12","2026-05-12T11:10","G","O","111111","","","",""],["91","2026-05-12","2026-05-12T11:11","G","O","111111","","","",""],["90","2026-05-12","2026-05-12T11:12","G","O","111111","","","",""],["88","2026-05-12","2026-05-12T11:13","G","O","111111","","","",""],["87","2026-05-12","2026-05-12T11:18","G","O","111111","","","",""],["83","2026-05-12","2026-05-12T11:19","G","O","111110","BATERIA INCHADA","","",""],["82","2026-05-12","2026-05-12T11:39","G","O","111110","TELA TRINCADA","","",""],["81","2026-05-12","2026-05-12T11:39","G","O","111111","","","",""],["74","2026-05-12","2026-05-12T11:45","G","O","110111","TROCAR O CABO","","",""],["73","2026-05-12","2026-05-12T11:47","G","O","110111","TROCAR O CABO","","",""],["37","2026-05-14","2026-05-14T07:56","T","O","111111","","","","1lDBJInCSCDbxiDsJzlNOQG8Z5QKixFbL"],["99","2026-05-15","2026-05-15T11:32","G","O","111111","","","","1h0Ma1Vo_bQmf4EAAFB9pwjNzwkAzXQsK"],["93","2026-05-15","2026-05-15T11:33","G","O","111111","","","","1rvNGjeIoZcellTa2Ddnio1tNGg9-JGW2"],["95","2026-05-15","2026-05-15T11:39","G","O","111111","","","","19xctkETHuWH8OYAy5d4m3n1C-eeQcPDR"],["88","2026-05-15","2026-05-15T11:40","G","O","111110","TELA TRINCADA","","","1SzqLcXmIKxsR6UNnuAEK87qrMphpoYV-"],["89","2026-05-15","2026-05-15T11:44","G","O","111111","","","","1AeW88a28JyBVWS2tpJ9uErlPoV0bktgh"],["82","2026-05-15","2026-05-15T11:52","T","O","111110","TELA TRINCADA","","","19V0k2RrbiqupgnY_FmQSuPCBtnTIRIPX"],["83","2026-05-15","2026-05-15T11:54","G","O","111110","BATERIA INCHADA","","","1uZuJXXq97ENx6_sTZOuFCpG2jtG1y7X8"],["86","2026-05-15","2026-05-15T11:56","G","O","111110","TELA TRINCADA","","","1GCj4vs1t0BL3h8UaVDINl1rhdWCaazNA"],["81","2026-05-15","2026-05-15T12:00","G","O","111111","","","","10QvEXP-LJ0U51W3y8FKlv1FtVGNVeP0o"],["73","2026-05-15","2026-05-15T12:04","G","O","111111","","","","1v-RxwUDtwn1qUFINRPpFObHZhIaBwg8A"],["74","2026-05-15","2026-05-15T12:06","G","O","111111","","","","11Q_GdXrirOI57TgCE-rYcPuNuT2cbHvM"],["75","2026-05-15","2026-05-15T12:15","G","O","111111","","","",""],["72","2026-05-15","2026-05-15T12:16","G","O","111110","TELA TRINCADA","","","1BI51x0u5ycpQsqXWJ_HCsRJ9wxpO50Vv"],["72","2026-05-15","2026-05-15T12:18","G","O","111111","","","","15niqHGSzvOAZBmgl2_mtBXora0TFgXRC"],["67","2026-05-15","2026-05-15T12:24","T","O","111111","","","","1aw2ts_Q0o-zt9sPy94ll7vdAAxuo9Kwa"],["71","2026-05-15","2026-05-15T12:25","T","O","111111","","","","1oSTJvxS2qfAagi5gJ4AjN2VR5FYNrFq9"],["87","2026-05-18","2026-05-18T08:51","T","O","111110","BATERIA INCHADA|TELA TRINCADA","","","11XFkmoUDpJNT_Y0vTA6F7yPXLgckhq6a"],["65","2026-05-18","2026-05-18T09:03","T","O","111111","","","","18s3YBcY1nPhzqX5j7xjel9TyFNO6LU88"],["88","2026-05-18","2026-05-18T11:28","T","O","111110","TELA TRINCADA","","","1KoBdlzseLoiNPOyGNChCAQC7DiGNHRln"],["89","2026-05-18","2026-05-18T12:48","T","O","111111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","CABO TROCADO","1yEIw3aP2ugZfeqwPyZbtacEQX1Nl4UAS"],["25","2026-05-18","2026-05-18T13:01","T","O","111111","","","",""],["12","2026-05-18","2026-05-18T13:20","T","O","111111","","","",""],["14","2026-05-18","2026-05-18T13:27","T","O","111111","","","",""],["11","2026-05-18","2026-05-18T13:32","T","O","111111","","","",""],["36","2026-05-18","2026-05-18T13:35","T","O","111111","","","",""],["25","2026-05-18","2026-05-18T13:36","T","O","111111","","","","1WTNltFczbr9HmVYoEck2UpiA2cKvtvBI"],["10","2026-05-18","2026-05-18T13:38","T","O","111111","","","",""],["42","2026-05-19","2026-05-19T11:16","G","O","111110","TELA TRINCADA|LATERAL DO CELULAR QUEBRADO|BATERIA INCHADA","","","1Svmqwo56b3zD93z4I-ISeb0iIscbLSXA"],["90","2026-05-19","2026-05-19T11:18","G","O","111111","","","","17camERdcGujg4pcSew75t2NIssFkzOlN"],["13","2026-05-19","2026-05-19T11:19","G","O","111111","","","","1lz7y2qSj2yzPaDhunegDRwJnm_RGAl4p"],["95","2026-05-19","2026-05-19T11:21","G","O","111111","","","","1utEf35-JbQtEP3uWETlRejTZZnH2hNwx"],["99","2026-05-19","2026-05-19T11:23","G","O","111111","","","","1qNEfUq8aH8_U0izhtpGy0o4o7HL-U4Vs"],["83","2026-05-19","2026-05-19T11:25","G","O","111110","BATERIA INCHADA","","","1bBWN6SgpnjpbTHX-J4rIQDGWD21rSZZi"],["86","2026-05-19","2026-05-19T11:28","G","O","111110","TELA TRINCADA","","","1wyUyh-eoGnDbJO08Wd5buao3cWIx7y9G"],["65","2026-05-19","2026-05-19T11:29","G","O","111111","","","","1lsz_MnHymYRirNzpphFQT8s786dABEMw"],["81","2026-05-19","2026-05-19T11:31","G","O","111111","","","","1JfOvkpYMNUISGIo7xqbvpr3YLPLI2wtL"],["91","2026-05-19","2026-05-19T11:34","G","O","111111","","","","1w5aJp0zZv0ja7W_uFedqYwUdv2iEkGkc"],["87","2026-05-19","2026-05-19T11:36","T","O","111110","TELA TRINCADA","","","1g00oDgZ8oLiroDz-T9P5-FT8g-jbEOy9"],["38","2026-05-19","2026-05-19T11:38","G","V","100111","CHIP SEM DADOS|CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1VgASBLVw1nosoQjDrh5G4ucL-M4yEMfd"],["39","2026-05-19","2026-05-19T11:42","G","O","111111","","","","1QMbI16fC7UHj0G1CJoW4F70JsI-lVYaL"],["74","2026-05-19","2026-05-19T11:43","G","O","111111","","","","1BK1UXPNJ_l5EznDVWZVUAaz7nhX8k1sI"],["74","2026-05-19","2026-05-19T11:44","G","O","111111","","","","1a1cB1xUxZlWjJe5atXI4x_mg5I3W_uCS"],["82","2026-05-19","2026-05-19T11:44","G","O","111110","TELA TRINCADA","","","14k1N8zKRNXimIWQHS_NjC6J1IGYXq7pQ"],["71","2026-05-19","2026-05-19T11:45","G","O","111111","","","","1HatcV9FLsc6zP9w7teicIi1b5BPVYmPZ"],["93","2026-05-19","2026-05-19T11:46","G","O","111111","","","","1ztT_n6b30TU4mM9Gt5GE9rB1DilQOH31"],["73","2026-05-19","2026-05-19T12:00","G","O","111111","","","","1eHvGoA5M5czc_zIDUivWccbBLVeTS_yR"],["75","2026-05-19","2026-05-19T12:02","G","O","111111","","","","17IfrkJ-m8h-S8RTSY9k6EC866aGfIPPu"],["88","2026-05-19","2026-05-19T12:04","G","O","111111","","","","1uoqhOfD8kdmh5iEcIIbgkvWpWL-CgAHe"],["37","2026-05-19","2026-05-19T12:05","G","O","111111","","","","1GbAk-RU0Waz2RcEd1nSsBZmkoAH4bDQk"],["53","2026-05-19","2026-05-19T12:06","T","V","100111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1WwVDbMvnwKlJ96s0EVHVMFsYpaoFrhMP"],["56","2026-05-19","2026-05-19T12:07","G","V","101111","","","","1aCUlDFaiw6cjeB5-SnbgTEKmWZom2HIn"],["80","2026-05-20","2026-05-20T09:31","G","V","111011","LEITOR QUEIMADO","","","1h8U4oZNXTGtBUL0kqXZAQlTdmmxT4SFH"],["95","2026-05-22","2026-05-22T15:26","T","O","111111","","","","1COlmLBfhoc3rFqoewNOZljW2YMq4ICND"],["56","2026-05-22","2026-05-22T15:34","G","V","101111","CHIP SEM DADOS","","","17Hw5aNzboRDcSpZ93vphsIlftYhTcCNU"],["73","2026-05-22","2026-05-22T15:36","G","O","111111","","","","1vyjET3htz2HVdvP4kMJtp4yK6WWkPuDA"],["25","2026-05-22","2026-05-22T15:37","G","O","111111","","","","1N68e0PJoU6aIYsq72zYNSFc2rM_iBf3z"],["55","2026-05-22","2026-05-22T15:39","G","V","101110","CHIP SEM DADOS|TELA TRINCADA","","",""],["42","2026-05-22","2026-05-22T15:40","G","O","111110","BATERIA INCHADA","","","17sJi4y-b9ZdwpQu_VCdrZbt1jcRz9VFo"],["67","2026-05-22","2026-05-22T15:43","G","O","110111","TROCAR O CABO","","","1URamUfReA4V3u60yGozj6rI3fAQfbO9e"],["68","2026-05-22","2026-05-22T15:45","G","O","111111","","","","1lB62Xfl3aXxyvfYllgJuavYlZwDk_Xj3"],["72","2026-05-22","2026-05-22T16:03","G","O","111111","","","","1r8Uhh4AvA-Ndc3zVl-NPOrSB1J27qw2Z"],["98","2026-05-22","2026-05-22T16:04","G","O","111111","","","","1i-1S9-hRHSHT7Ce48lJc9lHZLxg-3f5i"],["75","2026-05-22","2026-05-22T16:06","G","O","111111","","","","1SBPpgLYyX5JtF8VQNbDLmKvs9UX0AK11"],["74","2026-05-22","2026-05-22T16:07","G","O","111111","","","","1Hn6UU_9GPyrQgo_59sjpzE2ZSa_sPS2-"],["80","2026-05-22","2026-05-22T16:09","G","V","111011","TROCAR O LEITOR","","","1UiPNBXYK4ERT1BhzZw-wKpHmHrqRyHHZ"],["39","2026-05-22","2026-05-22T16:10","G","N","110001","VEÍCULO FORA DA GARAGEM","","","1O4aOXHZrKwfR4oikj3M2NGsjHNhuYUsT"],["83","2026-05-22","2026-05-22T16:12","G","O","111110","BATERIA INCHADA","","","1yPstaRGEVHOxoaeCk6rQ57NwXf49rV7D"],["87","2026-05-22","2026-05-22T16:14","G","O","111110","BATERIA INCHADA|TELA TRINCADA","","","1Jn3i2LzHSAiTSgcKOc7soARUY72AWAKo"],["88","2026-05-22","2026-05-22T16:16","G","O","111110","TELA TRINCADA","","","146lQzf00Y0w8EbgEW0LVv1V0L3cf_t7u"],["89","2026-05-22","2026-05-22T16:21","G","O","111111","","","","1jG99otGa114aSWP5P_VBX0pGIEPZsgw4"],["65","2026-05-22","2026-05-22T16:22","G","O","111111","","","","1tX3rlqg8xMnNEN9wx1Tgt-hEN0_w6cKN"],["91","2026-05-22","2026-05-22T16:24","G","O","111110","TELA TRINCADA","","","1l239QCOW2UOfDpSIJnrZwgiAZ0EZx5GR"],["93","2026-05-22","2026-05-22T16:25","G","O","111111","","","",""],["93","2026-05-22","2026-05-22T16:26","G","O","111111","","","",""],["38","2026-05-22","2026-05-22T16:29","G","V","100111","CHIP SEM DADOS|CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","","1j-xb4RZEun7QKixjJ08szflAfGq_NsHI"],["71","2026-05-22","2026-05-22T16:32","G","O","111111","","","","1EKGA5AcY3bLjflD_Znd6D5TAs0GhAMaL"],["90","2026-05-25","2026-05-25T09:31","T","V","111011","TROCAR LEITOR","","","1hK9YcmrI_coKJJMKsHbIj3gQfELcTQrP"],["13","2026-05-25","2026-05-25T10:34","T","V","101111","CHIP SEM DADOS","","","1G5aDOEzXLTvMt0YGRiBB0CghJ6ZqCDse"],["14","2026-05-25","2026-05-25T10:36","T","O","111111","","","","1mdj3vyGSK3pJdlxocuOmjwQtrlwRqJ15"],["66","2026-05-26","2026-05-26T14:01","G","O","111111","","","","14S_3-PffeVWHnQNoZyQgDrjUV-siXxpC"],["90","2026-05-26","2026-05-26T14:12","G","V","111011","TROCAR LEITOR","","","1PqBzUDdytMPypLUbxrPDcfi8PsTixshX"],["95","2026-05-26","2026-05-26T14:13","G","O","111111","","","","1zn01nEZMBnMKB2fdx_mL4hcCeAcQEGZQ"],["81","2026-05-26","2026-05-26T14:15","G","O","111111","","","","1XyZCmLSnPyqbEY8cYZtORj7-tjxkUTTE"],["69","2026-05-26","2026-05-26T14:16","G","O","111111","","","","1vNeEKPP46UuE0QjoNhV9LDN6ryVngR95"],["39","2026-05-26","2026-05-26T14:17","G","O","111111","","","","1rJKRxHeTjufGDVjgwb_I2MxeVAnbXkdW"],["37","2026-05-26","2026-05-26T14:20","G","O","111111","","","","1vN0G-84YmGRoTY6__cu-N441rhxIftou"],["86","2026-05-26","2026-05-26T14:23","G","O","111111","","","","1x6NoDNT3RqKxWEW1biwtdx_pJZtoqinY"],["99","2026-05-26","2026-05-26T14:24","G","O","111111","","","","1AY-ixPnJiaXsV7365U6XxC5s2u3rEiYc"],["83","2026-05-26","2026-05-26T14:26","G","O","111110","BATERIA INCHADA","","","1qXC7OMdtpjg540nDmGHIum4CaLtTQmiN"],["68","2026-05-27","2026-05-27T11:15","T","O","111111","","","","1PuEszd8VDD0g4HSsPI_InilxxnCd2NNF"],["86","2026-05-27","2026-05-27T11:43","T","O","111111","","","","1CVLmyHqMi7-mBCcTQ1wWHW-yWqrekIQ-"],["14","2026-05-30","2026-05-30T11:15","G","O","111111","","","CELULAR TROCADO POR NOVO","1aPQy6kLQw5K9lxefdqwplw1nVskuI8FT"],["42","2026-05-30","2026-05-30T13:32","G","O","111111","","","CELULAR TROCADO POR NOVO",""],["15","2026-06-01","2026-06-01T13:22","T","O","111111","","","INSTALADO",""],["66","2026-06-02","2026-06-02T12:15","G","O","111111","","","",""],["67","2026-06-02","2026-06-02T12:17","G","O","111111","","","","1f6cz2A8QuCcFzhHzMSL6Q0DMvMPLgQvc"],["90","2026-06-02","2026-06-02T12:18","G","O","111111","","","","1U2h2sT-gAhqY9ZpOY2gdPTLC-1UoEzXB"],["85","2026-06-02","2026-06-02T12:19","G","O","111110","TELA TRINCADA","","","136_6oh-sNpMqz_a2E62Oq_PNO1lZWsME"],["83","2026-06-02","2026-06-02T12:20","G","O","111110","BATERIA INCHADA","","","1gv82GZGLfwMumLfQb2nf0s7EKwYm_caC"],["82","2026-06-02","2026-06-02T12:21","G","O","111110","TELA TRINCADA","","","1yLatc5G4XcJLzhswN_b17ttNiT75oTiN"],["91","2026-06-02","2026-06-02T12:23","G","O","111111","","","","1NPxhXQoIw2aRklzGnO5JDPebHvwNV2Il"],["95","2026-06-02","2026-06-02T12:23","G","O","111111","","","","1oJP-kS8vwLGvQ3gTaMRJgWizH6fkm4zc"],["65","2026-06-02","2026-06-02T12:25","G","O","111111","","","","1U-9IjLxlEsMb9T8h7AFq8Zd9JZOzDAbA"],["99","2026-06-02","2026-06-02T12:26","G","O","111111","","","","1rh7hURzmNsYcy7G2dB83V9YsNO2jzCgC"],["77","2026-06-02","2026-06-02T12:27","G","N","001110","BATERIA INCHADA|CELULAR EM LOOP","","","1odXArFw4n2WY4fAi1zM_4NMLjuAMYk6a"],["37","2026-06-02","2026-06-02T12:29","G","O","111111","","","","1wJtpfxcaluqtpsyJQA0Y_GrIgLiMU4XK"],["74","2026-06-02","2026-06-02T12:30","G","O","111111","","","","1c0AAgSntc-iu24dr8n33jYWxj7gXszcJ"],["93","2026-06-02","2026-06-02T12:31","G","O","111111","","","","1ZtJ9o5xGzpuF6K6OJbuXoEr9MUZ3JXUG"],["77","2026-06-03","2026-06-03T12:05","T","O","101111","","","CELULAR TROCADO","1l31ACS9fGsqtrjbJMbm7_WvnyU-bDez6"],["11","2026-06-03","2026-06-03T12:55","T","O","111111","","","LEITOR USB","1ai1gkUd8jSNsTvkcNGb57W2JPIOM2fb0"],["42","2026-06-08","2026-06-08T09:11","G","O","111111","","","",""],["24","2026-06-08","2026-06-08T09:49","T","O","111111","","","","1S-GaILG4AtR8doq0BizS1jAWEwQugYNh"],["13","2026-06-08","2026-06-08T10:02","T","O","101111","","","","16pfod0pgGY9JfronHN0xb-QSY81bzot9"],["69","2026-06-08","2026-06-08T10:28","T","O","111111","","","","1tBcuwhcv1uFZ03kJGw17Q3VbolTl7xoc"],["85","2026-06-10","2026-06-10T08:07","T","O","111110","TELA TRINCADA","","","1TuVhKhzHyjTlWLbFTHNUwyjTqSMEg90k"],["15","2026-06-10","2026-06-10T08:50","T","O","111111","","","","1Nk31MgU3IFkpWr-UwDMVphP3aocOfsMj"],["42","2026-06-10","2026-06-10T09:21","T","O","111111","","","","1plSwiW6z70nVQnFlNr49yOi_Ch-naVUJ"],["68","2026-06-10","2026-06-10T10:20","T","O","111111","","","","1CDne1rwuW2TbM_YKHyKy-mixEfMoh5j8"],["80","2026-06-10","2026-06-10T10:34","T","O","111111","","","","1k9Awmv_dOtlNdP8QX96dG6VRsWd7Tx5O"],["98","2026-06-12","2026-06-12T10:33","G","O","111111","","","","1i_DbnmKKsWLU6n7fB40XsT8YSp4Ow6D7"],["95","2026-06-12","2026-06-12T10:34","G","O","111111","","","",""],["91","2026-06-12","2026-06-12T10:48","G","O","111110","TELA TRINCADA","","",""],["37","2026-06-12","2026-06-12T10:51","G","O","111111","","","","1jjgnJyez8J9hXMYPee_Y0LwsPW3mDqB2"],["81","2026-06-12","2026-06-12T10:53","G","O","111111","","","","13I21N1UVIa62_jfQWbhWYP1oTCTRdgk2"],["85","2026-06-12","2026-06-12T10:58","G","O","111110","TELA TRINCADA","","","1Lr9PalRMersSILwMQYhUqlofTluhZl_8"],["86","2026-06-12","2026-06-12T11:00","G","O","111111","","","","1mPW4mD-3LJu2H_EwoD28KJY0IdjO1MUd"],["95","2026-06-12","2026-06-16T12:16","G","O","111111","","","","1akX20AuuQpGbhJPdCdlW25dfGqbUK7IH"],["67","2026-06-16","2026-06-16T12:17","G","O","111111","","","","17JWlJ6eouqZ7teZ3q-X0rbU0Z3ynHPwE"],["99","2026-06-16","2026-06-16T12:18","G","O","111111","","","","1n3N2Oe_HfHOJNzHpL_bWW7qQjpHVxXZ5"],["91","2026-06-16","2026-06-16T12:20","G","O","111110","TELA TRINCADA","","","1WfsK2SKAIR2dUuJw1L7BMN4IbbcWiJvz"],["15","2026-06-16","2026-06-16T12:21","G","O","111111","","","","1uTqgJ7-sHeSb7SJnyXWFdIJjvUWw6Ht6"],["90","2026-06-16","2026-06-16T12:23","G","O","111111","","","","1epO0YhS-kEaoaDFHzGcLmBA3XTOH4Htg"],["83","2026-06-16","2026-06-16T12:29","G","O","111111","","","","1V_3C1n6DBf3aohZE250MZE9mpJRpeYfW"],["35","2026-06-16","2026-06-16T12:35","G","O","111111","","","","1YqGcojldkeyvFeXAfJL5CHOjiY_GbB0U"],["39","2026-06-16","2026-06-16T12:49","G","O","111111","","","","1pqDyyQUG2hVbLiAoYhds6YfCSHoOG35J"],["89","2026-06-16","2026-06-16T12:49","G","O","111111","","","","1S6EYnMVtSqwi03vI9kPopErtFRVNxy9a"],["90","2026-06-16","2026-06-16T12:50","G","O","111111","","","","1to2JbkX_RFy20T7AqXFEl-lZsvwL5lBd"],["68","2026-06-16","2026-06-16T12:51","G","V","110111","CABO DO CARREGADOR DANIFICADO","","","1KiJLsT7MvtIoLxQunSp0oZfIoWarfTf4"],["71","2026-06-16","2026-06-16T12:53","G","O","111111","","","","1krSucOuQJ43C5i5VbOMNCqwulPDfguTX"],["35","2026-06-16","2026-06-16T12:55","G","O","111111","","","","1ac_64GO9ZXdPWuHspQzlC122u1TW-08c"],["82","2026-06-16","2026-06-16T12:59","G","O","111110","TELA TRINCADA","","","1jPJ4p_fUNPLUF-pkyfNZrG8462lOMGEz"],["98","2026-06-16","2026-06-16T13:01","G","O","111111","","","",""],["13","2026-06-17","2026-06-17T09:55","T","O","111111","CHIP SEM DADOS","","","1Sue7TUIz6LhfRG-B3PPbQLeIbcmgunZC"],["68","2026-06-17","2026-06-17T10:30","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","","1VJQMMqi-32lHkgCJSfchFLtjM0iU80qq"],["87","2026-06-17","2026-06-17T10:41","T","O","101111","","","","1acdO66n-TwhjgxbPU5aaJOOqPpv9lcSb"],["91","2026-06-17","2026-06-17T11:34","T","O","111111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","CARREGADOR TROCADO","1LZIJauTN0JzAgf4iFKw-cYfonC2rUO8n"],["37","2026-06-17","2026-06-17T11:46","T","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","CABO TROCADO","1PwC1rnqiPqpCTTsICE-rhp8TXM18AL_b"],["98","2026-06-17","2026-06-17T12:18","T","O","101111","CHIP SEM DADOS","","","1pFVrUsrR9DdHbQKNsndCcmJ81gL05FRe"],["14","2026-06-18","2026-06-18T15:34","T","O","111110","BATERIA INCHADA|TELA TRINCADA","","","1U7iKGxp9l1Uu1AUIlACildDvpGSYPM70"],["84","2026-06-19","2026-06-19T10:16","G","O","111111","LEITOR LENTO","","LEITOR TROCADO","1sLMXMhSYEwviNgnUAispLa6HK8IxMI6R"],["66","2026-06-19","2026-06-19T11:51","G","O","111111","","","",""],["99","2026-06-19","2026-06-19T11:51","G","O","111111","","","","1gjNYZFNlpmyTF3gdOjoviExQhoSO7dUi"],["95","2026-06-19","2026-06-19T11:52","G","O","111111","","","","19VmczzkNdXHjMSEDPZXfcGZQpUcjRv5q"],["91","2026-06-19","2026-06-19T11:53","G","O","111111","","","","1QPVrx13nrk0LW_SQ_Q5oqyUrZXey51_1"],["82","2026-06-19","2026-06-19T11:54","G","O","111110","TELA TRINCADA","","","1q5wFh4NKuLOQj0AQG8BvlMC9fmQLPxMp"],["81","2026-06-19","2026-06-19T11:55","G","O","111111","","","","1XVr_YbTrGJdEGdcUvGw_HJZsi4qjbs_X"],["36","2026-06-19","2026-06-19T11:56","G","O","111110","TELA TRINCADA","","","1RS57-ls048fl0Ig4WBySHW2ty9qgw0wX"],["89","2026-06-19","2026-06-19T11:57","G","O","111111","","","","13_IpdTvk5maY-44OjomjvE_vysZb_TMm"],["83","2026-06-19","2026-06-19T12:03","G","O","111110","BATERIA INCHADA","","","1gGMA5kObkOTi3ku9zeYJD4537kw0JcPN"],["74","2026-06-19","2026-06-19T12:04","G","O","111111","","","","1XtvBDIyZS4I-zoXdmaW19UoHUMtiU5vE"],["72","2026-06-19","2026-06-19T12:05","G","O","111111","","","","1as_36mp-5CFUpPyR54BwmiU9TiwssUt3"],["71","2026-06-19","2026-06-19T12:06","G","O","111111","","","","14JL45Oi81HX9xY8y9EmycVXDlbAD4IUX"],["67","2026-06-19","2026-06-19T12:07","G","O","111111","","","","1308Nda_1YMyr-AHrYiTOh78iXdZKHkLo"],["86","2026-06-19","2026-06-19T12:48","G","O","110111","","","CABO TROCADO","1I0kgQkdHAlwRLPTxIncRqbURs7KFSGBI"],["12","2026-06-22","2026-06-22T09:13","T","O","111111","","","",""],["87","2026-06-22","2026-06-22T09:48","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["15","2026-06-22","2026-06-22T09:49","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["13","2026-06-22","2026-06-22T10:20","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["67","2026-06-22","2026-06-22T10:32","T","O","111111","ATUALIZAÇÃO DO TRACK","","",""],["99","2026-06-22","2026-06-22T11:19","T","O","111111","ATUALIZAÇÃO DO TRACK","","CABO TROCADO",""],["13","2026-07-03","2026-07-03T13:43","G","O","111111","","","","1P7IHKWkaW8ywBm4iWuGJEeWf5Sca_qeJ"],["26","2026-07-03","2026-07-03T13:44","G","O","111111","","","","1KHpko1YGmCeLqhh_ZpBs9fhL-OkogmsY"],["80","2026-07-03","2026-07-03T13:45","G","O","111111","","","","10hpiJ6nHdpMhu7ugGEiC8FKeogTmPAzQ"],["82","2026-07-03","2026-07-03T13:46","G","O","111110","TELA TRINCADA","","","1LF7m-u-9zPyvBqF1vHmkbmfp4ePBCePP"],["83","2026-07-03","2026-07-03T13:47","G","O","111110","BATERIA INCHADA","","","1TrTum5Quxy_t8Cp903qg1jPirpQaWeXT"],["91","2026-07-03","2026-07-03T13:48","G","O","111111","","","","1tQ6EyiQdCeSggh6Z-c_24lbOh47Y1t2U"],["10","2026-07-03","2026-07-03T13:48","G","O","111111","","","","1fx77JnV9514f7TeDHBf8jw--QVj-HYsf"],["81","2026-07-03","2026-07-03T13:49","G","O","111111","","","","1YViBl7f7iUBFm7J6XliY9oxaHHu2O_iH"],["99","2026-07-03","2026-07-03T13:50","G","O","111111","","","","1uQRJMyyxelQcXRcnygfREd3N4LXGXACM"],["15","2026-07-03","2026-07-03T13:51","G","O","111111","","","","1P-LzzuEFCwKD_wh0d5UBCdZyElEN2rj1"],["35","2026-07-03","2026-07-03T13:52","G","O","111111","","","","1n9TWx37jduTjh2p-fLQiuvF05iyRa6DG"],["72","2026-07-03","2026-07-03T13:53","G","O","111110","TELA TRINCADA","","","1aul3a1Upi7p9448iFcW3CKlwkGpiIDfp"],["71","2026-07-03","2026-07-03T13:54","G","O","111111","","","","1TRi8nAb4ay4ksKJrKaD7dscTi_JioRX6"],["74","2026-07-03","2026-07-03T13:54","G","O","111111","","","","1qQGI-s2TFFe_MeXMtZEGfLDnXH0yCvw5"],["15","2026-07-06","2026-07-06T10:16","T","O","110111","TEM QUE TROCAR O CARREGADOR","","",""],["25","2026-07-06","2026-07-06T10:17","T","O","110111","","","",""],["13","2026-07-06","2026-07-06T10:38","T","O","111111","","","",""],["82","2026-07-07","2026-07-07T10:38","T","O","111110","TELA TRINCADA","","","1P8_Pip9LIGOCOlYgSnuzNDsYPQSxPq9-"],["36","2026-07-07","2026-07-07T10:39","G","O","111110","TELA TRINCADA","","","1LddEdZwgQONBg979cA-xR8LMCzhuxKa3"],["35","2026-07-07","2026-07-07T10:40","G","O","111111","","","","1u7x5cxYLQ9X3FObo8jxNDFb4VDUetjx7"],["90","2026-07-07","2026-07-07T10:41","G","O","111111","","","","1-ltNfHB010W23c1fEbq0sdjnkB3Y_qqJ"],["89","2026-07-07","2026-07-07T10:42","G","O","111111","","","","1zHF59XkfwGgDk5MQ1pKYRpt74EP-BXO2"],["88","2026-07-07","2026-07-07T10:43","G","O","111111","","","","1UJuNHp0_aRstX2gxaszbv_fyLQ_FMsRt"],["93","2026-07-07","2026-07-07T10:45","G","O","111111","","","","1uqHCIBrZW-SOHSe5LwTrIKBvXWytch7v"],["95","2026-07-07","2026-07-07T10:46","G","O","111111","","","","1EFMGJE6LSqF6vrQKUyThNdEQBqaTDJLl"],["99","2026-07-07","2026-07-07T10:48","G","O","111111","","","","1AuRdA_AtXKrhICqD1RdCY3RJKr4f4MhC"],["14","2026-07-07","2026-07-07T10:49","G","O","111110","BATERIA INCHADA|TELA TRINCADA","","","1fuQIbEwFHYwSEu9tihoyB6UsX7N-yVTx"],["85","2026-07-10","2026-07-10T11:03","T","O","111111","","","",""],["83","2026-07-14","2026-07-14T11:16","G","O","111111","","","CELULAR TROCADO","1h59Cb-L1Jq0KYTIj3e2RIDwqfHf2DDKH"],["87","2026-07-14","2026-07-14T11:16","T","O","111111","","","CELULAR TROCADO",""],["14","2026-07-14","2026-07-14T11:17","G","O","111111","","","CELULAR TROCADO","1mIlXYTet7tSRry7oBUaQ8CKL6Txxkxst"],["81","2026-07-14","2026-07-14T11:18","G","O","111011","LEITOR LENTO","","LEITOR TROCADO","1FSEumK-a9JdTWSUr0hZIUNevjq8BaPm8"],["90","2026-07-14","2026-07-14T11:19","G","O","111111","","","","1rfe1oPnNqQpFO7tH2qQyw1OmxbbLdb8j"],["10","2026-07-14","2026-07-14T11:20","G","O","101111","CHIP SEM DADOS","","","1p6YMk1cMtnaxg9PWxSLqcnwiPAwiSZ7_"],["82","2026-07-14","2026-07-14T11:21","G","O","111110","TELA TRINCADA","","","1cu_B_kMMu2k8S4BkU4JDXI70nGt4bZJj"],["13","2026-07-14","2026-07-14T11:22","G","O","111111","","","","1CQAYLdjhwy4t7hZ-O9S5CRDPg9YLyFxo"],["65","2026-07-14","2026-07-14T11:24","G","O","111111","","","","1a0dLFyEVvPPjponsBP9ml56C-r5XzzRq"],["71","2026-07-14","2026-07-14T11:27","G","O","111111","","","","1VZC6aAnzRIrdSjLpWhKCEIKsxA8QXfag"],["72","2026-07-14","2026-07-14T11:28","G","O","111111","","","","1177Z90tkDSNK-S_N6AL8djlTxMtBTmRn"],["73","2026-07-14","2026-07-14T11:29","G","O","111110","BATERIA INCHADA","","","15qEVJw9EAlOVqDchpppF1hXs4Q3ljsXx"],["74","2026-07-14","2026-07-14T11:30","G","O","111111","","","","1-LGVqLlWeNK-xlTiflhhsG1FaoQmp6ew"],["37","2026-07-16","2026-07-16T08:43","T","O","111111","","","","1cnb-UjwaEfsRzkYqugR8m7QnaqojM6Kr"],["14","2026-07-16","2026-07-16T09:24","T","O","111111","","","",""],["83","2026-07-17","2026-07-17T12:44","G","O","111111","","","","1fqyaMZnzN9YPNJa8UCPufnatv9xTt1mB"],["13","2026-07-17","2026-07-17T12:45","G","O","111111","","","","11c6k05YsN9u1REcPNjc9GAwcW5NBAr4X"],["88","2026-07-17","2026-07-17T12:46","G","O","111110","BATERIA INCHADA|TELA TRINCADA","","","1AQtK7HV4ncoCrlpx5k4yBicOt9Ulo7om"],["90","2026-07-17","2026-07-17T12:47","G","O","111111","","","","1Mj_mvwPWCcpUC5IoiTJH7URzEAa65bDp"],["67","2026-07-17","2026-07-17T12:48","G","O","111111","","","","1Zf49wIzH1zHHzu43Wo7YWccnfQjxkWSN"],["24","2026-07-17","2026-07-17T12:49","G","O","111111","","","","1bdz9dWD5jX4u-KzP8EGHOeozzQrUmd98"],["82","2026-07-17","2026-07-17T12:51","G","O","110110","TELA TRINCADA|SEM CABO DE CARREGAMENTO","","CABO TROCADO","1LMuxqbv0-rgQNIUFMSSHz2XqAsLIiwec"],["26","2026-07-17","2026-07-17T12:52","G","O","111111","","","",""],["74","2026-07-17","2026-07-17T12:53","G","O","111111","","","","1S45OvEZkaaqiBFGkslrL-Ng6JbU4oU_E"],["80","2026-07-17","2026-07-17T12:54","G","O","111111","","","","1ydPAfIUEfowogXN6q0OWGr5YHG10GFoW"],["65","2026-07-17","2026-07-17T12:55","G","O","111111","","","","1jfo0Yq9g8Y-KhNVXclmGTewXMIVS7sWL"],["72","2026-07-17","2026-07-17T12:56","G","O","111111","PELÍCULA TRINCADA","","","1w1I5VCSVrX1AsAdrth64i3QzvV8MTibT"],["99","2026-07-17","2026-07-17T12:57","G","O","111111","","","","1Cu8fs8uN8JbaYebBQJIuMUcv8dlHYuX_"],["44","2026-07-24","2026-07-24T09:40","G","O","111111","","","","1IXs65rvoGOfYjeD-ILuwPREYHl0iteJI"],["65","2026-07-24","2026-07-24T10:01","G","O","110111","","","CABO TROCADO",""],["81","2026-07-24","2026-07-24T10:11","G","O","110111","","","CABO TROCADO","1QtpTxGisL1nG7jjt54MYwbnVH0uWSLtC"],["76","2026-07-24","2026-07-24T10:45","G","O","111111","","","","172AzVdYhN30AEzkAdUuhP1hxPC2sCivk"],["45","2026-07-24","2026-07-24T11:22","G","O","111111","","","","1u4EdWTX8jC6gfcmHazp7TxEqYiTdOZ6j"],["83","2026-07-24","2026-07-24T11:39","G","O","111111","","","",""],["99","2026-07-24","2026-07-24T11:40","G","O","111111","","","",""],["91","2026-07-24","2026-07-24T11:40","G","O","111111","","","",""],["90","2026-07-24","2026-07-24T11:41","G","O","111111","","","",""],["81","2026-07-24","2026-07-24T11:41","G","O","111111","","","",""],["80","2026-07-24","2026-07-24T11:42","G","O","111111","","","",""],["37","2026-07-24","2026-07-24T11:42","G","O","111111","","","",""],["42","2026-07-30","2026-07-30T08:57","T","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","CABO TROCADO",""],["36","2026-07-30","2026-07-30T08:57","T","O","011111","APLICATIVO TRAVADO","","ATUALIZAÇÃO NO APP",""],["12","2026-07-30","2026-07-30T08:58","T","O","111111","","","SEGUNDO DISPOSITIVO CONECTADO NO CELULAR",""],["69","2026-07-30","2026-07-30T09:09","T","O","111111","","","",""],["68","2026-07-30","2026-07-30T09:10","T","O","111111","","","",""],["13","2026-07-30","2026-07-30T09:10","T","O","111111","","","",""],["85","2026-07-30","2026-07-30T09:10","T","O","111111","","","",""],["98","2026-07-31","2026-07-31T10:07","G","O","111111","","","","10T5rl9Jfj4XcrPLZJoS93o_zgijK1iMe"],["80","2026-07-31","2026-07-31T10:21","G","O","111111","","","","1dMMgQgi5fP9LdU47rAE5Wah5o-OZYAYU"],["13","2026-07-31","2026-07-31T10:22","G","O","111111","","","","1V8RDOX_lEzpDMJfk5g-YQv6jD-sHMvP0"],["15","2026-07-31","2026-07-31T10:24","G","O","110111","CABO DO CARREGADOR DANIFICADO","","","1aA_DBZ8g3C4XUqk2XynwUAW2ecaOLqnr"],["88","2026-07-31","2026-07-31T10:27","G","O","111110","BATERIA INCHADA|TELA TRINCADA","","","11mMvSzjXBSZFbU9OH-Ljnm02Ujy_0MI3"],["89","2026-07-31","2026-07-31T10:28","G","O","111111","","","",""],["14","2026-07-31","2026-07-31T10:29","G","O","111111","","","",""],["95","2026-07-31","2026-07-31T10:29","G","O","111111","","","",""],["95","2026-07-31","2026-07-31T10:31","G","O","111111","","","",""],["83","2026-07-31","2026-07-31T10:33","G","O","111111","","","",""],["76","2026-07-31","2026-07-31T10:37","G","O","111111","","","","1gTEdWW7WuxATRplHfFMkyWD5hMgmRkMr"],["71","2026-07-31","2026-07-31T10:38","G","O","111111","","","","12oFzQiWu8E0B3eO6Q3Dvm2utHO3tzT7G"],["37","2026-07-31","2026-07-31T10:46","G","O","111111","","","",""],["26","2026-07-31","2026-07-31T10:51","G","O","111111","","","",""],["73","2026-07-31","2026-07-31T10:52","G","O","111111","","","",""],["73","2026-07-31","2026-07-31T10:53","G","O","111111","","","",""],["90","2026-07-31","2026-07-31T10:54","G","O","111111","","","",""],["74","2026-07-31","2026-07-31T10:54","G","O","111111","","","",""],["25","2026-08-06","2026-08-06T12:47","T","O","111111","","","",""],["85","2026-08-06","2026-08-06T12:48","T","O","111111","","","",""],["56","2026-08-11","2026-08-11T10:34","T","O","111111","","","","1kO1sZpILZvHYc0rt1ACNCe5b4WshXd_-"],["15","2026-08-11","2026-08-11T10:37","T","O","111111","","","",""],["91","2026-08-11","2026-08-11T11:01","T","O","110111","CABO DO CARREGADOR DANIFICADO","","",""],["68","2026-08-11","2026-08-11T11:02","T","O","111111","","","","1vsH2Q1E-dw0zqa3aAZRNm0yOHdUl9Sfq"],["27","2026-08-11","2026-08-11T13:29","T","O","111111","","","",""],["35","2026-08-11","2026-08-11T13:30","T","O","111111","","","",""],["93","2026-08-13","2026-08-13T14:51","T","O","111011","","","LEITOR TROCADO",""],["55","2026-08-14","2026-08-14T10:43","G","O","111111","","","","1yYTxCBPxCayjHlt6qLA-YPi31fVwczWa"],["83","2026-08-14","2026-08-14T11:23","G","O","111111","","","","11dHLapiMFh8DWmBd-3kqTgo_TJ3AvH8A"],["87","2026-08-14","2026-08-14T11:25","G","O","111111","","","","1EBdv_q7FGf521YPm_zStfsT0HkAR7Qpj"],["39","2026-08-14","2026-08-14T11:28","G","O","111111","","","","1qenWaeYkMK7zR37GjBrLf200Z8xKHjF8"],["89","2026-08-14","2026-08-14T11:31","G","O","111111","","","","1Of2t9JA2zjT09q6LTv7CNREKDeq-5-QW"],["80","2026-08-14","2026-08-14T11:39","G","O","111111","","","","1yyMNkpmDd--zI6alYGj8OMttNAHxZ-NX"],["91","2026-08-14","2026-08-14T11:41","G","O","111111","","","","12wHlG1FWB3qB_mRt9Sll-uEP1gsQAW0k"],["98","2026-08-14","2026-08-14T11:43","G","O","111111","","","","1N0nnrRvG5QgtDvQ5CWUaISMgE9zZ-Udd"],["86","2026-08-14","2026-08-14T11:50","G","O","111111","","","","1jnYgQf9jScaJyd7HRiYZF3ncLGQ95F8V"],["95","2026-08-14","2026-08-14T11:51","G","O","111111","","","","1hs4rrKZIfuf_IBbE8nZ1ZpCJrH9PoXTp"],["73","2026-08-14","2026-08-14T11:52","G","O","111111","","","","16BuRdXfzaV-YrLNcfVU8qY9ov8ssH_t0"],["74","2026-08-14","2026-08-14T11:53","G","O","111111","","","","1sM4J-nzO5lyy24XtR2iu4ekA_14rhDcd"],["77","2026-08-14","2026-08-14T11:54","G","O","111111","","","","1maLcwjZU-i_6SQ5OkmsIUJxzrQkLuTfA"],["68","2026-08-14","2026-08-14T11:55","G","O","111111","","","","1_dXSyGng4lNS0LWI6TBTyEyDmygXA8n7"],["99","2026-08-14","2026-08-14T15:42","G","O","111111","","","","1ileW5q2YFU23JJPVdd9laYcM5U7kaf0A"],["43","2026-08-14","2026-08-14T15:42","G","O","111111","","","",""],["11","2026-08-14","2026-08-14T15:42","G","O","111111","","","",""],["12","2026-08-14","2026-08-14T15:42","G","O","111111","","","",""],["14","2026-08-17","2026-08-17T08:19","T","O","111011","LEITOR SOLTO","","COLADO NOVAMENTE",""],["84","2026-08-17","2026-08-17T11:03","T","O","110111","CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","",""],["10","2026-08-17","2026-08-17T11:03","T","O","110111","CABO DO CARREGADOR DANIFICADO","","",""],["24","2026-08-17","2026-08-17T11:45","T","O","111111","","","",""],["12","2026-08-17","2026-08-17T12:02","T","O","111111","","","",""],["68","2026-08-19","2026-08-19T10:46","T","O","110111","CABO DO CARREGADOR DANIFICADO","","",""],["93","2026-08-19","2026-08-19T10:46","T","O","111111","","","",""],["25","2026-08-19","2026-08-19T10:52","T","O","111111","","","","1rI1vUwU5qR7OxAOKOIAqyT-Q-jyj1WLQ"],["14","2026-08-19","2026-08-19T10:56","T","O","111111","","","","1Hy6rY3sbnQmF6CnNVebdneqs7lCWlAI-"],["39","2026-08-19","2026-08-19T11:17","T","O","110111","CABO DO CARREGADOR DANIFICADO","","",""],["35","2026-08-19","2026-08-19T11:19","T","O","111111","","","","1bW56qsCHuKMIkEZ3USLH8KIWIAi12kpA"],["84","2026-08-19","2026-08-19T11:20","T","O","111111","","","",""],["65","2026-08-19","2026-08-19T11:21","T","O","111111","","","",""],["67","2026-08-19","2026-08-19T11:48","T","O","111111","","","",""],["13","2026-08-19","2026-08-19T11:48","T","O","111111","","","",""],["26","2026-08-19","2026-08-19T11:48","T","O","111111","","","",""],["83","2026-08-21","2026-08-21T11:07","G","O","011111","DOWNGRADE DO TRACK","","","1ZRf8EqzSlNjW9cXWb1QJIeMVnVNUV0R8"],["87","2026-08-21","2026-08-21T11:08","G","O","011111","DOWNGRADE DO TRACK","","","1lztKjHbN4c8PMgnLBkjQrIVNMu72dIcB"],["84","2026-08-21","2026-08-21T11:11","G","O","011111","","","","1_a68or-cuNiNYvnFBjpJnPL7feXupgUd"],["99","2026-08-21","2026-08-21T11:12","G","O","111111","CABO DO CARREGADOR DANIFICADO","","","1ZBiGhJ6EqPi6e5drmNKTyyOpb5cLB5fn"],["80","2026-08-21","2026-08-21T11:12","G","O","111111","CABO DO CARREGADOR DANIFICADO","","","1uCdbMP46sxb5lLwG1VvLi21GyANgUUdU"],["81","2026-08-21","2026-08-21T11:46","G","O","111111","","","",""],["39","2026-08-21","2026-08-21T11:52","G","O","111111","","","",""],["90","2026-08-21","2026-08-21T11:52","G","O","111111","","","",""],["67","2026-08-21","2026-08-21T11:53","G","O","111111","","","",""],["73","2026-08-21","2026-08-21T11:55","G","O","111111","","","",""],["71","2026-08-21","2026-08-21T11:56","G","O","111111","","","",""],["74","2026-08-21","2026-08-21T11:56","G","O","111111","","","",""],["76","2026-08-21","2026-08-21T11:57","G","O","111111","","","",""],["91","2026-08-21","2026-08-21T11:57","G","O","111111","","","",""],["29","2026-08-21","2026-08-21T11:59","G","O","111111","","","","1w9EQZOWstDNEGSGiFCfGXzhrnDrgGbAJ"],["75","2026-08-21","2026-08-21T12:00","G","O","111111","","","","1DOvjSVMCkAvTh0cLbFtvyOTi1XCF3C9W"],["26","2026-08-26","2026-08-26T10:12","T","O","111111","","","",""],["14","2026-08-26","2026-08-26T10:13","T","O","111111","","","",""],["39","2026-08-26","2026-08-26T11:52","T","O","111111","","","",""],["65","2026-08-26","2026-08-26T11:52","T","O","111111","","","",""],["13","2026-08-26","2026-08-26T11:53","T","O","111111","","","",""],["80","2026-08-26","2026-08-26T11:55","T","O","111111","","","",""],["75","2026-08-26","2026-08-26T11:55","T","O","111111","","","",""],["11","2026-08-26","2026-08-26T11:55","T","O","111111","","","",""],["84","2026-08-26","2026-08-26T11:56","T","O","111111","","","",""],["99","2026-08-26","2026-08-26T12:38","T","O","111111","","","",""],["87","2026-08-27","2026-08-27T10:05","T","O","111111","","","",""],["11","2026-08-27","2026-08-27T10:27","T","O","111111","","","",""],["42","2026-08-27","2026-08-27T11:47","T","O","111111","","","",""],["68","2026-08-27","2026-08-27T11:55","T","O","111111","","","",""],["83","2026-08-27","2026-08-27T12:00","T","O","101111","","","CHIP TROCADO",""],["35","2026-08-27","2026-08-27T12:59","T","O","101111","","","CHIP TROCADO",""],["88","2026-08-31","2026-08-31T10:36","T","O","110110","CABO DO CARREGADOR DANIFICADO|TELA TRINCADA","","CABO TROCADO",""],["14","2026-08-31","2026-08-31T10:39","T","N","001110","","","",""],["44","2026-08-31","2026-08-31T10:40","T","N","001110","CELULAR NÃO ESTAVA NO VEÍCULO","","",""],["84","2026-08-31","2026-08-31T11:10","T","O","111011","","","RESET NO LEITOR",""],["36","2026-08-31","2026-08-31T11:15","T","O","111111","","","",""],["91","2026-09-01","2026-09-01T10:43","G","O","111110","TELA TRINCADA","","","1BiZ2nn3s6BtmctTrOQkPyb5Tm0FNCpob"],["75","2026-09-01","2026-09-01T10:44","G","O","111111","","","",""],["90","2026-09-01","2026-09-01T10:44","G","O","111111","","","",""],["87","2026-09-01","2026-09-01T10:45","G","O","111111","","","",""],["83","2026-09-01","2026-09-01T10:46","G","O","111111","","","",""],["43","2026-09-01","2026-09-01T10:48","G","O","111111","SEM CHIP","","NOVO CHIP ADICIONADO",""],["95","2026-09-01","2026-09-01T10:50","G","O","110111","CABO DO CARREGADOR DANIFICADO","","",""],["15","2026-09-01","2026-09-01T10:51","G","O","111110","TELA TRINCADA","","","1GWvm1MaigFK-rrrFrBWd3xCPO3D5MR7-"],["69","2026-09-04","2026-09-04T08:36","T","O","111111","CABO DO CARREGADOR DANIFICADO","","",""],["82","2026-10-02","2026-10-02T10:45","G","O","111110","TELA TRINCADA","","","1bZ_xZ7EAYkpxy9RlPYyF-FNQwn0MSlnL"],["81","2026-10-02","2026-10-02T10:46","G","O","111111","","","","1lkLgPaB3hkhO3mne6nx-IuETQZ8CVA6w"],["65","2026-10-02","2026-10-02T10:49","G","O","111111","","","","1UP06mtPDVq3WaiPXA3TwWK7y8T4TKNnQ"],["90","2026-10-02","2026-10-02T10:51","G","O","111111","","","","1M2MWtlatK6YdOLFKdva_WFWivQdNJvVm"],["95","2026-10-02","2026-10-02T10:53","G","O","111111","","","","1TX6ogH8FEjSoOyJlSgbtL4mtR4l5fXk1"],["43","2026-10-02","2026-10-02T10:59","G","O","111111","","","","1QVmdl4X5-dC6QV2riRoC7rPbkmbIy9VS"],["45","2026-10-02","2026-10-02T11:00","G","O","111111","","","","1_kAyCnTr6MmiSAjLjmW3O8kHoVQWp_yg"],["89","2026-10-02","2026-10-02T11:01","G","O","111111","","","","1Z1DAcpCooxScEVW1p4T3xR5OcqQYxNyY"],["38","2026-10-02","2026-10-02T11:03","G","N","110001","VEÍCULO FORA DA GARAGEM","","","1SRU5RNTAfwhKezsAGakf0o-aO_pw4uHy"],["67","2026-10-02","2026-10-02T11:04","G","O","111111","ATUALIZAÇÃO DO TRACK","","CELULAR ATUALIZADO","1quqbQ4bW45lIP70JJx1jX0DB0leHkttg"],["88","2026-10-05","2026-10-05T08:18","T","O","111110","BATERIA INCHADA|TELA TRINCADA","","","1v2RO57wu6vQaQN9jsv2ziNeoXHD1XGIB"],["26","2026-10-05","2026-10-05T08:29","T","O","111111","","","","1KuVt-JPZlwbEZGt95skIGlUtyGevkKNB"],["14","2026-10-05","2026-10-05T08:34","T","O","111111","","","","1ZHoQbJHroeV3yvxbVCn6AhOSKFj-2vQK"],["90","2026-10-05","2026-10-05T09:10","T","O","111111","","","","1BOonFq0AzT_pS8mJ06t8axr-6MeGO778"],["10","2026-10-05","2026-10-05T09:13","T","O","111111","","","","1eMKqxLxUcL3uMo39pK77wFknI9Cvdzd7"],["09","2026-10-05","2026-10-05T09:21","T","O","111111","","","","1-S1hoPKUFjvcuhl9HPHf31GnL22c4Dqb"],["77","2026-10-05","2026-10-05T09:48","T","N","001110","","","","1ybBxKkfo7401V39HSywwgd9BcYoUKUfj"],["65","2026-10-05","2026-10-05T09:51","T","O","111111","","","","1kfSczEEiezrdnQnqlnw9Yy8EHUR1tC6d"],["93","2026-10-05","2026-10-05T09:58","T","N","001110","","","",""],["83","2026-10-05","2026-10-05T10:00","T","O","111111","","","","1lzSp_lGl3hbfymzor0ZNUP7MiJ2LqbZH"],["25","2026-10-05","2026-10-05T10:02","T","O","111111","","","",""],["95","2026-10-05","2026-10-05T10:06","T","O","111111","","","","1knoUAU6v_nyPxxy77AAuX4RQLy-RvYaC"],["68","2026-10-05","2026-10-05T11:27","T","V","110111","CABO DO CARREGADOR DANIFICADO","","","1d81G0eHe5XFfeHNcj-uUiJrRwwvvi3sq"],["98","2026-10-05","2026-10-05T14:38","T","O","111111","","","","1o7P3pq39dDv26xs7CyMjv1Hhl1A7x3cf"],["93","2026-10-05","2026-10-05T14:47","T","O","111111","","","","1pwVREGWgcJfcok8u1re-zqLRTnJVWuyE"],["17","2026-10-07","2026-10-07T11:09","T","O","111111","","","INSTALADO",""],["16","2026-10-07","2026-10-07T12:32","T","O","111111","","","INSTALADO",""],["36","2026-10-07","2026-10-07T12:38","T","V","111111","CABO DO CARREGADOR DANIFICADO|TELA TRINCADA","","","1DT6zXJo3xgAA6YgO8aoJlZDBRYmfJdss"],["72","2026-10-09","2026-10-09T12:08","G","O","111111","CABO DO CARREGADOR DANIFICADO","","","1W20Wk1RwC7WeK24UiqcGUiq9wg0P1Uid"],["10","2026-10-09","2026-10-09T12:16","G","O","111111","","","","1v7aGsP1ZBhEB4UYiMy8XH4tsLMRQWLdm"],["13","2026-10-09","2026-10-09T12:16","G","O","111111","","","","1SeB1nI5Vqim1zV51pUz_zp0IU0vpfIea"],["36","2026-10-09","2026-10-09T12:17","G","V","111110","TELA TRINCADA","","","1wD9EQPzLYaOzI4CgPHTtdpNdfA_NbUzh"],["36","2026-10-09","2026-10-09T12:18","G","V","111110","TELA TRINCADA","","","1l-6F8M9Vq_fgX195K9rYHRTsIKlJO30r"],["42","2026-10-09","2026-10-09T12:19","G","O","111111","PIXEL DA TELA QUEIMADO","","","1b43qXiWmqLoRRUZUi7Ew4J7VyDDSZqDk"],["65","2026-10-09","2026-10-09T12:20","G","O","111111","","","","1GkcXFGkdmRkW3uNz7vwBqwql4CrUWdzM"],["68","2026-10-09","2026-10-09T12:22","G","O","111111","TELA TRINCADA","","","1fGllvpMCJw6uHeyflxHuv-WUkNtREcW6"],["73","2026-10-09","2026-10-09T12:24","G","O","111111","","","","175otZopL_iFsr1qgzq4nLzC1ZLA332Du"],["76","2026-10-09","2026-10-09T12:25","G","O","111111","","","","1rbYFh_RrDMS5GHm9d9MJarpNJCZEeOIP"],["82","2026-10-09","2026-10-09T12:26","G","V","011110","TELA TRINCADA","","","1OcdEtGEj1XV2WYU2TIex8217YLHH9pXh"],["83","2026-10-09","2026-10-09T12:28","G","O","111111","","","","1NTzRFmOXzgKsf-XJaBayO5gjgGoQQykq"],["90","2026-10-09","2026-10-09T12:29","G","O","111111","","","","1gobTPZ-PiN00YTzP8FR4Q_Uj4pRvQMuA"],["95","2026-10-09","2026-10-09T12:30","G","O","111111","","","","1BuealyWDzTbUWGaWXZKfeCfhc_5NNX7Y"],["35","2026-10-09","2026-10-09T12:31","G","V","111110","BATERIA INCHADA","","","1RFq5mpMQoLWtObqNUEXv8ij3Nt255d8d"],["43","2026-10-14","2026-10-14T09:57","T","O","110111","CABO DO CARREGADOR DANIFICADO","","CABO TROCADO",""],["16","2026-10-14","2026-10-14T10:00","T","O","111111","","","",""],["17","2026-10-14","2026-10-14T10:25","T","O","101111","","","",""],["25","2026-10-14","2026-10-14T10:26","T","O","111111","","","",""],["12","2026-10-14","2026-10-14T11:36","T","O","111111","","","",""],["73","2026-10-14","2026-10-14T11:42","T","V","111110","BATERIA INCHADA","","","1qGgwcNCRMvp-lSERAT31y-bJDbQfbm1n"],["55","2026-10-14","2026-10-16T18:38","G","V","111110","TELA TRINCADA|SEM CABO DE CARREGAMENTO","","CABO TROCADO",""],["37","2026-10-16","2026-10-16T18:47","G","O","111111","","","CELULAR ATUALIZADO",""],["39","2026-10-16","2026-10-16T18:47","G","O","111111","","","CELULAR ATUALIZADO",""],["43","2026-10-16","2026-10-16T18:49","G","O","111111","","","CELULAR ATUALIZADO",""],["35","2026-10-16","2026-10-16T18:55","G","O","101111","SEM CHIP","","",""],["82","2026-10-16","2026-10-16T19:22","G","O","110111","CABO DO CARREGADOR DANIFICADO","","CABO TROCADO",""],["35","2026-10-16","2026-10-16T20:04","G","O","111111","","","CELULAR NOVO",""],["87","2026-10-22","2026-10-22T15:58","T","O","110111","ATUALIZAÇÃO DO TRACK|CONECTOR DE INDUÇÃO NÃO ENCONTRADO","","CABO TROCADO",""],["11","2026-10-22","2026-10-22T15:59","T","O","111110","APLICATIVO TRAVADO","","CELULAR ATUALIZADO",""],["56","2026-10-22","2026-10-22T15:59","T","V","111110","BATERIA INCHADA","","",""],["80","2026-10-22","2026-10-22T16:00","T","O","110111","CABO DO CARREGADOR DANIFICADO","","CARREGADOR TROCADO",""],["44","2026-10-22","2026-10-22T16:16","T","O","111111","","","",""],["77","2026-10-22","2026-10-22T16:17","T","O","111111","","","",""],["45","2026-10-23","2026-10-23T11:46","G","O","111111","","","",""],["65","2026-10-23","2026-10-23T11:46","G","O","111111","","","",""],["89","2026-10-23","2026-10-23T11:47","G","O","111111","","","",""],["72","2026-10-23","2026-10-23T11:50","G","O","111111","BATERIA INCHADA","","",""],["82","2026-10-23","2026-10-23T11:51","G","V","111110","TELA TRINCADA","","",""],["77","2026-10-23","2026-10-23T11:52","G","O","111111","","","",""],["85","2026-10-23","2026-10-23T11:53","G","O","111111","","","",""],["99","2026-10-23","2026-10-23T11:55","G","O","111111","","","",""],["93","2026-10-23","2026-10-23T11:56","G","O","111111","","","",""],["87","2026-10-23","2026-10-23T11:56","G","O","111111","","","",""]];
+
+// ---------------------------------------------------------------- utilidades
+function $(id) { return document.getElementById(id); }
+function el(tag, attrs, kids) {
+  var e = document.createElement(tag);
+  if (attrs) for (var k in attrs) { if (attrs[k] == null) continue; if (k === "text") e.textContent = attrs[k]; else if (k === "class") e.className = attrs[k]; else e.setAttribute(k, attrs[k]); }
+  (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+  return e;
+}
+function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+function uuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); });
+}
+function todayBelem() { return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date()); }
+var fmtDTi = new Intl.DateTimeFormat("pt-BR", { timeZone: TZ, day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+function fmtDT(iso) { return fmtDTi.format(new Date(iso)); }
+function fmtDate(ymd) { var p = ymd.split("-"); return p[2] + "/" + p[1] + "/" + p[0].slice(2); }
+function dayNum(ymd) { var p = ymd.split("-"); return Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000; }
+function daysAgo(ymd) { return Math.round(dayNum(todayBelem()) - dayNum(ymd)); }
+function kb(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB"; }
+function normTag(t) { t = String(t || "").replace(/\D/g, ""); if (!t) return ""; return String(parseInt(t, 10)).padStart(2, "0"); }
+function cap(s) { s = s.toLowerCase(); return s.charAt(0).toUpperCase() + s.slice(1); }
+function plural(n, a, b) { return n + " " + (n === 1 ? a : b); }
+var toastT;
+function toast(msg) { var t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 3200); }
+
+// ---------------------------------------------------------------- armazenamento local (IndexedDB, com memoria como reserva)
+var mem = {}, dbp = null;
+function idb() {
+  if (dbp) return dbp;
+  dbp = new Promise(function (res) {
+    try {
+      var rq = indexedDB.open("vistoria-bdv", 1);
+      rq.onupgradeneeded = function () { rq.result.createObjectStore("recs", { keyPath: "id" }); };
+      rq.onsuccess = function () { res(rq.result); };
+      rq.onerror = function () { res(null); };
+    } catch (e) { res(null); }
+  });
+  return dbp;
+}
+function put(rec) {
+  mem[rec.id] = rec;
+  return idb().then(function (db) {
+    if (!db) return;
+    return new Promise(function (res) { var tx = db.transaction("recs", "readwrite"); tx.objectStore("recs").put(rec); tx.oncomplete = res; tx.onerror = res; });
+  });
+}
+function del(id) {
+  delete mem[id];
+  return idb().then(function (db) {
+    if (!db) return;
+    return new Promise(function (res) { var tx = db.transaction("recs", "readwrite"); tx.objectStore("recs").delete(id); tx.oncomplete = res; tx.onerror = res; });
+  });
+}
+function all() {
+  return idb().then(function (db) {
+    if (!db) return Object.values(mem);
+    return new Promise(function (res) {
+      var rq = db.transaction("recs").objectStore("recs").getAll();
+      rq.onsuccess = function () { rq.result.forEach(function (r) { mem[r.id] = r; }); res(Object.values(mem)); };
+      rq.onerror = function () { res(Object.values(mem)); };
+    });
+  }).then(function (list) { return list.sort(function (a, b) { return b.ts < a.ts ? -1 : 1; }); });
+}
+
+// ---------------------------------------------------------------- base de vistorias: servidor (ou planilha) + o que esta no celular
+// Registro unico usado em todas as telas: {id, tag, dia, ts, local, status, it:{item_*:'OK'|'NOK'|null}, oc:[], obs, acao, fotos:[url], src}
+var ST3 = { O: "OPERANTE", V: "VERIFICAR", N: "NAO_VERIFICADO" };
+function fromHist(h, i) {
+  var it = {}; ITEMS.forEach(function (x, k) { it[x[0]] = h[5][k] === "1" ? "OK" : "NOK"; });
+  return { id: "planilha-" + i, tag: h[0], dia: h[1], ts: h[2] + ":00-03:00", local: h[3] === "T" ? "TERMINAL" : "GARAGEM", status: ST3[h[4]], it: it,
+    oc: h[6] ? h[6].split("|") : [], obs: h[7] || "", acao: h[8] || "", fotos: h[9] ? ["https://drive.google.com/open?id=" + h[9]] : [], src: "planilha" };
+}
+function fromRow(r) {
+  var it = {}; ITEMS.forEach(function (x) { it[x[0]] = r[x[0]] || null; });
+  return { id: r.id, tag: r.tag, dia: r.data_vistoria, ts: r.ts, local: r.local, status: r.status, it: it, oc: r.ocorrencias || [], obs: r.observacao || "",
+    acao: r.acao || "", fotos: r.fotos || [], src: r.origem === "planilha" ? "planilha" : "servidor", via: r.origem, pend: r.pendentes || null };
+}
+function fromLocal(r) {
+  var it = {}; ITEMS.forEach(function (x) { it[x[0]] = r[x[0]]; });
+  return { id: r.id, tag: r.tag, dia: r.data_vistoria, ts: r.ts, local: r.local, status: r.status, it: it, oc: r.ocorrencias || [], obs: r.observacao || "",
+    acao: r.acao || "", fotos: r.fotos || [], src: r.state === "sent" ? "servidor" : "celular", blobs: r.photos, pend: r.pendentes || null };
+}
+function isNok(v) { return ITEMS.some(function (x) { return v.it[x[0]] === "NOK"; }); }
+function nokNames(v) { return ITEMS.filter(function (x) { return v.it[x[0]] === "NOK"; }).map(function (x) { return x[1]; }); }
+// NOK com "o que foi feito" preenchido = resolvido na hora (menos acoes que sao so lembrete, ex.: "TROCAR CABO").
+function isTodo(a) { return /^(TROCAR|PEDIR|TEM QUE|PRECISA|VERIFICAR)/.test(a); }
+function hasAction(acao) { return acao ? acao.split(/\s*,\s*/).some(function (a) { return a && !isTodo(a.toUpperCase()); }) : false; }
+// Cada problema (item NOK, ocorrencia ou "verificar") fica resolvido na hora ou em aberto.
+// Vistorias novas guardam a lista "pendentes"; as antigas (planilha) usam a regra: com acao = tudo resolvido.
+var VERIF = "SITUAÇÃO: VERIFICAR";
+function itemLabel(name) { return "NOK " + name.toUpperCase(); }
+function probsOf(items, oc, status) {
+  var p = ITEMS.filter(function (x) { return items[x[0]] === "NOK"; }).map(function (x) { return itemLabel(x[1]); }).concat(oc);
+  if (status === "VERIFICAR" && !p.length) p.push(VERIF);
+  return p;
+}
+function probs(v) { return probsOf(v.it, v.oc, v.status); }
+function pend(v) { if (v.pend) return v.pend; return problem(v) && !hasAction(v.acao) ? probs(v) : []; }
+function resolved(v) { return pend(v).length === 0; }
+function problem(v) { return isNok(v) || v.status === "VERIFICAR" || (v.pend && v.pend.length > 0); }
+function pTxt(l) { return l === VERIF ? "Verificar celular" : l.indexOf("NOK ") === 0 ? "NOK " + l.slice(4).toLowerCase() : cap(l); }
+// Desde quando o problema esta em aberto neste carro (vistorias seguidas com ele pendente).
+function openSince(tag, label) { var h = byTag[tag] || [], d = null; for (var i = h.length - 1; i >= 0; i--) { if (h[i].status === "NAO_VERIFICADO") continue; if (pend(h[i]).indexOf(label) >= 0) d = h[i].dia; else break; } return d; }
+// Ultima vistoria em que o celular foi de fato verificado (as "nao verificado" nao mudam pendencias).
+function lastChecked(tag) { var h = byTag[tag] || []; for (var i = h.length - 1; i >= 0; i--) if (h[i].status !== "NAO_VERIFICADO") return h[i]; return null; }
+function resTxt(v) { return problem(v) ? (resolved(v) ? "Resolvido" : "NOK") : "OK"; }
+function resCls(v) { return problem(v) ? (resolved(v) ? "res" : "nok") : "ok"; }
+function cmpV(a, b) { return a.dia === b.dia ? (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0) : (a.dia < b.dia ? -1 : 1); }
+
+var histRecs = HIST.map(fromHist);
+var serverRows = null, serverAt = null;
+try { var c = JSON.parse(ls("vb_cache") || "null"); if (c && c.rows) { serverRows = c.rows; serverAt = c.at; } } catch (e) {}
+var V = [], byTag = {}, latest = {};
+function rebuild(local) {
+  var seen = {}, list = [];
+  var sv = serverRows ? serverRows.map(fromRow) : [];
+  var hasPlanilha = sv.some(function (v) { return v.src === "planilha"; });
+  (hasPlanilha ? [] : histRecs).concat(sv).forEach(function (v) { seen[v.id] = 1; list.push(v); });
+  local.forEach(function (r) { if (!seen[r.id]) list.push(fromLocal(r)); });
+  list.sort(cmpV);
+  V = list; byTag = {}; latest = {};
+  list.forEach(function (v) { (byTag[v.tag] = byTag[v.tag] || []).push(v); latest[v.tag] = v; });
+  calcFreq();
+}
+
+// ---------------------------------------------------------------- foto: reduz no celular antes de guardar
+function loadImage(file) {
+  if (window.createImageBitmap) return createImageBitmap(file, { imageOrientation: "from-image" }).catch(function () { return createImageBitmap(file); });
+  return new Promise(function (res, rej) { var i = new Image(); i.onload = function () { res(i); }; i.onerror = rej; i.src = URL.createObjectURL(file); });
+}
+function compress(file) {
+  return loadImage(file).then(function (img) {
+    var w = img.width, h = img.height, s = Math.min(1, MAX_SIDE / Math.max(w, h));
+    var c = document.createElement("canvas"); c.width = Math.round(w * s); c.height = Math.round(h * s);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    if (img.close) img.close();
+    return new Promise(function (res) { c.toBlob(function (b) { res(b || file); }, "image/jpeg", JPEG_Q); });
+  });
+}
+
+// ---------------------------------------------------------------- formulario
+var form;
+// Botoes criados ao escrever: ficam guardados no celular e, depois de usados 2 vezes, aparecem para todos (vem do historico).
+function custom(kind) { try { return JSON.parse(ls("vb_" + kind + "_extra") || "[]"); } catch (e) { return []; } }
+var freq = { oc: [], ac: [] };
+function splitAc(a) { return a ? a.split(/\s*,\s*/).map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean) : []; }
+function calcFreq() {
+  var c = { oc: {}, ac: {} };
+  V.forEach(function (v) { v.oc.forEach(function (o) { c.oc[o] = (c.oc[o] || 0) + 1; }); splitAc(v.acao).forEach(function (a) { c.ac[a] = (c.ac[a] || 0) + 1; }); });
+  ["oc", "ac"].forEach(function (k) {
+    var base = k === "oc" ? OCORRENCIAS : ACOES;
+    freq[k] = Object.keys(c[k]).filter(function (x) { return c[k][x] >= 2 && base.indexOf(x) < 0 && x.length <= 60; })
+      .sort(function (a, b) { return c[k][b] - c[k][a]; }).slice(0, 8);
+  });
+}
+function blankForm(keepTag) {
+  var f = { tag: keepTag || "", local: ls("vb_local") || "GARAGEM", status: "OPERANTE", items: {}, oc: [], ac: [], fotos: [], obs: "", data: todayBelem(), pref: null, pst: {}, carry: {}, chamRes: {} };
+  ITEMS.forEach(function (it) { f.items[it[0]] = "OK"; });
+  return f;
+}
+// Puxa a ultima vistoria do carro: situacao, itens e ocorrencias (acao, obs e fotos comecam vazias).
+function prefill(tag) {
+  var hist = byTag[tag]; if (!hist || !hist.length) { form.pref = null; return; }
+  var last = hist[hist.length - 1], base = last;
+  if (last.status === "NAO_VERIFICADO") { for (var i = hist.length - 1; i >= 0; i--) if (hist[i].status !== "NAO_VERIFICADO") { base = hist[i]; break; } }
+  // So o que ficou EM ABERTO volta marcado; o que foi resolvido comeca OK.
+  var open = pend(base);
+  form.status = open.indexOf(VERIF) >= 0 || (base.status === "VERIFICAR" && open.length) ? "VERIFICAR" : "OPERANTE";
+  ITEMS.forEach(function (x) { form.items[x[0]] = open.indexOf(itemLabel(x[1])) >= 0 ? "NOK" : "OK"; });
+  form.oc = open.filter(function (l) { return l !== VERIF && l.indexOf("NOK ") !== 0; });
+  open.forEach(function (l) { form.carry[l] = openSince(tag, l) || base.dia; form.pst[l] = "open"; });
+  form.pref = { tag: tag, dia: base.dia, n: open.length };
+}
+function setTag(t, fromCar) {
+  t = normTag(t);
+  if (t && t !== (form.pref && form.pref.tag)) { var keep = form.fotos, obs = form.obs; form = blankForm(t); form.fotos = keep; form.obs = obs; prefill(t); }
+  form.tag = t;
+  paintForm();
+}
+function chipBtn(label, on, fn, cls) {
+  var b = el("button", { type: "button", class: "chip" + (cls ? " " + cls : ""), "aria-pressed": cls ? null : String(on), text: label });
+  b.addEventListener("click", fn); return b;
+}
+function paintChips() {
+  var box = $("ocChips"); box.textContent = "";
+  fillChips(box, "oc", OCORRENCIAS);
+  fillChips($("acChips"), "ac", ACOES);
+}
+function fillChips(box, kind, base) {
+  box.textContent = "";
+  var sel = form[kind], opts = base.concat(freq[kind]).concat(custom(kind)).concat(sel);
+  opts = opts.filter(function (o, i) { return opts.indexOf(o) === i; });
+  opts.forEach(function (o) {
+    box.appendChild(chipBtn(cap(o), sel.indexOf(o) >= 0, function () {
+      var i = sel.indexOf(o); if (i >= 0) sel.splice(i, 1); else sel.push(o); paintForm();
+    }));
+  });
+  box.appendChild(chipBtn("+ Outra", false, function () { $(kind + "Add").hidden = false; $(kind + "Input").focus(); }, "add"));
+}
+function addCustom(kind) {
+  var v = $(kind + "Input").value.trim().toUpperCase().replace(/[\s,]+/g, " ").trim();
+  if (!v) { $(kind + "Add").hidden = true; return; }
+  if (form[kind].indexOf(v) < 0) form[kind].push(v);
+  var base = kind === "oc" ? OCORRENCIAS : ACOES, ex = custom(kind);
+  if (ex.indexOf(v) < 0 && base.indexOf(v) < 0) { ex.push(v); ls("vb_" + kind + "_extra", JSON.stringify(ex.slice(-20))); }
+  $(kind + "Input").value = ""; $(kind + "Add").hidden = true; paintForm();
+}
+function buildItems() {
+  var box = $("items"); box.textContent = "";
+  ITEMS.forEach(function (it) {
+    var row = el("div", { class: "item", "data-k": it[0] }, [
+      el("span", { class: "nm", text: it[1] }),
+      el("div", { class: "ok-nok" }, [
+        el("button", { type: "button", "data-v": "OK", text: "OK", "aria-pressed": "false" }),
+        el("button", { type: "button", "data-v": "NOK", text: "NOK", "aria-pressed": "false" })
+      ])
+    ]);
+    row.addEventListener("click", function (e) {
+      var b = e.target.closest("button"); if (!b) return;
+      var v = b.dataset.v; form.items[it[0]] = form.items[it[0]] === v ? null : v; paintForm();
+    });
+    box.appendChild(row);
+  });
+}
+function paintForm() {
+  if (document.activeElement !== $("tag") && $("tag").value !== form.tag) $("tag").value = form.tag;
+  document.querySelectorAll("#v-nova .seg").forEach(function (seg) {
+    var k = seg.dataset.k;
+    seg.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", String(form[k] === b.dataset.v)); });
+  });
+  var anyNok = false;
+  document.querySelectorAll("#items .item").forEach(function (row) {
+    var v = form.items[row.dataset.k];
+    row.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", String(v === b.dataset.v)); });
+    row.classList.toggle("is-nok", v === "NOK"); row.classList.toggle("is-off", !v);
+    if (v === "NOK") anyNok = true;
+  });
+  paintChips();
+  paintProbs(); paintCham(); if ($("pendAlert")) $("pendAlert").hidden = !!form.tag || !pendTags().length;
+  if ($("obs").value !== form.obs) $("obs").value = form.obs;
+  $("dataV").value = form.data;
+  paintPhotos();
+  var hint = $("photoHint");
+  if (anyNok && !form.fotos.length) { hint.textContent = "Tem item NOK e nenhuma foto. Vale registrar o problema."; hint.className = "hint warn"; }
+  else { hint.textContent = "A foto é reduzida no celular antes de enviar (cerca de 200 KB)."; hint.className = "hint"; }
+  $("prefill").hidden = !(form.pref && form.pref.dia && form.pref.tag === form.tag);
+  if (form.pref && form.pref.dia) $("prefillTxt").textContent = "Preenchido com a vistoria de " + fmtDate(form.pref.dia) + (form.pref.n ? ": " + plural(form.pref.n, "pendência continua", "pendências continuam") + " em aberto." : ": estava tudo resolvido.") + " Mude só o que estiver diferente.";
+  var sum = $("saveSum"); sum.textContent = "";
+  sum.appendChild(document.createTextNode("Carro ")); sum.appendChild(el("b", { text: form.tag || "—" }));
+  var noks = ITEMS.filter(function (it) { return form.items[it[0]] === "NOK"; }).length;
+  sum.appendChild(document.createTextNode(noks ? " · " + noks + " NOK" : " · tudo OK"));
+  if (form.fotos.length) sum.appendChild(document.createTextNode(" · " + plural(form.fotos.length, "foto", "fotos")));
+  paintLast();
+}
+var urls = [];
+function paintPhotos() {
+  urls.forEach(function (u) { URL.revokeObjectURL(u); }); urls = [];
+  var box = $("photos"); box.textContent = "";
+  form.fotos.forEach(function (b, i) {
+    var u = URL.createObjectURL(b); urls.push(u);
+    var rm = el("button", { type: "button", class: "rm", "aria-label": "Remover foto", text: "×" });
+    rm.addEventListener("click", function () { form.fotos.splice(i, 1); paintForm(); });
+    box.appendChild(el("div", { class: "thumb" }, [el("img", { src: u, alt: "Foto " + (i + 1) }), el("span", { class: "sz", text: kb(b.size) }), rm]));
+  });
+}
+function addFiles(files) {
+  var list = Array.prototype.slice.call(files || []);
+  if (!list.length) return;
+  toast("Reduzindo foto…");
+  list.reduce(function (p, f) {
+    return p.then(function () { return compress(f).then(function (b) { form.fotos.push(b); }); });
+  }, Promise.resolve()).then(function () { paintForm(); toast("Foto pronta"); })
+    .catch(function () { toast("Não consegui ler essa imagem. Tente bater de novo."); });
+}
+// ---------------------------------------------------------------- problemas: resolvido na hora x em aberto
+// Acao escolhida sugere quais problemas foram resolvidos; o vistoriador pode mudar (fica a escolha dele).
+var LINK = [[/CABO|CARREG|CONECTOR|MAGN/, /CABO|CARREG|CONECTOR|INDU/], [/CELULAR (TROCADO|NOVO)|TROCA DO CELULAR/, /CELULAR|TELA|BATERIA|PIXEL|LOOP|CAPA|PEL[IÍ]CULA/],
+  [/ATUALIZ|APP|APLICATIVO|REINSTAL|DOWNGRADE/, /APLICATIVO|TRACK|APP|VIAGEM|TRAVAD/], [/LEITOR|RESET/, /LEITOR/], [/SUPORTE/, /SUPORTE/], [/CHIP/, /CHIP|DADOS|INTERNET/], [/BLUETOOTH|PAREAD/, /BLUETOOTH/]];
+function suggest(label) {
+  return form.ac.some(function (a) { return !isTodo(a) && LINK.some(function (g) { return g[0].test(a) && g[1].test(label); }); }) ? "res" : "open";
+}
+function formProbs() { return probsOf(form.items, form.oc, form.status); }
+function stateOf(l) { return form.pman && form.pman[l] ? form.pst[l] : suggest(l); }
+function paintProbs() {
+  var list = formProbs(), box = $("probList"); box.textContent = "";
+  $("probBox").hidden = !list.length;
+  list.forEach(function (l) {
+    var st = stateOf(l), since = form.carry[l];
+    var row = el("div", { class: "prob" + (st === "open" ? " is-open" : "") }, [
+      el("span", { class: "nm" }, [pTxt(l), since ? el("small", { text: "em aberto desde " + fmtDate(since) + " (" + daysAgo(since) + "d)" }) : null]),
+      el("div", { class: "seg2" }, [
+        el("button", { type: "button", "data-v": "res", "aria-pressed": String(st === "res"), text: "Resolvido" }),
+        el("button", { type: "button", "data-v": "open", "aria-pressed": String(st === "open"), text: "Fica em aberto" })])
+    ]);
+    row.addEventListener("click", function (e) { var b = e.target.closest("button"); if (!b) return; form.pman = form.pman || {}; form.pman[l] = true; form.pst[l] = b.dataset.v; paintForm(); });
+    box.appendChild(row);
+  });
+}
+// ---------------------------------------------------------------- chamados abertos pelos motoristas (tabela ocorrencias do WhatsApp)
+var chamados = null;
+try { chamados = JSON.parse(ls("vb_cham") || "null"); } catch (e) {}
+var IS_PREVIEW = !/(onrender\.com|github\.io)$/.test(location.hostname);
+function demoCham() { // so na previa, para ver como fica; nunca vai para o servidor
+  var d = function (n) { return new Date(Date.now() - n * 86400000).toISOString(); };
+  return [{ id: -1, tag: "80", categoria: "carregamento", problema: "Celular não carrega, cabo parece danificado", relatado_por: "Motorista (exemplo)", primeira_msg_em: d(2), demo: true },
+          { id: -2, tag: "82", categoria: "abrir_viagem", problema: "App BDV não abre a viagem", relatado_por: "Motorista (exemplo)", primeira_msg_em: d(1), demo: true }];
+}
+function openCham(tag) { return (chamados || (IS_PREVIEW ? demoCham() : [])).filter(function (c) { return c.tag === tag; }); }
+function fetchChamados() {
+  if (!navigator.onLine) return;
+  fetch(SB.url + "/rest/v1/ocorrencias?select=id,tag,categoria,problema,relatado_por,primeira_msg_em,criado_em,urgencia&status=in.(aberta,em_andamento)&tag=not.is.null&order=criado_em.asc", { headers: hdr({}) })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (rows) { chamados = rows; ls("vb_cham", JSON.stringify(rows)); paintForm(); if (view === "dash") paintDash(); })
+    .catch(function () {});
+}
+function paintCham() {
+  var box = $("chamBox"); box.textContent = "";
+  var list = form.tag ? openCham(form.tag) : [], l = lastChecked(form.tag);
+  var open = l ? pend(l) : [];
+  box.hidden = !list.length && !open.length;
+  if (open.length && !form.pref) box.appendChild(el("div", { class: "pendcar", text: "Pendências em aberto: " + open.map(pTxt).join(", ") }));
+  list.forEach(function (c) {
+    var on = !!form.chamRes[c.id];
+    var bt = el("button", { type: "button", "aria-pressed": String(on), text: on ? "Resolvido nesta vistoria ✓" : "Marcar como resolvido nesta vistoria" });
+    bt.addEventListener("click", function () { if (on) delete form.chamRes[c.id]; else form.chamRes[c.id] = true; paintForm(); });
+    box.appendChild(el("div", { class: "chamc" + (on ? " done" : "") }, [
+      el("span", { class: "h", text: "Chamado do motorista" + (c.demo ? " · exemplo da prévia" : "") }),
+      el("span", { class: "p", text: c.problema }),
+      el("span", { class: "m", text: (c.relatado_por || "Motorista") + " · aberto em " + fmtDT(c.primeira_msg_em || c.criado_em) + " · há " + plural(Math.max(0, Math.floor((Date.now() - new Date(c.primeira_msg_em || c.criado_em)) / 86400000)), "dia", "dias") }),
+      bt]));
+  });
+}
+function paintLast() {
+  var box = $("lastInfo"), t = form.tag; box.textContent = "";
+  if (!t) { box.appendChild(el("span", { text: "Digite o número do carro." })); return; }
+  var l = latest[t];
+  if (!l) { box.appendChild(el("span", { text: "Primeira vistoria deste carro." })); return; }
+  var d = daysAgo(l.dia);
+  box.appendChild(el("span", { text: "Última vistoria" }));
+  box.appendChild(el("b", { text: fmtDate(l.dia) + " · " + (d === 0 ? "hoje" : "há " + plural(d, "dia", "dias")) }));
+  box.appendChild(el("span", { text: STATUS_TXT[l.status] + " · " + resTxt(l) }));
+  var lk = el("button", { type: "button", class: "lnk", text: "Ver histórico (" + byTag[t].length + ")" });
+  lk.addEventListener("click", function () { openCar(t); });
+  box.appendChild(lk);
+}
+
+// ---------------------------------------------------------------- salvar
+function save() {
+  var tag = normTag(form.tag);
+  if (!tag) { toast("Informe o número do carro"); $("tag").focus(); return; }
+  var acao = form.ac.join(", ");
+  var rec = {
+    id: uuid(), ts: new Date().toISOString(), data_vistoria: form.data || todayBelem(), tag: tag,
+    local: form.local, status: form.status, ocorrencias: form.oc.slice(), observacao: form.obs.trim() || null,
+    acao: acao || null, vistoriador: (ls("vb_nome") || "").trim() || null, app_device: deviceId(),
+    photos: form.fotos.slice(), fotos: [], state: "pending", err: null
+  };
+  ITEMS.forEach(function (it) { rec[it[0]] = form.items[it[0]]; });
+  var ps = formProbs();
+  rec.pendentes = ps.filter(function (l) { return stateOf(l) === "open"; });
+  rec.resolvidos = ps.filter(function (l) { return stateOf(l) === "res"; });
+  rec.chamados_resolvidos = Object.keys(form.chamRes).map(Number).filter(function (n) { return n > 0; });
+  ls("vb_local", form.local);
+  put(rec).then(function () {
+    form = blankForm(); paintForm(); window.scrollTo(0, 0);
+    toast(navigator.onLine ? "Carro " + tag + " salvo. Enviando…" : "Carro " + tag + " salvo no celular. Envia quando tiver internet.");
+    refreshAll(); syncNow();
+  });
+}
+function deviceId() { var d = ls("vb_dev"); if (!d) { d = "web-" + uuid().slice(0, 8); ls("vb_dev", d); } return d; }
+
+// ---------------------------------------------------------------- envio ao Supabase (fila; reenvio nao duplica porque o id vem do celular)
+var syncing = false, lastNetErr = false;
+function hdr(extra) { var h = { apikey: SB.key }; if (SB.key.indexOf("eyJ") === 0) h.Authorization = "Bearer " + SB.key; for (var k in extra) h[k] = extra[k]; return h; }
+function uploadPhoto(rec, i) {
+  var path = rec.data_vistoria.slice(0, 7) + "/" + rec.tag + "/" + rec.id + "-" + (i + 1) + ".jpg";
+  var pub = SB.url + "/storage/v1/object/public/" + SB.bucket + "/" + path;
+  return fetch(SB.url + "/storage/v1/object/" + SB.bucket + "/" + path, { method: "POST", headers: hdr({ "Content-Type": "image/jpeg" }), body: rec.photos[i] })
+    .then(function (r) {
+      if (r.ok) return pub;
+      return r.text().then(function (t) { if (r.status === 409 || /exists|Duplicate/i.test(t)) return pub; throw new Error("Foto: " + r.status + " " + t.slice(0, 140)); });
+    });
+}
+function sendOne(rec) {
+  rec.state = "sending"; rec.err = null; if (view === "enviadas") paintList();
+  var chain = Promise.resolve();
+  rec.photos.forEach(function (b, i) {
+    chain = chain.then(function () { if (rec.fotos[i]) return; return uploadPhoto(rec, i).then(function (u) { rec.fotos[i] = u; return put(rec); }); });
+  });
+  return chain.then(function () {
+    var row = {}; ["id", "ts", "data_vistoria", "tag", "local", "status", "ocorrencias", "observacao", "acao", "fotos", "vistoriador", "app_device", "pendentes", "resolvidos", "chamados_resolvidos"].forEach(function (k) { row[k] = rec[k]; });
+    ITEMS.forEach(function (it) { row[it[0]] = rec[it[0]]; });
+    return fetch(SB.url + "/rest/v1/vistorias?on_conflict=id", { method: "POST",
+      headers: hdr({ "Content-Type": "application/json", Prefer: "return=minimal,resolution=ignore-duplicates" }), body: JSON.stringify(row) });
+  }).then(function (r) {
+    if (!r.ok) return r.text().then(function (t) { throw new Error("Servidor: " + r.status + " " + t.slice(0, 160)); });
+    // fecha so os chamados que o vistoriador marcou; o resto da vistoria (ex.: tela trincada) nao volta para o motorista
+    var ids = rec.chamados_resolvidos || [];
+    if (!ids.length || rec.chamDone) return;
+    return fetch(SB.url + "/rest/v1/ocorrencias?id=in.(" + ids.join(",") + ")&status=in.(aberta,em_andamento)", { method: "PATCH",
+      headers: hdr({ "Content-Type": "application/json", Prefer: "return=minimal" }),
+      body: JSON.stringify({ status: "resolvida", resolvido_por: rec.vistoriador || "Vistoria", solucao: ("Vistoria " + fmtDT(rec.ts) + (rec.acao ? ": " + rec.acao : "")).slice(0, 1000) }) })
+      .then(function (r2) { if (!r2.ok) return r2.text().then(function (t) { throw new Error("Vistoria enviada, mas o chamado não fechou: " + r2.status + " " + t.slice(0, 120)); }); rec.chamDone = true; });
+  }).then(function () {
+    rec.state = "sent"; rec.sent_at = new Date().toISOString(); rec.photos = []; // fotos ja estao no servidor; libera espaco
+    lastNetErr = false;
+    return put(rec);
+  }).catch(function (e) {
+    var net = e instanceof TypeError;
+    if (net) lastNetErr = true;
+    rec.state = "pending"; rec.err = net ? "Sem conexão com o servidor" : String(e.message || e);
+    return put(rec);
+  });
+}
+function syncNow() {
+  if (syncing) return; syncing = true;
+  all().then(function (list) {
+    var pend = list.filter(function (r) { return r.state !== "sent"; }).reverse(); // mais antiga primeiro
+    return pend.reduce(function (p, r) { return p.then(function () { if (lastNetErr && !navigator.onLine) return; return sendOne(r); }); }, Promise.resolve());
+  }).then(function () { return prune(); }).then(function () { syncing = false; refreshAll(); fetchServer(); fetchChamados(); }, function () { syncing = false; refreshAll(); });
+}
+function prune() { // guarda so as 60 ultimas enviadas no celular
+  return all().then(function (list) { var sent = list.filter(function (r) { return r.state === "sent"; }); return Promise.all(sent.slice(60).map(function (r) { return del(r.id); })); });
+}
+var COLS = "id,tag,ts,data_vistoria,local,status,item_app,item_chip,item_cabo,item_leitor,item_suporte,item_celular,ocorrencias,observacao,acao,fotos,origem,pendentes";
+function fetchServer() {
+  if (!navigator.onLine) return;
+  fetch(SB.url + "/rest/v1/vistorias?select=" + COLS + "&order=ts.asc&limit=20000", { headers: hdr({}) })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (rows) {
+      if (!rows.length) return;
+      serverRows = rows; serverAt = new Date().toISOString();
+      ls("vb_cache", JSON.stringify({ rows: rows, at: serverAt })); // para abrir sem internet
+      refreshAll();
+    })
+    .catch(function () { /* fica com o cache ou com a planilha */ });
+}
+
+// ---------------------------------------------------------------- tela Carros
+var carFilter = null;
+function ageOf(l) { var d = daysAgo(l.dia); return d <= 15 ? "new" : d <= 30 ? "mid" : "old"; }
+function sitOf(l) { if (l.status === "NAO_VERIFICADO") return "nv"; if (pend(l).length) return l.status === "VERIFICAR" ? "ver" : "opnok"; return problem(l) ? "res" : "opok"; }
+var SIT = [["opok", "Operante + OK", "var(--ok)"], ["res", "Resolvido na hora", "var(--bar)"], ["opnok", "NOK em aberto", "var(--nok)"], ["ver", "Verificar", "var(--warn)"], ["nv", "Não verificado", "var(--idle)"]];
+function tagsSorted() { return Object.keys(latest).sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); }); }
+function paintCars() {
+  var tags = tagsSorted();
+  var cnt = { new: 0, mid: 0, old: 0, opok: 0, res: 0, opnok: 0, ver: 0, nv: 0 };
+  tags.forEach(function (t) { var l = latest[t]; cnt[ageOf(l)]++; cnt[sitOf(l)]++; });
+  var sum = $("carSummary"); sum.textContent = "";
+  [["new", "até 15 dias"], ["mid", "16 a 30 dias"], ["old", "mais de 30 dias"], ["opok", "Operante + OK"], ["res", "Resolvido na hora"], ["opnok", "NOK em aberto"], ["ver", "Verificar"], ["nv", "Não verificado"]].forEach(function (p) {
+    var b = el("button", { type: "button", class: "pill", "aria-pressed": String(carFilter === p[0]) }, [el("b", { text: String(cnt[p[0]]) }), el("span", { text: p[1] })]);
+    b.addEventListener("click", function () { carFilter = carFilter === p[0] ? null : p[0]; paintCars(); });
+    sum.appendChild(b);
+  });
+  var grid = $("carGrid"); grid.textContent = "";
+  tags.filter(function (t) { var l = latest[t]; return !carFilter || ageOf(l) === carFilter || sitOf(l) === carFilter; }).forEach(function (t) {
+    var l = latest[t], d = daysAgo(l.dia);
+    var c = el("button", { type: "button", class: "car", "data-age": ageOf(l), "aria-label": "Histórico do carro " + t }, [
+      el("span", { class: "n", text: t }),
+      el("span", { class: "cnt", text: byTag[t].length + "×" }),
+      el("span", { class: "d", text: fmtDate(l.dia) + " · " + d + "d" }),
+      el("span", { class: "st" }, [el("span", { class: "badge " + (l.status === "VERIFICAR" ? "warn" : ""), text: STATUS_TXT[l.status] }), el("span", { class: "badge " + resCls(l), text: resTxt(l) }),
+        l.src === "celular" ? el("span", { class: "badge warn", text: "pendente" }) : null])
+    ]);
+    c.addEventListener("click", function () { openCar(t); });
+    grid.appendChild(c);
+  });
+  if (!tags.length) grid.appendChild(el("div", { class: "empty", text: "Nenhuma vistoria ainda." }));
+  $("carSrc").textContent = srcText() + " Toque num carro para ver o histórico.";
+}
+function srcText() {
+  var hasPl = serverRows && serverRows.some(function (r) { return r.origem === "planilha"; });
+  if (serverRows) return (hasPl ? "Servidor" : "Planilha CHECK BDV até 23/10 + servidor") + ", atualizado " + fmtDT(serverAt) + ".";
+  return "Base: planilha CHECK BDV até 23/10, mais as vistorias feitas neste celular.";
+}
+
+// ---------------------------------------------------------------- detalhe do carro (historico completo)
+var shTag = null, shOrder = ls("vb_order") || "desc";
+function clsOf(v) { var s2 = sitOf(v); return s2 === "nv" ? "nv" : s2 === "res" ? "res" : s2 === "ver" ? "ver" : s2 === "opnok" ? "nok" : ""; }
+var stack = [];
+function showSheet(fn) { stack.push(fn); renderTop(); $("sheet").hidden = false; $("sheet").scrollTop = 0; document.body.style.overflow = "hidden"; }
+function renderTop() { if (!stack.length) return; stack[stack.length - 1](); $("shClose").textContent = stack.length > 1 ? "Voltar" : "Fechar"; }
+function openCar(t) { showSheet(function () { shTag = t; paintSheet(); }); }
+function closeCar() { stack.pop(); if (stack.length) { renderTop(); $("sheet").scrollTop = 0; return; } $("sheet").hidden = true; document.body.style.overflow = ""; }
+function closeAll() { stack = []; $("sheet").hidden = true; document.body.style.overflow = ""; }
+// Lista de drill-down: build() devolve [{tag, main, side, cls}] (carro ou vistoria); tocar abre o historico do carro
+function openList(title, sub, build) {
+  showSheet(function () {
+    shTag = null; $("shTitle").textContent = title; $("shNew").hidden = true;
+    var b = $("shBody"); b.textContent = ""; var rows = build();
+    b.appendChild(el("div", { class: "src", text: sub + " · " + plural(rows.length, "item", "itens") + ". Toque para ver o histórico do carro." }));
+    var box = el("div", { class: "open rows" });
+    if (!rows.length) box.appendChild(el("div", { class: "empty", text: "Nada aqui." }));
+    rows.forEach(function (r) {
+      var bt = el("button", { type: "button" }, [el("span", { class: "n", text: r.tag }), el("span", { class: "w" }, r.main), el("span", { class: "a", text: r.side })]);
+      bt.addEventListener("click", function () { openCar(r.tag); });
+      box.appendChild(bt);
+    });
+    b.appendChild(box);
+  });
+}
+function vRow(v) {
+  var what = nokNames(v).map(function (n) { return "NOK " + n.toLowerCase(); }).concat(v.oc.map(cap));
+  return { tag: v.tag, side: fmtDate(v.dia), main: [el("span", { class: "badge " + resCls(v), text: resTxt(v) }), " ", STATUS_TXT[v.status] + (what.length ? " · " + what.join(", ") : "") + (v.acao ? " · feito: " + cap(v.acao) : "")] };
+}
+function cRow(t, extra) { var l = latest[t]; var r = vRow(l); r.side = fmtDate(l.dia) + " · " + daysAgo(l.dia) + "d"; if (extra) r.main.unshift(extra + " · "); return r; }
+function newestFirst(a, b) { return -cmpV(a, b); }
+function paintSheet() {
+  var t = shTag, h = byTag[t] || [], b = $("shBody"); b.textContent = "";
+  $("shTitle").textContent = "Carro " + t; $("shNew").hidden = false;
+  if (!h.length) { b.appendChild(el("div", { class: "empty", text: "Sem vistorias." })); return; }
+  var noks = h.filter(isNok).length, first = h[0], last = h[h.length - 1];
+  var gaps = []; for (var i = 1; i < h.length; i++) gaps.push(dayNum(h[i].dia) - dayNum(h[i - 1].dia));
+  var avg = gaps.length ? Math.round(gaps.reduce(function (a, x) { return a + x; }, 0) / gaps.length) : null;
+  b.appendChild(el("div", { class: "facts" }, [
+    el("div", { class: "fact" }, [el("b", { text: String(h.length) }), el("span", { text: "vistorias desde " + fmtDate(first.dia) })]),
+    el("div", { class: "fact" }, [el("b", { text: String(noks) }), el("span", { text: "com NOK (" + Math.round(noks * 100 / h.length) + "%)" })]),
+    el("div", { class: "fact" }, [el("b", { text: daysAgo(last.dia) + "d" }), el("span", { text: "desde a última (" + fmtDate(last.dia) + ")" })]),
+    el("div", { class: "fact" }, [el("b", { text: avg == null ? "—" : avg + "d" }), el("span", { text: "intervalo médio" })])
+  ]));
+  // faixa: cada vistoria da primeira (esquerda) a ultima (direita)
+  var strip = el("div", { class: "strip" });
+  h.forEach(function (v) { strip.appendChild(el("i", { class: clsOf(v), title: fmtDate(v.dia) + " · " + STATUS_TXT[v.status] + (isNok(v) ? " · NOK: " + nokNames(v).join(", ") : " · OK") })); });
+  b.appendChild(el("div", { class: "field" }, [el("span", { class: "label", text: "Linha do tempo (primeira → última)" }),
+    el("div", { class: "strip-wrap" }, [strip]), el("div", { class: "strip-ax" }, [el("span", { text: fmtDate(first.dia) }), el("span", { text: fmtDate(last.dia) })]),
+    el("div", { class: "legend" }, [el("span", { style: "--c: var(--ok)", text: "OK" }), el("span", { style: "--c: var(--bar)", text: "Resolvido na hora" }), el("span", { style: "--c: var(--nok)", text: "NOK" }), el("span", { style: "--c: var(--warn)", text: "Verificar" }), el("span", { style: "--c: var(--idle)", text: "Não verificado" })])]));
+  // problemas recorrentes deste carro
+  var cnt = {};
+  h.forEach(function (v) { nokNames(v).forEach(function (n) { cnt["NOK em " + n] = (cnt["NOK em " + n] || 0) + 1; }); v.oc.forEach(function (o) { var k = cap(o); cnt[k] = (cnt[k] || 0) + 1; }); });
+  var rec = Object.keys(cnt).sort(function (a, c) { return cnt[c] - cnt[a]; });
+  if (rec.length) {
+    var ch = el("div", { class: "chips" });
+    rec.slice(0, 10).forEach(function (k) { ch.appendChild(el("span", { class: "badge " + (cnt[k] > 1 ? "nok" : ""), text: k + " ×" + cnt[k] })); });
+    b.appendChild(el("div", { class: "field" }, [el("span", { class: "label", text: "O que mais aparece neste carro" }), ch]));
+  }
+  // lista
+  var ord = el("div", { class: "seg small", style: "max-width: 340px" });
+  [["desc", "Mais recente primeiro"], ["asc", "Da primeira à última"]].forEach(function (o) {
+    var bt = el("button", { type: "button", "aria-pressed": String(shOrder === o[0]), text: o[1] });
+    bt.addEventListener("click", function () { shOrder = o[0]; ls("vb_order", o[0]); paintSheet(); });
+    ord.appendChild(bt);
+  });
+  b.appendChild(el("div", { class: "field" }, [el("span", { class: "label", text: "Todas as vistorias" }), ord]));
+  var tl = el("div", { class: "tl" });
+  (shOrder === "desc" ? h.slice().reverse() : h).forEach(function (v) {
+    var nn = nokNames(v);
+    var fotos = el("div", { class: "fotos" });
+    v.fotos.forEach(function (u, i) {
+      if (/drive\.google/.test(u)) fotos.appendChild(el("a", { href: u, target: "_blank", rel: "noopener", text: "Foto " + (i + 1) + " (Drive)" }));
+      else fotos.appendChild(el("a", { href: u, target: "_blank", rel: "noopener" }, [el("img", { src: u, alt: "Foto " + (i + 1), loading: "lazy" })]));
+    });
+    if (v.blobs && v.blobs.length) v.blobs.forEach(function (bl) { fotos.appendChild(el("img", { src: URL.createObjectURL(bl), alt: "Foto ainda no celular" })); });
+    tl.appendChild(el("div", { class: "tl-it " + clsOf(v) }, [
+      el("div", { class: "tl-h" }, [el("span", { class: "d", text: fmtDate(v.dia) + (v.src === "planilha" ? "" : " " + fmtDT(v.ts).slice(-5)) }),
+        el("span", { class: "badge " + (v.status === "VERIFICAR" ? "warn" : ""), text: STATUS_TXT[v.status] }),
+        el("span", { class: "badge " + resCls(v), text: resTxt(v) }),
+        v.src === "celular" ? el("span", { class: "badge warn", text: "pendente" }) : null,
+        v.via === "whatsapp" ? el("span", { class: "badge", text: "via WhatsApp" }) : null]),
+      el("div", { class: "meta" }, [(v.local === "TERMINAL" ? "Terminal" : "Garagem"), nn.length ? el("span", {}, [" · NOK: ", el("b", { text: nn.join(", ") })]) : null]),
+      v.oc.length ? el("div", { class: "meta", text: "Ocorrências: " + v.oc.map(cap).join(", ") }) : null,
+      v.acao ? el("div", { class: "meta", text: "Feito: " + cap(v.acao) }) : null,
+      v.obs ? el("div", { class: "meta", text: v.obs }) : null,
+      fotos.childNodes.length ? fotos : null
+    ]));
+  });
+  b.appendChild(tl);
+}
+
+// ---------------------------------------------------------------- dashboard gerencial
+var dashDays = 90, dashOpen = null;
+function inPeriod(v) { return !dashDays || daysAgo(v.dia) < dashDays; }
+function hbars(box, rows, max, fillCls, key) {
+  box.textContent = "";
+  if (!rows.length) { box.appendChild(el("div", { class: "hint", text: "Nada registrado no período." })); return; }
+  rows.forEach(function (r) {
+    var open = dashOpen === key + r.k;
+    var bt = el("button", { type: "button", class: "hbar", "aria-expanded": r.cars ? String(open) : null, title: r.title || "" }, [
+      el("span", { class: "nm", text: r.label }),
+      el("span", { class: "track" }, [el("span", { class: "fill " + (fillCls || ""), style: "display:block;width:" + (r.v * 100 / max).toFixed(1) + "%" })]),
+      el("span", { class: "v" }, [el("b", { text: String(r.v) }), r.extra ? " · " + r.extra : ""])
+    ]);
+    if (r.cars) bt.addEventListener("click", function () { dashOpen = open ? null : key + r.k; paintDash(); });
+    if (r.onClick) bt.addEventListener("click", r.onClick);
+    box.appendChild(bt);
+    if (open && r.cars) {
+      var d = el("div", { class: "drill" });
+      r.cars.forEach(function (t) { var cb = el("button", { type: "button", text: t, "aria-label": "Histórico do carro " + t }); cb.addEventListener("click", function () { openCar(t); }); d.appendChild(cb); });
+      if (r.list) { var ls2 = el("button", { type: "button", text: "Ver em lista", style: "font: 600 14px var(--font-body)" }); ls2.addEventListener("click", function () { openList(r.label, "Vistorias no período", r.list); }); d.appendChild(ls2); }
+      box.appendChild(d);
+    }
+  });
+}
+function paintDash() {
+  var P = V.filter(inPeriod), tags = tagsSorted();
+  var carsP = {}; P.forEach(function (v) { carsP[v.tag] = 1; });
+  var nokP = P.filter(isNok).length;
+  var stale = tags.filter(function (t) { return daysAgo(latest[t].dia) > 30; }).length;
+  var perTxt = dashDays ? "Últimos " + dashDays + " dias" : "Todo o histórico";
+  var resP = P.filter(function (v) { return problem(v) && resolved(v); }).length;
+  var k = $("kpis"); k.textContent = "";
+  [[String(P.length), "vistorias no período", false, function () { openList("Vistorias", perTxt, function () { return V.filter(inPeriod).sort(newestFirst).map(vRow); }); }],
+   [Object.keys(carsP).length + "/" + tags.length, "carros vistoriados", false, function () {
+     openList("Carros no período", perTxt + ", primeiro os que não foram vistoriados", function () {
+       var seen = {}; V.filter(inPeriod).forEach(function (v) { seen[v.tag] = (seen[v.tag] || 0) + 1; });
+       return tagsSorted().sort(function (a, b) { return (seen[a] ? 1 : 0) - (seen[b] ? 1 : 0) || daysAgo(latest[b].dia) - daysAgo(latest[a].dia); })
+         .map(function (t) { return cRow(t, seen[t] ? plural(seen[t], "vistoria", "vistorias") : "Sem vistoria no período"); });
+     }); }],
+   [P.length ? Math.round(nokP * 100 / P.length) + "%" : "—", "das vistorias com NOK · " + resP + " resolvidas na hora", false, function () {
+     openList("Vistorias com NOK", perTxt, function () { return V.filter(function (v) { return inPeriod(v) && isNok(v); }).sort(newestFirst).map(vRow); }); }],
+   [String(stale), "carros sem vistoria há +30 dias", stale > 0, function () {
+     openList("Sem vistoria há +30 dias", "Mais antigos primeiro", function () {
+       return tagsSorted().filter(function (t) { return daysAgo(latest[t].dia) > 30; }).sort(function (a, b) { return daysAgo(latest[b].dia) - daysAgo(latest[a].dia); }).map(function (t) { return cRow(t); });
+     }); }]].forEach(function (x) {
+    var bt = el("button", { type: "button", class: "kpi" + (x[2] ? " alert" : "") }, [el("b", { text: x[0] }), el("span", { text: x[1] })]);
+    bt.addEventListener("click", x[3]); k.appendChild(bt);
+  });
+  // ocorrencias: carros distintos por ocorrencia
+  var oc = {};
+  P.forEach(function (v) { v.oc.forEach(function (o) { var e = oc[o] = oc[o] || { cars: {}, n: 0 }; e.cars[v.tag] = 1; e.n++; }); });
+  var ocRows = Object.keys(oc).map(function (o) { var c = Object.keys(oc[o].cars).sort(); return { k: o, label: cap(o), v: c.length, extra: plural(oc[o].n, "registro", "registros"), cars: c,
+    list: function () { return V.filter(function (v) { return inPeriod(v) && v.oc.indexOf(o) >= 0; }).sort(newestFirst).map(vRow); } }; })
+    .sort(function (a, b) { return b.v - a.v || a.label.localeCompare(b.label); }).slice(0, 12);
+  hbars($("dOc"), ocRows, Math.max.apply(null, ocRows.map(function (r) { return r.v; }).concat(1)), "", "oc:");
+  // itens NOK
+  var itRows = ITEMS.map(function (x) {
+    var cars = {}, n = 0; P.forEach(function (v) { if (v.it[x[0]] === "NOK") { cars[v.tag] = 1; n++; } });
+    var c = Object.keys(cars).sort(); return { k: x[0], label: x[1], v: c.length, extra: plural(n, "vistoria", "vistorias"), cars: c,
+      list: function () { return V.filter(function (v) { return inPeriod(v) && v.it[x[0]] === "NOK"; }).sort(newestFirst).map(vRow); } };
+  }).sort(function (a, b) { return b.v - a.v; });
+  hbars($("dItems"), itRows.filter(function (r) { return r.v; }), Math.max.apply(null, itRows.map(function (r) { return r.v; }).concat(1)), "nok", "it:");
+  // situacao da frota (ultima vistoria de cada carro)
+  var sit = { opok: 0, res: 0, opnok: 0, ver: 0, nv: 0 }; tags.forEach(function (t) { sit[sitOf(latest[t])]++; });
+  var st = $("dStack"), sl = $("dStackLeg"); st.textContent = ""; sl.textContent = "";
+  SIT.forEach(function (s) {
+    var go = function () { openList(s[1], "Situação pela última vistoria", function () { return tagsSorted().filter(function (t) { return sitOf(latest[t]) === s[0]; }).map(function (t) { return cRow(t); }); }); };
+    if (sit[s[0]]) { var seg = el("button", { type: "button", style: "flex:" + sit[s[0]] + ";background:" + s[2], title: s[1] + ": " + sit[s[0]] + " carros", "aria-label": s[1] + ": " + sit[s[0]] + " carros" }); seg.addEventListener("click", go); st.appendChild(seg); }
+    var lg = el("button", { type: "button", style: "--c: " + s[2], text: s[1] + " " + sit[s[0]] }); lg.addEventListener("click", go); sl.appendChild(lg);
+  });
+  // por semana (segunda-feira como inicio)
+  function weekOf(v) { var dn = dayNum(v.dia); return dn - (new Date(dn * 86400000).getUTCDay() + 6) % 7; }
+  var wk = {}; P.forEach(function (v) { var w = weekOf(v); var e = wk[w] = wk[w] || { ok: 0, nok: 0, res: 0 }; if (!problem(v)) e.ok++; else if (resolved(v)) e.res++; else e.nok++; });
+  var ws = Object.keys(wk).map(Number).sort(function (a, b) { return a - b; });
+  if (ws.length) { var all = []; for (var w = ws[0]; w <= ws[ws.length - 1]; w += 7) all.push(w); ws = all; }
+  var wmax = Math.max.apply(null, ws.map(function (w) { var e = wk[w] || { ok: 0, nok: 0, res: 0 }; return e.ok + e.nok + e.res; }).concat(1));
+  var cols = $("dWeeks"); cols.textContent = "";
+  function wd(w) { var d = new Date(w * 86400000); return String(d.getUTCDate()).padStart(2, "0") + "/" + String(d.getUTCMonth() + 1).padStart(2, "0"); }
+  ws.forEach(function (w) {
+    var e = wk[w] || { ok: 0, nok: 0, res: 0 }, tot = e.ok + e.nok + e.res;
+    var lab = "Semana de " + wd(w) + ": " + tot + " vistorias, " + e.res + " NOK resolvidas na hora, " + e.nok + " NOK em aberto";
+    var c = el("button", { type: "button", class: "col", title: lab, "aria-label": lab });
+    if (e.ok) c.appendChild(el("div", { class: "okp", style: "height:" + (e.ok * 100 / wmax) + "%" }));
+    if (e.res) c.appendChild(el("div", { class: "resp", style: "height:" + (e.res * 100 / wmax) + "%" }));
+    if (e.nok) c.appendChild(el("div", { class: "nokp", style: "height:" + (e.nok * 100 / wmax) + "%" }));
+    if (tot) c.addEventListener("click", function () { openList("Semana de " + wd(w), "Segunda a domingo", function () { return V.filter(function (v) { return weekOf(v) === w; }).sort(newestFirst).map(vRow); }); });
+    cols.appendChild(c);
+  });
+  var ax = $("dWeeksAx"); ax.textContent = "";
+  if (ws.length) { ax.appendChild(el("span", { text: wd(ws[0]) })); ax.appendChild(el("span", { text: "máx. " + wmax + "/semana" })); ax.appendChild(el("span", { text: wd(ws[ws.length - 1]) })); }
+  // pendencias em aberto
+  paintPendList($("dOpen"));
+  $("dOpenTitle").textContent = "Pendências em aberto · " + plural(pendTags().length, "carro", "carros");
+  // ranking de carros com mais NOK
+  var rk = {}; P.forEach(function (v) { if (isNok(v)) rk[v.tag] = (rk[v.tag] || 0) + 1; });
+  var rkRows = Object.keys(rk).map(function (t) {
+    var tot = P.filter(function (v) { return v.tag === t; }).length;
+    return { k: t, label: "Carro " + t, v: rk[t], extra: "de " + tot, onClick: function () { openCar(t); } };
+  }).sort(function (a, b) { return b.v - a.v; }).slice(0, 10);
+  hbars($("dRank"), rkRows, Math.max.apply(null, rkRows.map(function (r) { return r.v; }).concat(1)), "nok", "rk:");
+}
+
+// ---------------------------------------------------------------- tela Enviadas
+function paintList() {
+  all().then(function (list) {
+    var box = $("recList"); box.textContent = "";
+    if (!list.length) { box.appendChild(el("div", { class: "empty", text: "As vistorias salvas neste celular aparecem aqui." })); return; }
+    list.forEach(function (r) {
+      var noks = ITEMS.filter(function (it) { return r[it[0]] === "NOK"; }).map(function (it) { return it[1]; });
+      var st = r.state === "sent" ? el("span", { class: "badge ok", text: "Enviada" }) : r.state === "sending" ? el("span", { class: "badge warn", text: "Enviando" }) : el("span", { class: "badge warn", text: "Pendente" });
+      var mini = el("div", { class: "mini" });
+      (r.photos && r.photos.length ? r.photos.map(function (b) { return URL.createObjectURL(b); }) : r.fotos || []).slice(0, 4).forEach(function (u) { mini.appendChild(el("img", { src: u, alt: "" })); });
+      var acts = el("div", { class: "acts" });
+      if (r.state !== "sent") {
+        var bt = el("button", { type: "button", text: "Enviar agora" }); bt.addEventListener("click", function () { lastNetErr = false; syncNow(); }); acts.appendChild(bt);
+        var bx = el("button", { type: "button", text: "Excluir" });
+        bx.addEventListener("click", function () { if (bx.dataset.c) { del(r.id).then(refreshAll); } else { bx.dataset.c = "1"; bx.textContent = "Toque de novo para excluir"; } });
+        acts.appendChild(bx);
+      }
+      box.appendChild(el("div", { class: "rec" }, [
+        el("div", { class: "rec-h" }, [el("span", { class: "n", text: r.tag }), el("span", { class: "d", text: fmtDT(r.ts) + (r.data_vistoria !== todayBelemOf(r.ts) ? " · dia " + fmtDate(r.data_vistoria) : "") }), st]),
+        el("div", { class: "meta", text: (r.local === "TERMINAL" ? "Terminal" : "Garagem") + " · " + STATUS_TXT[r.status] + " · " + (noks.length ? "NOK: " + noks.join(", ") : "tudo OK") + (r.ocorrencias.length ? " · " + r.ocorrencias.join(", ").toLowerCase() : "") }),
+        r.acao ? el("div", { class: "meta", text: "Feito: " + cap(r.acao) }) : null,
+        r.observacao ? el("div", { class: "meta", text: r.observacao }) : null,
+        mini.childNodes.length ? mini : null,
+        r.err && r.state !== "sent" ? el("div", { class: "err", text: r.err }) : null,
+        acts.childNodes.length ? acts : null
+      ]));
+    });
+  });
+}
+function todayBelemOf(iso) { return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(iso)); }
+// Carros sem vistoria ha mais de 6 meses provavelmente sairam da frota: ficam fora do alerta, numa lista a parte.
+var STALE_DAYS = 180;
+function pendTags(old) {
+  return tagsSorted().filter(function (t) { var l = lastChecked(t); return l && pend(l).length && (daysAgo(latest[t].dia) > STALE_DAYS) === !!old; })
+    .sort(function (a, b) { return pendAge(b) - pendAge(a); });
+}
+function pendAge(t) { var l = lastChecked(t); return Math.max.apply(null, pend(l).map(function (p) { return daysAgo(openSince(t, p) || l.dia); })); }
+function pendRow(t) {
+  var l = lastChecked(t), ch = openCham(t).length;
+  var what = pend(l).map(function (p) { var d = openSince(t, p) || l.dia; return pTxt(p) + " (" + daysAgo(d) + "d)"; });
+  return { tag: t, side: "há " + pendAge(t) + "d", main: [ch ? el("span", { class: "badge warn", text: "chamado aberto" }) : null, ch ? " " : "", what.join(", ")] };
+}
+function paintPendList(box) {
+  box.textContent = ""; var ts = pendTags();
+  if (!ts.length) box.appendChild(el("div", { class: "hint", text: "Nenhuma pendência em aberto." }));
+  ts.forEach(function (t) {
+    var r = pendRow(t);
+    var bt = el("button", { type: "button" }, [el("span", { class: "n", text: t }), el("span", { class: "w" }, r.main), el("span", { class: "a", text: r.side })]);
+    bt.addEventListener("click", function () { openCar(t); }); box.appendChild(bt);
+  });
+  var old = pendTags(true);
+  if (old.length) {
+    var ob = el("button", { type: "button", class: "lnk", style: "border:0;background:none;color:var(--accent);font-weight:600;text-decoration:underline;padding:4px 0;text-align:left", text: "+ " + plural(old.length, "carro", "carros") + " com pendência e sem vistoria há mais de 6 meses (talvez fora da frota): " + old.join(", ") });
+    ob.addEventListener("click", function () { openList("Sem vistoria há +6 meses", "Pendências antigas", function () { return old.map(pendRow); }); });
+    box.appendChild(ob);
+  }
+}
+function paintAlert() {
+  var n = pendTags().length, a = $("pendAlert"), tc = $("tabPend");
+  tc.hidden = !n; tc.textContent = n;
+  a.hidden = !n || !!form.tag; a.textContent = "";
+  if (n) { a.appendChild(el("b", { text: String(n) })); a.appendChild(el("span", { text: (n === 1 ? "carro com pendência em aberto" : "carros com pendência em aberto") + ". Toque para ver a lista." })); }
+}
+function paintSync(list) {
+  var pend = list.filter(function (r) { return r.state !== "sent"; }).length, b = $("syncBtn");
+  if (pend) { b.dataset.s = navigator.onLine && !lastNetErr ? "pend" : "off"; $("syncTxt").textContent = pend + (pend > 1 ? " pendentes" : " pendente"); }
+  else { b.dataset.s = navigator.onLine ? "ok" : "off"; $("syncTxt").textContent = navigator.onLine ? "Tudo enviado" : "Sem internet"; }
+  $("previewNotice").hidden = !(pend && lastNetErr && navigator.onLine);
+}
+function refreshAll() {
+  return all().then(function (list) {
+    rebuild(list); paintSync(list); paintLast(); paintAlert();
+    if (view === "carros") paintCars(); if (view === "dash") paintDash(); if (view === "enviadas") paintList();
+    if (!$("sheet").hidden) renderTop();
+  });
+}
+
+// ---------------------------------------------------------------- navegacao e eventos
+var view = "nova";
+function switchView(v) {
+  view = v;
+  document.querySelectorAll("#tabs button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.view === v)); });
+  ["nova", "carros", "dash", "enviadas"].forEach(function (k) { $("v-" + k).hidden = k !== v; });
+  $("savebar").hidden = v !== "nova";
+  refreshAll(); window.scrollTo(0, 0);
+}
+document.querySelectorAll("#tabs button").forEach(function (b) { b.addEventListener("click", function () { switchView(b.dataset.view); }); });
+document.querySelectorAll("#v-nova .seg").forEach(function (seg) {
+  seg.addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    var k = seg.dataset.k; form[k] = b.dataset.v;
+    if (k === "status" && b.dataset.v === "NAO_VERIFICADO") ITEMS.forEach(function (it) { form.items[it[0]] = null; });
+    if (k === "status" && b.dataset.v !== "NAO_VERIFICADO") ITEMS.forEach(function (it) { if (!form.items[it[0]]) form.items[it[0]] = "OK"; });
+    paintForm();
+  });
+});
+$("perSeg").addEventListener("click", function (e) {
+  var b = e.target.closest("button"); if (!b) return;
+  dashDays = +b.dataset.d; dashOpen = null;
+  this.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+  paintDash();
+});
+$("tag").addEventListener("input", function () {
+  var t = this.value.replace(/\D/g, "").slice(0, 4); this.value = t;
+  if (t.length >= 2) setTag(t); else { form.tag = t; paintForm(); }
+});
+$("tag").addEventListener("blur", function () { if (this.value && normTag(this.value) !== form.tag) setTag(this.value); });
+$("clearBtn").addEventListener("click", function () { var t = form.tag, f = form.fotos; form = blankForm(t); form.fotos = f; form.pref = { tag: t, dia: null }; paintForm(); $("prefill").hidden = true; });
+["oc", "ac"].forEach(function (k) {
+  $(k + "Input").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); addCustom(k); } });
+  $(k + "Ok").addEventListener("click", function () { addCustom(k); });
+});
+$("obs").addEventListener("input", function () { form.obs = this.value; });
+$("dataV").addEventListener("change", function () { form.data = this.value || todayBelem(); });
+$("camBtn").addEventListener("click", function () { $("camIn").click(); });
+$("galBtn").addEventListener("click", function () { $("galIn").click(); });
+$("camIn").addEventListener("change", function () { addFiles(this.files); this.value = ""; });
+$("galIn").addEventListener("change", function () { addFiles(this.files); this.value = ""; });
+$("saveBtn").addEventListener("click", save);
+$("syncBtn").addEventListener("click", function () { lastNetErr = false; syncNow(); toast("Tentando enviar…"); });
+$("shClose").addEventListener("click", closeCar);
+$("pendAlert").addEventListener("click", function () { openList("Pendências em aberto", "Mais antigas primeiro", function () { return pendTags().map(pendRow); }); });
+$("shNew").addEventListener("click", function () { var t = shTag; closeAll(); form.pref = null; switchView("nova"); setTag(t); });
+document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("sheet").hidden) closeCar(); });
+$("nome").value = ls("vb_nome") || "";
+$("nome").addEventListener("input", function () { ls("vb_nome", this.value); });
+$("devInfo").textContent = "Este aparelho: " + deviceId() + ". As fotos ficam no celular até subirem; depois são apagadas daqui para liberar espaço.";
+window.addEventListener("online", function () { lastNetErr = false; syncNow(); });
+window.addEventListener("offline", refreshAll);
+document.addEventListener("visibilitychange", function () { if (!document.hidden) syncNow(); });
+setInterval(function () { if (navigator.onLine) syncNow(); }, 60000);
+
+// Funciona offline quando aberto pelo endereco definitivo (sw.js ao lado). Na previa nao ha service worker.
+if ("serviceWorker" in navigator && (/^https:/.test(location.protocol) || location.hostname === "localhost")) { try { navigator.serviceWorker.register("sw.js").catch(function () {}); } catch (e) {} }
+// Pede ao navegador para nao apagar a fila offline (fotos e vistorias ainda nao enviadas) quando faltar espaco.
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+// Botao "Instalar app" (Android/Chrome). No iPhone: Compartilhar > Adicionar a Tela de Inicio.
+var installEv = null;
+window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); installEv = e; $("installBtn").hidden = false; });
+window.addEventListener("appinstalled", function () { installEv = null; $("installBtn").hidden = true; });
+$("installBtn").addEventListener("click", function () {
+  if (!installEv) return;
+  installEv.prompt(); installEv.userChoice.then(function () { installEv = null; $("installBtn").hidden = true; });
+});
+
+form = blankForm(); buildItems(); paintForm(); refreshAll().then(function () { paintForm(); }); syncNow();
+</script>
+
+</body>
+</html>
