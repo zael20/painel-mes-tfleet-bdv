@@ -148,7 +148,7 @@ if (MANHA && (alerta.length || fIna.length || respostas.length)) {
     fIna.map(p => `${esc(p.nome)} (${esc(p.matricula)}) · ${esc(p.linha)} · último ${ddmm(p.ultimo)}`).join('<br>') + '</div>';
   if (respostas.length) corpo += `<div style="background:#e8f5e9;border-radius:8px;padding:10px 12px;margin:6px 0 12px;font-size:13px;color:#17212b">
       <b style="color:#2e7d32">Respostas dos supervisores</b><br>` +
-    respostas.map(c => `${esc(c.nome)} · ${esc(c.linha_usada)}: <b>${esc(NOME_RESP[c.resposta] || c.resposta)}</b>${c.comentario ? ' — "' + esc(c.comentario) + '"' : ''}`).join('<br>') + '</div>';
+    respostas.map(c => `${esc(c.nome)} · ${esc(c.linha_usada)}: <b>${esc(NOME_RESP[c.resposta] || c.resposta)}</b>${c.periodo_fim ? ' até ' + ddmm(c.periodo_fim) : ''}${c.endereco ? ' · <b>endereço novo:</b> ' + esc([[c.endereco.rua, c.endereco.numero].filter(Boolean).join(' '), c.endereco.bairro, c.endereco.cidade, c.endereco.referencia && 'ref.: ' + c.endereco.referencia].filter(Boolean).join(', ')) : ''}${['MUDOU_ENDERECO', 'MUDOU_TURNO'].includes(c.resposta) ? ' <span style="color:#b3261e">→ ajustar a rota na TFleet</span>' : ''}${c.resposta === 'OUTRO' ? ' <span style="color:#a35c00">(para analisar)</span>' : ''}${c.comentario ? ' — "' + esc(c.comentario) + '"' : ''}`).join('<br>') + '</div>';
   corpo += `<div style="margin-top:6px">${botao(PAINEL, 'Abrir painel de lotação')}</div>`;
   const partes = [nL && `${nL} lotando`, nA && `${nA} em atenção`, nP && `${nP} com previsão`, fIna.length && `${fIna.length} inativo(s)`].filter(Boolean);
   out.push({ json: {

@@ -31,6 +31,13 @@ button { width: 100%; margin-top: 14px; font-family: inherit; font-weight: 600; 
 button:disabled { opacity: .6; }
 .ok { background: var(--good-soft); color: var(--good); border-radius: 10px; padding: 16px; font-weight: 600; }
 .err { color: var(--crit); margin-top: 10px; }
+.extra { border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: -2px 0 10px; background: var(--panel); }
+.extra[hidden] { display: none; }
+.extra label { display: block; font-size: 14px; color: var(--muted); margin-top: 8px; }
+.extra label:first-child { margin-top: 0; }
+.extra input { width: 100%; font: inherit; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 3px; }
+.duas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+.extra p { margin: 0 0 4px; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -40,11 +47,27 @@ button:disabled { opacity: .6; }
 // Conexao publica do painel: a pagina so consegue ver/responder a consulta do token do link.
 const CONFIG = { url: "https://orhuxmsrdnugpogvtnbg.supabase.co", key: "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL" };
 const OPCOES = [
-  ["TREINAMENTO", "Treinamento / temporário"], ["MUDOU_ENDERECO", "Mudou de endereço (vai permanecer)"],
-  ["MUDOU_TURNO", "Mudou de turno / escala"], ["COBERTURA", "Cobertura (férias / folga)"],
+  ["TREINAMENTO", "Treinamento / temporário"], ["COBERTURA", "Cobertura (férias / folga)"],
+  ["MUDOU_ENDERECO", "Mudou de endereço (vai permanecer)"], ["MUDOU_TURNO", "Mudou de turno / escala"],
   ["NAO_SEI", "Não sei, vou verificar"], ["OUTRO", "Outro motivo"]];
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const hojeISO = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+// campos que aparecem logo abaixo da opcao escolhida
+const EXTRA = {
+  PERIODO: c => `<p>Até quando? Nesse período não chega mais e-mail sobre essa pessoa. Depois, se ela ainda estiver nessa rota, perguntamos de novo.</p>
+    <div class="duas"><label>De<input id="pIni" type="date" value="${esc(c.periodo_ini || hojeISO())}"></label>
+    <label>Até<input id="pFim" type="date" value="${esc(c.periodo_fim || "")}" min="${hojeISO()}"></label></div>`,
+  MUDOU_ENDERECO: c => { const e = c.endereco || {}; return `<p>Endereço novo (o transporte ajusta a rota no sistema):</p>
+    <label>Rua / avenida<input id="eRua" type="text" maxlength="150" value="${esc(e.rua)}" autocomplete="off"></label>
+    <div class="duas"><label>Número<input id="eNum" type="text" maxlength="20" value="${esc(e.numero)}"></label>
+    <label>Bairro<input id="eBai" type="text" maxlength="100" value="${esc(e.bairro)}"></label></div>
+    <div class="duas"><label>Cidade<input id="eCid" type="text" maxlength="100" value="${esc(e.cidade || "Paragominas")}"></label>
+    <label>Ponto de referência<input id="eRef" type="text" maxlength="200" value="${esc(e.referencia)}"></label></div>`; },
+  MUDOU_TURNO: () => `<p>Só confirmar. O transporte muda a rota da pessoa no sistema. Se souber a escala nova, escreva na observação.</p>`,
+  NAO_SEI: () => `<p>Perguntamos de novo em 3 dias se a pessoa continuar nessa rota.</p>`,
+};
+const extraDe = (k, c) => EXTRA[k === "TREINAMENTO" || k === "COBERTURA" ? "PERIODO" : k]?.(c) || "";
 const dt = d => d ? String(d).slice(0, 10).split("-").reverse().join("/") : "";
 const sem = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s*-\s*PASSAGEIRO\s*$/, "").trim();
 const grupo = t => { const n = sem(t); return /^CT\s*-?\s*\d/.test(n) ? "terceiros (CT)" : /(^|[^A-Z])ADM([^A-Z]|$)/.test(n) ? "ADM" : /TURNO/.test(n) ? "turno" : null; };
@@ -74,14 +97,19 @@ async function rpc(fn, body) {
     ${c.respondido_em ? `<div class="ok" style="margin-bottom:8px">Já respondido em ${dt(c.respondido_em)}. Pode alterar abaixo.</div>` : ""}
     <form id="f">
       <fieldset><legend>Por que está nessa rota?</legend>
-        ${OPCOES.map(([k, t]) => `<label class="opt"><input type="radio" name="r" value="${k}" ${k === sel ? "checked" : ""}> ${t}</label>`).join("")}
+        ${OPCOES.map(([k, t]) => `<label class="opt"><input type="radio" name="r" value="${k}" ${k === sel ? "checked" : ""}> ${t}</label>
+          <div class="extra" data-k="${k}" ${k === sel && extraDe(k, c) ? "" : "hidden"}>${k === sel ? extraDe(k, c) : ""}</div>`).join("")}
       </fieldset>
       <label for="obs" class="muted">Observação ${sel === "OUTRO" ? "(obrigatória)" : "(opcional)"}</label>
       <textarea id="obs" maxlength="1000" placeholder="Ex.: treinamento até 05/11; depois volta para a rota de cadastro">${esc(c.comentario || "")}</textarea>
       <button id="b">Enviar resposta</button>
       <div id="e" class="err"></div>
     </form>`;
-  $("#f").addEventListener("change", () => {
+  $("#f").addEventListener("change", e => {
+    if (e.target.name === "r") document.querySelectorAll(".extra").forEach(x => {
+      const on = x.dataset.k === e.target.value, h = on ? extraDe(x.dataset.k, c) : "";
+      if (on && !x.innerHTML) x.innerHTML = h; if (!on) x.innerHTML = ""; x.hidden = !on || !h;
+    });
     $('label[for="obs"]').textContent = "Observação " + ($('input[name="r"]:checked')?.value === "OUTRO" ? "(obrigatória)" : "(opcional)");
   });
   $("#f").addEventListener("submit", async e => {
@@ -89,10 +117,26 @@ async function rpc(fn, body) {
     const r = $('input[name="r"]:checked')?.value, obs = $("#obs").value.trim();
     if (!r) { $("#e").textContent = "Escolha uma opção."; return; }
     if (r === "OUTRO" && !obs) { $("#e").textContent = "Escreva o motivo."; $("#obs").focus(); return; }
+    const body = { p_token: token, p_resposta: r, p_comentario: obs || null };
+    if (r === "TREINAMENTO" || r === "COBERTURA") {
+      body.p_periodo_ini = $("#pIni").value || null; body.p_periodo_fim = $("#pFim").value || null;
+      if (!body.p_periodo_fim) { $("#e").textContent = "Informe até quando."; $("#pFim").focus(); return; }
+      if (body.p_periodo_ini && body.p_periodo_ini > body.p_periodo_fim) { $("#e").textContent = "A data inicial está depois da final."; return; }
+    }
+    if (r === "MUDOU_ENDERECO") {
+      body.p_endereco = { rua: $("#eRua").value.trim(), numero: $("#eNum").value.trim(), bairro: $("#eBai").value.trim(), cidade: $("#eCid").value.trim(), referencia: $("#eRef").value.trim() };
+      if (!body.p_endereco.rua || !body.p_endereco.bairro) { $("#e").textContent = "Informe pelo menos a rua e o bairro."; (body.p_endereco.rua ? $("#eBai") : $("#eRua")).focus(); return; }
+    }
     $("#b").disabled = true; $("#b").textContent = "Enviando…"; $("#e").textContent = "";
     try {
-      await rpc("consulta_responder", { p_token: token, p_resposta: r, p_comentario: obs || null });
-      $("#app").innerHTML = `<div class="ok">Resposta registrada. Obrigado!</div><p class="muted">${esc(c.nome)} · ${esc(OPCOES.find(o => o[0] === r)[1])}${obs ? " — " + esc(obs) : ""}</p>`;
+      try { await rpc("consulta_responder", body); }
+      catch (err) {   // Supabase ainda sem o lotacao-v5: grava periodo/endereco na observacao
+        if (!/consulta_responder|function|schema cache/i.test(err.message) || Object.keys(body).length === 3) throw err;
+        const ex = [body.p_periodo_fim && ("período " + dt(body.p_periodo_ini) + " a " + dt(body.p_periodo_fim)),
+                    body.p_endereco && ("endereço novo: " + Object.values(body.p_endereco).filter(Boolean).join(", "))].filter(Boolean).join("; ");
+        await rpc("consulta_responder", { p_token: token, p_resposta: r, p_comentario: [ex, obs].filter(Boolean).join(" — ") });
+      }
+      $("#app").innerHTML = `<div class="ok">Resposta registrada. Obrigado!</div><p class="muted">${esc(c.nome)} · ${esc(OPCOES.find(o => o[0] === r)[1])}${body.p_periodo_fim ? " até " + dt(body.p_periodo_fim) : ""}${body.p_endereco ? " — " + esc([body.p_endereco.rua + (body.p_endereco.numero ? " " + body.p_endereco.numero : ""), body.p_endereco.bairro, body.p_endereco.cidade].filter(Boolean).join(", ")) : ""}${obs ? " — " + esc(obs) : ""}</p>`;
     } catch (err) { $("#b").disabled = false; $("#b").textContent = "Enviar resposta"; $("#e").textContent = "Não enviou: " + err.message; }
   });
 })();

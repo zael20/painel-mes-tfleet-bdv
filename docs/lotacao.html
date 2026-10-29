@@ -46,7 +46,8 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 .painel h4 { margin: 12px 0 2px; font: 600 14px var(--f-display); }
 .imp { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
 .kpis.k4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-@media (max-width: 640px) { .kpis, .kpis.k4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpis.k3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 640px) { .kpis, .kpis.k4, .kpis.k3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 button.kpi { text-align: left; font: inherit; color: inherit; cursor: pointer; }
 button.kpi.on { outline: 2px solid var(--accent); outline-offset: -2px; }
 button.kpi:hover { border-color: var(--accent); }
@@ -95,6 +96,17 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
 .note { font-size: 12px; color: var(--muted); margin-top: 16px; }
 .btn { font: 600 14px var(--f-body); padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); cursor: pointer; }
 .muted { color: var(--muted); font-size: 13px; }
+.mapa { height: 380px; border-radius: 8px; border: 1px solid var(--line); margin: 8px 0; background: var(--chart-grid); cursor: default; }
+.mapa.grande { height: 460px; }
+@media (max-width: 640px) { .mapa { height: 300px; } .mapa.grande { height: 360px; } }
+.oc { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; font-size: 14px; }
+.oc.t-LOTA_FIM { border-left-color: var(--crit); } .oc.t-MOVER { border-left-color: var(--warn); } .oc.t-SOBREPOSTA { border-left-color: var(--accent); }
+.oc.on { outline: 2px solid var(--accent); }
+.oc .tt { font: 600 15px var(--f-display); } .oc .chip { background: var(--accent-soft) !important; color: var(--accent) !important; } .oc ul { margin: 4px 0 0; padding-left: 18px; }
+.leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.leg i { display: inline-block; width: 18px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+.leg i.pt { width: 10px; height: 10px; border-radius: 50%; }
+.leaflet-container { font: 13px var(--f-body); }
 .painel h3.old { margin: 14px 0 4px; font: 600 15px var(--f-display); }
 #vCola { width: 100%; min-height: 120px; font: 13px var(--f-mono); padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
 .vtodos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin: 8px 0; }
@@ -128,6 +140,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
 <main>
   <nav class="tabs" role="tablist">
     <button type="button" role="tab" data-tab="ocup" class="on">Ocupação dos ônibus</button>
+    <button type="button" role="tab" data-tab="otim">Otimização de rotas</button>
     <button type="button" role="tab" data-tab="fora">Passageiros fora de rota</button>
     <button type="button" role="tab" data-tab="cad">Cadastro e gestores</button>
     <button type="button" role="tab" data-tab="resp">Respostas</button>
@@ -149,6 +162,21 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
     <p class="base" id="base"></p>
     <div class="list" id="list"><div class="msg">Carregando…</div></div>
     <p class="note">Clique num número de cima para ver só aquelas rotas; clique numa rota para ver as viagens que formam a média. Média = passageiros identificados por viagem (BDV). Ideal = 40, deixando 5 vagas dos 45 lugares. Quadradinhos = um por dia: vermelho passou de 40, amarelo de 36 a 40, verde abaixo. Rota alternativa só é sugerida dentro do mesmo grupo (ADM com ADM, CT com CT, turno com turno), com ponto a até 400 m e embarque em horário parecido; confira com a operação antes de mudar.</p>
+  </section>
+
+  <section class="painel" data-p="otim" hidden>
+    <div class="bar">
+      <label>Sentido<select id="oSent"><option value="IDA" selected>Ida</option><option value="VOLTA">Volta</option><option value="">Ida e volta</option></select></label>
+      <label>Grupo<select id="oGrupo"><option value="">Todos</option><option value="ADM">ADM</option><option value="CT">CT (terceiros)</option><option value="TURNO">Turno</option></select></label>
+      <label>Raio<select id="oRaio"><option value="200">200 m</option><option value="300" selected>300 m</option><option value="400">400 m</option></select></label>
+      <label>Buscar rota<input id="oBusca" type="search" placeholder="ex.: JK, Promissão"></label>
+    </div>
+    <div class="kpis" id="oKpis"></div>
+    <p class="base" id="oBase"></p>
+    <div id="oMapa" class="mapa grande"></div>
+    <div class="leg" id="oLeg"></div>
+    <div id="oLista" style="margin-top:10px"><div class="msg">Carregando…</div></div>
+    <p class="note">Traçado e paradas: mapa de roteirização da TFleet, atualizado todo dia pelo fluxo "Coletar traçado das rotas" (rota nova no mapa entra sozinha). Pontos: onde o pessoal embarcou de verdade (ida) ou desceu (volta) no período, agrupados a cada ~100 m. Vaga = ideal (40) menos a média por viagem da rota; até 45 lugares aparece entre parênteses. Só sugere rota do mesmo grupo (ADM com ADM, CT com CT, turno com o mesmo turno). São sugestões para conferir com a operação antes de mudar.</p>
   </section>
 
   <section class="painel" data-p="fora" hidden>
@@ -191,10 +219,11 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
   </section>
 
   <section class="painel" data-p="resp" hidden>
-    <div class="kpis k4" id="rKpis"></div>
+    <div class="kpis k3" id="rKpis"></div>
     <div id="gResp" class="muted">Abra com a senha para ver.</div>
   </section>
 </main>
+<script src="lotacao-rotas.js"></script>
 <script>
 // Mesma conexao publica do painel (so leitura).
 const CONFIG = { url: "https://orhuxmsrdnugpogvtnbg.supabase.co", key: "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL" };
@@ -233,6 +262,7 @@ async function load() {
       api("rpc/lotacao_dias", { dias }).catch(() => [])]);
     monit = new Set((await api("rotas_monitoradas?select=linha").catch(() => [])).map(m => m.linha));
     render(); foraRender();
+    otimLoad(dias, capacidade);
   } catch (e) {
     $("#kpis").innerHTML = "";
     $("#list").innerHTML = '<div class="msg">Não consegui ler os dados (' + esc(e.message) + '). Se aparecer 404, falta rodar o <b>lotacao-v3.sql</b> no Supabase.</div>';
@@ -326,18 +356,157 @@ $("#list").addEventListener("click", async e => {
       if (r.ref === "turno") return prev === r.faixa;
       return !prev && v.hora_saida >= r.faixa && v.hora_saida <= endSlot(r.faixa) + ":59";
     });
-    det.innerHTML = extras(r) + `<table><tr><th>Dia</th><th>Saída</th><th>Ônibus</th><th>Motorista</th><th style="text-align:right">Passag.</th></tr>` +
+    det.innerHTML = extras(r) + otimDetalhe(r) + `<table><tr><th>Dia</th><th>Saída</th><th>Ônibus</th><th>Motorista</th><th style="text-align:right">Passag.</th></tr>` +
       vs.slice().reverse().map(v => `<tr><td>${v.data_local.split("-").reverse().join("/")}</td><td>${esc((v.hora_saida || "").slice(0, 5))}</td><td>${esc(v.frota)}</td><td>${esc(v.motorista)}</td>
         <td class="n ${v.ocupacao > cap ? "acima" : ""}">${v.ocupacao ? v.ocupacao : "sem leitura"}</td></tr>`).join("") + "</table>";
     el.dataset.loaded = 1;
+    otimMapaRota(det.querySelector(".mapa"), r);
   } catch (err) { det.textContent = "Erro ao carregar: " + err.message; }
 });
+
+// ---- otimizacao de rotas: traçado real (rotas_tracado) + pontos de embarque (rota_pontos) + ocupacao (rows).
+// Calculo em lotacao-rotas.js (Otim.analisar). Mapa: Leaflet local + satelite MapTiler.
+const MAPTILER_KEY = "G2MUHW7Q8hatR3VYbHUz";
+let tracado = null, rpontos = [], otimRes = null, otimErro = "", otimSel = -1, otimF = "", oMap = null, oLayer = null;
+const CORES = ["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#46f0f0", "#f032e6", "#bcf60c", "#fabebe", "#008080", "#e6beff", "#9a6324", "#fffac8", "#aaffc3"];
+let leafletP = null;
+function carregaLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (leafletP) return leafletP;
+  const css = (h) => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = h; document.head.appendChild(l); };
+  const js = (src) => new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = src; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+  css("leaflet.css");
+  leafletP = js("leaflet.js").catch(() => { css("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"); return js("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"); }).then(() => window.L);
+  return leafletP;
+}
+function novoMapa(el) {
+  const m = L.map(el, { preferCanvas: true, scrollWheelZoom: false });
+  m.attributionControl.setPrefix(false);
+  setTimeout(() => m.invalidateSize(), 50);
+  const sat = L.tileLayer("https://api.maptiler.com/maps/satellite/256/{z}/{x}/{y}.jpg?key=" + MAPTILER_KEY, { maxZoom: 20, attribution: "© MapTiler © OpenStreetMap" });
+  const ruas = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" });
+  sat.addTo(m);
+  let falhas = 0; sat.on("tileerror", () => { if (++falhas === 6 && m.hasLayer(sat)) { m.removeLayer(sat); ruas.addTo(m); } });   // satelite bloqueado na rede -> ruas
+  L.control.layers({ "Satélite": sat, "Ruas": ruas }, null, { position: "topright" }).addTo(m);
+  m.on("click", () => m.scrollWheelZoom.enable());
+  m.setView([-2.99, -47.36], 13);
+  return m;
+}
+async function otimLoad(dias, capacidade) {
+  otimErro = "";
+  try {
+    if (!tracado) tracado = await api("rotas_tracado?select=codigo_linha,sentido,linha,tipolinha,grupo,pontos,paradas,km,cadastrados,atualizado_em");
+    rpontos = await api("rpc/rota_pontos", { dias, capacidade }).catch(e => { otimErro = "pontos: " + e.message; return []; });
+  } catch (e) { tracado = null; otimErro = e.message; }
+  otimRes = null; otimSel = -1;
+  if (!$('[data-p="otim"]').hidden) otimRender();
+}
+function otimCalc() {
+  if (otimRes || !tracado || !window.Otim) return otimRes;
+  otimRes = Otim.analisar({ tracado, pontos: rpontos, rotas: rows, cap: +$("#fCap").value || 40, lug: +$("#fLug").value || 45, raio: +$("#oRaio").value || 300 });
+  return otimRes;
+}
+const TIPO_TXT = { LOTA_FIM: "Lota no fim da rota", MOVER: "Remanejar passageiros", SOBREPOSTA: "Rota sobrando no trecho" };
+async function otimRender() {
+  if (!tracado) {
+    $("#oKpis").innerHTML = ""; $("#oBase").textContent = ""; $("#oMapa").hidden = true;
+    $("#oLista").innerHTML = `<div class="msg">${otimErro ? "Ainda sem traçado das rotas (" + esc(otimErro) + "). Falta rodar o <b>lotacao-v5-rotas.sql</b> no Supabase e ligar o fluxo <b>Coletar traçado das rotas</b>." : "Carregando…"}</div>`;
+    return;
+  }
+  const res = otimCalc(); if (!res) return;
+  const sen = $("#oSent").value, grp = $("#oGrupo").value, q = Otim.norm($("#oBusca").value);
+  const okR = rt => (!sen || rt.sentido === sen) && (!grp || rt.grupo === grp) && (!q || Otim.norm(rt.linha).includes(q));
+  const rts = res.rotas.filter(okR);
+  const sugs = res.sug.filter(sg => (!sen || sg.sentido === sen) && (!grp || sg.grupo === grp) && (!q || sg.rotas.some(id => Otim.norm(res.porId[id].linha).includes(q))));
+  const vis = sugs.filter(sg => !otimF || sg.tipo === otimF);
+  const n = t => sugs.filter(sg => sg.tipo === t).length;
+  const kpi = (cls, val, tit, sub, f) => `<button type="button" class="kpi ${cls}${otimF === f ? " on" : ""}" data-f="${f}"><b>${val}</b><span><b style="font-size:14px;color:inherit;display:inline">${tit}</b><br>${sub}</span></button>`;
+  $("#oKpis").innerHTML = kpi("crit", n("LOTA_FIM"), "Lotam no fim", "passam do ideal no fim do caminho", "LOTA_FIM") +
+    kpi("warn", n("MOVER"), "Remanejar", "rota cheia com outra de vaga na mesma rua", "MOVER") +
+    kpi("info", n("SOBREPOSTA"), "Rota sobrando", "trechos onde uma rota a menos dá conta", "SOBREPOSTA") +
+    kpi("", rts.length, "Rotas com traçado", "no mapa de roteirização", "");
+  const semOcc = rts.filter(r => !r.occ).length;
+  $("#oBase").innerHTML = `Traçado de ${res.ultimaColeta ? res.ultimaColeta.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "–"} · ${rpontos.length} pontos de embarque no período${semOcc ? ` · ${semOcc} rota(s) do mapa sem viagem no BDV nesse período (aparecem cinza)` : ""}${otimErro ? ` · <span style="color:var(--crit)">${esc(otimErro)}</span>` : ""}. Mostrando ${vis.length} de ${sugs.length} sugestões.`;
+  $("#oLista").innerHTML = vis.length ? vis.map(sg => `<div class="oc t-${sg.tipo}${res.sug.indexOf(sg) === otimSel ? " on" : ""}" data-i="${res.sug.indexOf(sg)}">
+      <div class="tt">${esc(sg.titulo)} <span class="chip">${TIPO_TXT[sg.tipo]}</span></div><div>${sg.texto}</div></div>`).join("")
+    : `<div class="msg">Nenhuma sugestão nesse filtro${rpontos.length ? "" : " (ainda não há pontos de embarque no período)"}.</div>`;
+  $("#oMapa").hidden = false;
+  await carregaLeaflet();
+  if (!oMap) oMap = novoMapa($("#oMapa"));
+  oMap.invalidateSize();
+  otimDesenha(oMap, rts, otimSel >= 0 ? res.sug[otimSel] : null, true);
+}
+// desenha rotas (+ destaque de uma sugestão) num mapa
+function otimDesenha(m, rts, sg, ajusta) {
+  if (m._camada) m.removeLayer(m._camada);
+  const g = L.featureGroup().addTo(m); m._camada = g;
+  const destaque = new Set(sg ? sg.rotas : []), cor = {}; let ci = 0;
+  for (const rt of rts) cor[rt.id] = destaque.size ? (destaque.has(rt.id) ? CORES[ci++ % CORES.length] : "#9aa5b1") : (rt.occ ? CORES[ci++ % CORES.length] : "#9aa5b1");
+  const ordem = [...rts].sort((a, b) => destaque.has(a.id) - destaque.has(b.id));
+  for (const rt of ordem) {
+    const on = !destaque.size || destaque.has(rt.id);
+    const tip = `<b>${esc(rt.linha)}</b> · ${rt.sentido}${rt.tipolinha ? " · " + esc(rt.tipolinha) : ""}<br>${rt.km ? rt.km.toLocaleString("pt-BR") + " km · " : ""}${rt.cadastrados} cadastrados<br>` +
+      (rt.occ ? `média ${fmt(rt.carga)} por viagem · <b>${rt.vagas > 0 ? rt.vagas + " vaga(s) até " + (+$("#fCap").value || 40) : "sem vaga"}</b>` : "sem viagem no BDV no período");
+    L.polyline(rt.pontos, { color: cor[rt.id], weight: on ? (sg && sg.principal === rt.id ? 6 : 4) : 2, opacity: on ? .9 : .35 }).bindTooltip(tip, { sticky: true }).addTo(g);
+    if (on && (destaque.size || rts.length <= 3)) {
+      for (const p of rt.paradas) L.circleMarker([p.lat, p.lon], { radius: 4, color: "#17212b", weight: 1, fillColor: "#fff", fillOpacity: 1 })
+        .bindTooltip(`Parada ${esc(rt.linha)}${p.horario ? " · " + p.horario : ""}<br>${esc(p.endereco || "")}`).addTo(g);
+      for (const e of rt.emb) L.circleMarker([e.lat, e.lon], { radius: Math.min(4 + Math.sqrt(e.dia) * 3, 16), color: e.depois > 0 ? "#b3261e" : cor[rt.id], weight: 2,
+        fillColor: e.depois > 0 ? "#f07b72" : cor[rt.id], fillOpacity: .55 })
+        .bindTooltip(`${esc(rt.linha)}: ~${fmt(e.dia)} ${rt.sentido === "VOLTA" ? "descem" : "embarcam"}/dia${e.hora ? " (~" + e.hora + ")" : ""}${e.depois > 0 ? `<br><b>~${fmt(e.depois)}/dia depois do ${+$("#fCap").value || 40}º</b>` : ""}`).addTo(g);
+    }
+  }
+  if (sg && sg.trecho) L.polyline(sg.trecho, { color: "#ffffff", weight: 10, opacity: .55 }).addTo(g);
+  if (sg && sg.pontosIni) for (const p of sg.pontosIni) L.circleMarker(p, { radius: 9, color: "#4fb3d4", weight: 3, fill: false }).bindTooltip("começo da rota (outra pode pegar)").addTo(g);
+  const leg = [...(destaque.size ? rts.filter(r => destaque.has(r.id)) : rts.filter(r => r.occ).slice(0, 12))].map(r => `<span><i style="background:${cor[r.id]}"></i>${esc(r.linha)}</span>`);
+  const legEl = m.getContainer().nextElementSibling;
+  if (legEl && legEl.classList.contains("leg")) legEl.innerHTML = leg.join("") + `<span><i class="pt" style="background:#f07b72;border:2px solid #b3261e"></i>embarca depois do ideal</span><span><i class="pt" style="background:#fff;border:1px solid #17212b"></i>parada cadastrada</span>`;
+  if (ajusta) {
+    const alvo = sg && (sg.trecho || sg.pontosFim || sg.pontos);
+    if (alvo && alvo.length) m.fitBounds(L.latLngBounds(alvo).pad(sg.tipo === "SOBREPOSTA" ? .6 : .3), { maxZoom: 16 });
+    else if (g.getLayers().length) m.fitBounds(g.getBounds().pad(.05));
+  }
+}
+// detalhe da rota (aba Ocupação): mapa da propria rota + sugestões dela
+function otimRotaDe(r) {
+  const res = otimCalc(); if (!res) return null;
+  const k = Otim.solta(r.linha), tn = (/TURNO\s*0?(\d+)/i.exec(r.tipolinha || "") || [])[1];
+  const c = res.rotas.filter(x => Otim.solta(x.linha) === k && x.sentido === r.tipo);
+  return c.find(x => tn && x.turno === tn) || c[0] || null;
+}
+function otimDetalhe(r) {
+  if (!tracado) return "";
+  const rt = otimRotaDe(r);
+  if (!rt) return `<p class="muted">Sem traçado desta rota no mapa de roteirização da TFleet (rotas CT entram quando forem cadastradas lá).</p>`;
+  const sg = otimRes.sug.filter(x => x.rotas.includes(rt.id)).sort((a, b) => (b.principal === rt.id) - (a.principal === rt.id));
+  return `<div class="mapa"></div><div class="leg"></div>` + (sg.length ? `<p class="muted" style="margin:8px 0 4px">Sugestões de otimização que envolvem esta rota (mais na aba <b>Otimização de rotas</b>):</p>` : "") + sg.slice(0, 4).map(x => `<div class="oc t-${x.tipo}" style="cursor:default"><div class="tt">${esc(x.titulo)} <span class="chip">${TIPO_TXT[x.tipo]}</span></div><div>${x.texto}</div></div>`).join("");
+}
+async function otimMapaRota(el, r) {
+  if (!el) return;
+  const rt = otimRotaDe(r); if (!rt) return;
+  await carregaLeaflet();
+  const m = novoMapa(el);
+  const sg = otimRes.sug.find(x => x.principal === rt.id) || { rotas: [rt.id], principal: rt.id };
+  otimDesenha(m, otimRes.rotas.filter(x => sg.rotas.includes(x.id)), sg, false);
+  const foco = [...rt.paradas.map(p => [p.lat, p.lon]), ...rt.emb.map(e => [e.lat, e.lon])];   // bairro da coleta, sem a estrada ate a mina
+  m.fitBounds(L.latLngBounds(foco.length ? foco : rt.pontos).pad(.15), { maxZoom: 16 });
+}
+$("#oKpis").addEventListener("click", e => { const b = e.target.closest(".kpi"); if (!b) return; otimF = otimF === b.dataset.f ? "" : b.dataset.f; otimSel = -1; otimRender(); });
+$("#oLista").addEventListener("click", e => {
+  const c = e.target.closest(".oc"); if (!c) return;
+  otimSel = otimSel === +c.dataset.i ? -1 : +c.dataset.i; otimRender();
+  $("#oMapa").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+["#oSent", "#oGrupo", "#oBusca"].forEach(sel => $(sel).addEventListener("input", () => { otimSel = -1; otimRender(); }));
+$("#oRaio").addEventListener("change", () => { otimRes = null; otimSel = -1; otimRender(); });
 
 // ---- gestores (senha conferida no Supabase; sem senha so aparecem as gerencias, sem e-mail)
 
 // Respostas das consultas (com nome): so com a senha certa.
 const RESP_TXT = { TREINAMENTO: "Treinamento / temporário", MUDOU_ENDERECO: "Mudou de endereço", MUDOU_TURNO: "Mudou de turno / escala", COBERTURA: "Cobertura", NAO_SEI: "Vai verificar", OUTRO: "Outro" };
 let respL = [], respF = "";
+const hojeL = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+const ddmmaa = d => String(d).slice(0, 10).split("-").reverse().join("/");
 async function respLoad(ok) {
   if (!ok) { $("#gResp").textContent = "Abra com a senha para ver."; $("#rKpis").innerHTML = ""; return; }
   try {
@@ -348,17 +517,19 @@ async function respLoad(ok) {
 function respRender() {
   const l = respL, dias = Math.max(30, +$("#fDias").value);
   const filtros = { todas: () => true, resp: c => c.resposta, agu: c => !c.resposta, naoenv: c => !c.enviado_para,
-    perm: c => ["MUDOU_TURNO", "MUDOU_ENDERECO"].includes(c.resposta) };
+    perm: c => ["MUDOU_TURNO", "MUDOU_ENDERECO"].includes(c.resposta), anal: c => c.resposta === "OUTRO",
+    temp: c => ["TREINAMENTO", "COBERTURA"].includes(c.resposta) && c.periodo_fim && c.periodo_fim >= hojeL() };
   const k = (cls, f, val, tit, sub) => `<button type="button" class="kpi ${cls}${respF === f ? " on" : ""}" data-f="${f}"><b>${val}</b><span><b style="font-size:14px;color:inherit;display:inline">${tit}</b><br>${sub}</span></button>`;
   $("#rKpis").innerHTML = k("", "todas", l.length, "Consultas", `últimos ${dias} dias`) + k("info", "resp", l.filter(filtros.resp).length, "Respondidas", "pelo gestor") +
-    k("warn", "agu", l.filter(filtros.agu).length, "Aguardando", "sem resposta") + k("crit", "perm", l.filter(filtros.perm).length, "Mudou turno / endereço", "atualizar o cadastro da rota");
+    k("warn", "agu", l.filter(filtros.agu).length, "Aguardando", "sem resposta") + k("crit", "perm", l.filter(filtros.perm).length, "Mudou turno / endereço", "atualizar o cadastro da rota") +
+    k("warn", "anal", l.filter(filtros.anal).length, "Para analisar", "outro motivo") + k("", "temp", l.filter(filtros.temp).length, "Temporários", "treinamento / cobertura em andamento");
   const vis = l.filter(filtros[respF] || filtros.todas);
   if (!l.length) { $("#gResp").textContent = `Nenhuma consulta nos últimos ${dias} dias.`; return; }
   $("#gResp").innerHTML = `<p class="base">Mostrando ${vis.length} de ${l.length}. Clique num número de cima para filtrar.</p><div class="gl-wrap"><table class="gl"><tr><th>Colaborador</th><th>Usando / cadastro</th><th>Dias</th><th>Enviado para</th><th>Resposta</th></tr>` +
     vis.map(c => `<tr><td data-l="Colaborador">${esc(c.nome)}<br><span class="muted">${esc(c.matricula)} · ${esc(c.tipopassageiro || "")} · ${esc(c.ga || "")}</span></td>
       <td data-l="Usando / cadastro">${esc(c.linha_usada)}<br><span class="muted">${esc(c.linha_cadastro || "sem linha")}</span></td><td data-l="Dias">${c.dias_fora}</td>
       <td data-l="Enviado para">${esc(c.enviado_para || "ainda não enviado")}</td>
-      <td data-l="Resposta">${c.resposta ? `<b>${esc(RESP_TXT[c.resposta] || c.resposta)}</b>${c.comentario ? "<br>" + esc(c.comentario) : ""}` : '<span class="muted">aguardando</span>'}</td></tr>`).join("") + "</table></div>";
+      <td data-l="Resposta">${c.resposta ? `<b>${esc(RESP_TXT[c.resposta] || c.resposta)}</b>${c.periodo_fim ? `<br>${c.periodo_ini ? ddmmaa(c.periodo_ini) + " a " : "até "}${ddmmaa(c.periodo_fim)}${c.periodo_fim < hojeL() ? ' <span class="muted">(terminou)</span>' : ""}` : ""}${c.endereco ? `<br>Endereço novo: <b>${esc(c.endereco)}</b>` : ""}${c.resposta === "OUTRO" ? ' <span class="chip" style="background:var(--warn-soft);color:var(--warn)">para analisar</span>' : ""}${c.resposta === "NAO_SEI" && c.retornar_em ? `<br><span class="muted">pergunta de novo em ${ddmmaa(c.retornar_em)}</span>` : ""}${c.comentario ? "<br>" + esc(c.comentario) : ""}` : '<span class="muted">aguardando</span>'}</td></tr>`).join("") + "</table></div>";
 }
 $("#rKpis").addEventListener("click", e => { const b = e.target.closest(".kpi"); if (!b) return; respF = respF === b.dataset.f ? "" : b.dataset.f; respRender(); });
 
@@ -679,7 +850,8 @@ document.querySelector(".tabs").addEventListener("click", e => {
   const b = e.target.closest("button[data-tab]"); if (!b) return;
   document.querySelectorAll(".tabs button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-selected", x === b); });
   document.querySelectorAll(".painel").forEach(p => p.hidden = p.dataset.p !== b.dataset.tab);
-  $("#senhaBar").hidden = b.dataset.tab === "ocup";
+  $("#senhaBar").hidden = b.dataset.tab === "ocup" || b.dataset.tab === "otim";
+  if (b.dataset.tab === "otim") otimRender();
   store.set("lot_tab", b.dataset.tab);
   if (b.dataset.tab === "fora") foraRender();
   if (b.dataset.tab !== "ocup" && !gestCarregado) { gestCarregado = true; gestLoad(); }
@@ -698,5 +870,4 @@ $("#gateForm").addEventListener("submit", async e => {
 if (store.get("lot_ok") === "1") { $("#gate").remove(); load(); const t = store.get("lot_tab"); if (t && t !== "ocup") document.querySelector(`.tabs [data-tab="${t}"]`)?.click(); }
 </script>
 </body>
-<script src="central-voltar.js"></script>
 </html>
