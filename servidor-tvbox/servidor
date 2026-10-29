@@ -10,7 +10,7 @@ ok()   { echo -e "\e[32m[OK]\e[0m $*"; }
 aviso(){ echo -e "\e[33m[!]\e[0m $*"; }
 root() { [ "$(id -u)" -eq 0 ] || { echo "Use com sudo:  sudo servidor $*"; exit 1; }; }
 
-# logo TFLEET + resumo em todo terminal que abrir (Central, Alt+F2, SSH); cache atualizado a cada 5 min
+# onibus TFLEET + resumo em todo terminal que abrir (Central, Alt+F2, SSH); cache atualizado a cada 5 min
 instalar_boas_vindas() {
   cat > /etc/profile.d/zz-servidor-boas-vindas.sh <<'SH'
 # boas-vindas do servidor da TV Box (servidor boas-vindas). Para tirar: apague este arquivo.
@@ -37,7 +37,7 @@ servidor acessos           -> mostra os enderecos e a chave da Evolution
 servidor tela              -> resumo do servidor numa tela so (o mesmo da tela HDMI)
 servidor tela-ligar        -> mostra esse resumo sozinho na TV ligada no HDMI (login fica no Alt+F2)
 servidor tela-desligar     -> volta a tela HDMI para o login normal
-servidor boas-vindas       -> logo TFLEET + resumo curto (aparece sozinho ao abrir um terminal)
+servidor boas-vindas       -> onibus TFLEET + resumo curto (aparece sozinho ao abrir um terminal)
 TXT
 }
 
@@ -103,7 +103,7 @@ case "${1:-}" in
     for f in manifest.json index.html central.css central.js vendor/xterm.js vendor/xterm.css vendor/addon-fit.js; do
       curl -fsSL "$RAW/central/$f" -o "/usr/share/cockpit/central/$f.novo" && mv "/usr/share/cockpit/central/$f.novo" "/usr/share/cockpit/central/$f"
     done && ok "Central da Frota atualizada (recarregue a pagina)"
-    instalar_boas_vindas && ok "Boas-vindas TFLEET ligada (aparece ao abrir um terminal)"
+    instalar_boas_vindas && ok "Boas-vindas (onibus TFLEET) ligada (aparece ao abrir um terminal)"
     ;;
   # ---- usados pela Central da Frota (interface no Cockpit); respondem em JSON
   status-json)
@@ -270,7 +270,7 @@ os.replace("/run/servidor/estado.json.tmp", "/run/servidor/estado.json")
 PY
     ;;
   tela|boas-vindas)
-    # logo TFLEET + resumo (estilo neofetch). "tela" = completo (TV do HDMI); "boas-vindas" = ao abrir um terminal
+    # onibus TFLEET + resumo (estilo neofetch). "tela" = completo (TV do HDMI); "boas-vindas" = ao abrir um terminal
     if [ "$1" = tela ] && [ "$(id -u)" -eq 0 ]; then "$0" estado-cache >/dev/null 2>&1; fi
     SV_MODO="$1" python3 - <<'PY'
 import json, os, time, shutil, socket, getpass
@@ -284,19 +284,31 @@ except (OSError, ValueError):
 idade_min = int((time.time() - e.get("ts", 0)) / 60) if e else None
 st, fl, wa = e.get("st") or {}, e.get("fl") or [], e.get("wa") or {}
 
-# ---- logo TFLEET (cada letra uma cor, verde -> ciano) ----
-LETRAS = {
-  "T": ["████████╗", "╚══██╔══╝", "   ██║   ", "   ██║   ", "   ██║   ", "   ╚═╝   "],
-  "F": ["███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "██║     ", "╚═╝     "],
-  "L": ["██╗     ", "██║     ", "██║     ", "██║     ", "███████╗", "╚══════╝"],
-  "E": ["███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "███████╗", "╚══════╝"],
-}
-CORES = ["\033[32m", "\033[32m", "\033[92m", "\033[92m", "\033[36m", "\033[96m"]
-LARG = sum(len(LETRAS[l][0]) for l in "TFLEET")
-logo = ["".join(cor + B + LETRAS[l][i] for l, cor in zip("TFLEET", CORES)) + N for i in range(6)]
-sub = "S E R V I D O R   M E S"
-logo += ["", " " * ((LARG - len(sub)) // 2) + A + B + sub + N]
-logo_larg = [LARG] * 6 + [0, (LARG - len(sub)) // 2 + len(sub)]
+# ---- onibus da frota em caracteres (passageiros e frase mudam a cada vez) ----
+import random, re
+Y, G, CY, W, CI, R, N = "\033[33;1m", "\033[32;1m", "\033[36;1m", "\033[97;1m", "\033[90m", "\033[31;1m", "\033[0m"
+CARAS = ["^_^", "-_-", "o.o", "^o^", ">_<", "*_*", "u_u", "O_O", "z_z", "^.^", "@_@", "T_T", "°o°"]
+FRASES = ["Bluetooth ligado, motorista?", "Proxima parada: Paragominas!", "Cinto afivelado, por favor!",
+          "Passageiro sem leitura? Olha o BT!", "Roteador desligado, ne? ;)", "Rumo a Hydro, sem atraso!",
+          "Carregador no lugar? Entao bora!", "Celular lendo, viagem contando!"]
+k = random.sample(CARAS, 5)
+jan = "".join(f"{CY}|{W}{c}{CY}|" for c in k)
+ARTE = [
+ f"     {Y}_______________________________{N}",
+ f"    {Y}|{CY} ___  ___  ___  ___  ___  {Y}|{CY}  _ {Y} \\{N}",
+ f"    {Y}|{jan} {Y}|{CY} | |{Y}  \\{N}",
+ f"    {Y}|{CY}|___||___||___||___||___| {Y}|{CY} | |{Y}____\\_{N}",
+ f"    {Y}|                          |{CY} |_|{Y}     |{N}",
+ f" {CI}°o {Y}|   {G}T F L E E T{Y}   {R}M E S{Y}    |      {W}[]{Y} |{N}",
+ f"{CI}o°.{N} {Y}|____/ {W}(){Y} \\__________/ {W}(){Y} \\__________|{N}",
+ f"          {W}\\__/{N}            {W}\\__/{N}",
+ f"{CI}=============================================={N}",
+]
+FRASE = random.choice(FRASES)
+ARTE.append(f"   {Y}\"{FRASE}\"{N}")
+LARG = 46
+logo = ARTE
+logo_larg = [len(re.sub(r"\033\[[0-9;]*m", "", l)) for l in ARTE]
 
 # ---- informacoes (as locais sao lidas na hora; Docker/fluxos/WhatsApp vem do cache do root) ----
 mem = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo")}
@@ -348,7 +360,7 @@ if cols >= LARG + 4 + 46:      # logo do lado das informacoes (estilo neofetch)
         txt, w = esq[i] if i < len(esq) else ("", 0)
         print("  " + txt + " " * (LARG - w + 4) + (info[i] if i < len(info) else ""))
 else:                           # tela estreita: logo em cima
-    if cols >= LARG + 2: print("\n".join(" " + l for l in logo))
+    if cols >= LARG: print("\n".join(logo))
     else: print(f"  {V}{B}TFLEET{N} · {A}{B}SERVIDOR MES{N}")
     print()
     print("\n".join("  " + l for l in info))
