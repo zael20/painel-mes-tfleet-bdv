@@ -615,7 +615,19 @@ begin
            %s
            %s
            ,
-           b.bt_amostras, b.bt_min_ligado_tomada, b.bt_min_desligado, b.bt_min_sem_leitor, b.bt_causa,
+           b.bt_amostras, b.bt_min_ligado_tomada, b.bt_min_desligado, b.bt_min_sem_leitor, b.bt_causa, bd.bt_desde,
+           -- observacao automatica do Monitor Frota para o app/painel mostrar junto da ocorrencia
+           case b.bt_causa
+             when 'bluetooth_desligado' then 'Monitor Frota: provavelmente o Bluetooth do celular estava desligado' ||
+                  coalesce(' desde ' || to_char(bd.bt_desde at time zone 'America/Belem', 'DD/MM HH24:MI'), '') ||
+                  ' (' || b.bt_min_desligado || ' min na tomada com Bluetooth desligado nas 18h antes do relato), por isso o leitor não registrou.'
+             when 'leitor_desconectado' then 'Monitor Frota: Bluetooth ligado, mas o leitor RFID estava desconectado' ||
+                  coalesce(' desde ' || to_char(bd.bt_desde at time zone 'America/Belem', 'DD/MM HH24:MI'), '') ||
+                  ' (' || b.bt_min_sem_leitor || ' min nas 18h antes do relato). Conferir pareamento e bateria do leitor.'
+             when 'nao_rodou' then 'Monitor Frota: o celular não ficou na tomada nas 18h antes do relato (ônibus parado ou celular fora do carregador).'
+             when 'bluetooth_ok' then 'Monitor Frota: Bluetooth ligado e leitor conectado nas 18h antes do relato; o problema não parece ser de conexão.'
+             when 'sem_dados' then 'Monitor Frota: sem dados do celular nas 18h antes do relato.'
+           end as observacao_monitor,
            case when o.categoria in ('carregamento','internet_chip') then 'alta'
                 when o.categoria = 'contagem_passageiros' then
                   case when b.bt_causa = 'bluetooth_desligado' then 'baixa'
@@ -663,6 +675,15 @@ begin
       where o.categoria = 'contagem_passageiros' and m.device_id is not null and s.device_id = m.device_id
         and s.ts between coalesce(o.primeira_msg_em, o.criado_em) - interval '18 hours' and coalesce(o.primeira_msg_em, o.criado_em)
       having o.categoria = 'contagem_passageiros' and m.device_id is not null) b on true
+    -- desde quando: inicio do ultimo trecho continuo com o problema antes do relato
+    left join lateral (
+      select min(s.ts) as bt_desde from public.samples s
+      where b.bt_causa in ('bluetooth_desligado','leitor_desconectado') and s.device_id = m.device_id
+        and s.ts between coalesce(o.primeira_msg_em, o.criado_em) - interval '18 hours' and coalesce(o.primeira_msg_em, o.criado_em)
+        and (case when b.bt_causa = 'bluetooth_desligado' then s.bt_on is false else s.bt_on and coalesce(s.bt_connected,'') = '' end)
+        and s.ts > coalesce((select max(s2.ts) from public.samples s2 where s2.device_id = m.device_id
+              and s2.ts between coalesce(o.primeira_msg_em, o.criado_em) - interval '18 hours' and coalesce(o.primeira_msg_em, o.criado_em)
+              and (case when b.bt_causa = 'bluetooth_desligado' then s2.bt_on else coalesce(s2.bt_connected,'') <> '' end)), '-infinity')) bd on true
     %s
   $v$,
   v_mon,
