@@ -1,5 +1,5 @@
 // Vistoria BDV: guarda o app para abrir sem internet. Chamadas ao Supabase passam direto (a fila offline fica no app).
-var CACHE = "vistoria-bdv-v10";
+var CACHE = "vistoria-bdv-v11";
 var SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", function (e) {

@@ -1391,7 +1391,7 @@ function ocOpenMin(o) { return bhMin(o.ini, o.fim || new Date().toISOString()); 
 function ocCt(o) { return o.ct != null ? o.ct : o.origem !== "retroativo" && (!EXP.desde || new Date(o.ini) >= new Date(EXP.desde)); }
 function ocTimeMin(o) { return ocCt(o) ? ocResMin(o) : null; }
 function ocResMin(o) { return o.fim ? (o.bhSrv != null ? Math.round(o.bhSrv * 60) : bhMin(o.ini, o.fim)) : null; }
-function porTxt(p) { return !p ? "—" : p === "vistoria" ? "Vistoria (CHECK BDV)" : p === "painel" ? "Painel" : p; }
+function porTxt(p) { return !p ? "—" : p === "vistoria" ? "Vistoria (CHECK BDV)" : p === "api" ? "API TFleet (automático)" : p === "painel" ? "Painel" : p; }
 function demoOc() { // so na previa: exemplos para ver a tela; nunca vao para o servidor
   var tags = Object.keys(latest).sort().slice(0, 40), cats = Object.keys(OC_CAT), out = [], seed = 7;
   function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
@@ -1462,7 +1462,7 @@ function ocRow(o) {
   var st = OC_ST[o.status] || [o.status, ""];
   var side = isOpenOc(o) ? agoShort(o.ini) + " · " + fmtBhShort(ocOpenMin(o)) : o.fim ? (ocCt(o) ? "em " + fmtBhShort(ocResMin(o)) : "resolv. " + fmtDate(todayBelemOf(o.fim))) : fmtDate(todayBelemOf(o.ini));
   return { tag: o.tag || "?", side: side, go: function () { openOc(o.id); },
-    main: [el("span", { class: "badge " + st[1], text: st[0] }), " ", origBadge(o), o.tagFonte === "viagem" ? " " : null, o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null, " ", o.problema, el("span", { class: "hint", text: " · " + relTxt(o) }),
+    main: [el("span", { class: "badge " + st[1], text: o.status === "resolvida" && o.por === "api" ? "Resolvida pela API" : o.status === "resolvida" && o.por === "vistoria" ? "Resolvida na vistoria" : st[0] }), " ", origBadge(o), o.tagFonte === "viagem" ? " " : null, o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null, " ", o.problema, el("span", { class: "hint", text: " · " + relTxt(o) }),
       o.obsMon ? el("span", { class: "monobs", text: o.obsMon.length > 110 ? o.obsMon.slice(0, 107) + "…" : o.obsMon }) : null] };
 }
 function byOld(a, b) { return a.ini < b.ini ? -1 : 1; }
