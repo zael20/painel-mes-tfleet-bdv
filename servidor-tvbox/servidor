@@ -272,6 +272,7 @@ LoginTitle = Central da Frota
 CONF
         echo "Na primeira vez o Tailscale pode mostrar um link para AUTORIZAR o Funnel: abra, aprove e rode de novo."
         tailscale funnel --bg https+insecure://localhost:9090 || exit 1
+        echo "https://$NOME" > "$DIR/acesso-publico.txt"; chmod 644 "$DIR/acesso-publico.txt"
         ok "Central na internet:  https://$NOME"
         echo "Abre no PC da empresa sem instalar nada. Login: seu usuario e senha da box. Ao terminar, clique em Sessao > Sair."
         echo "Para tirar da internet:  sudo servidor acesso-publico desligar"
@@ -279,7 +280,7 @@ CONF
         sleep 5; systemctl restart cockpit.socket cockpit.service 2>/dev/null
         ;;
       desligar)
-        tailscale funnel reset && ok "Central fora da internet (continua pela rede de casa e pelo Tailscale)" ;;
+        rm -f "$DIR/acesso-publico.txt"; tailscale funnel reset && ok "Central fora da internet (continua pela rede de casa e pelo Tailscale)" ;;
       *)
         tailscale funnel status 2>/dev/null || echo "Acesso publico desligado." ;;
     esac
@@ -365,6 +366,8 @@ if e:
     info.append(rotulo("Rede") + f"{sq(e.get('cabo'))} cabo  {sq(e.get('net'))} internet  {sq(ts)} tailscale")
     info.append(rotulo("Casa") + f"https://{st.get('ip_casa', '?')}:9090")
     info.append(rotulo("Fora") + (f"https://{st['ip_tailscale']}:9090" if ts else R + "Tailscale desligado" + N))
+    try: info.append(rotulo("Internet") + open("/opt/servidor/acesso-publico.txt").read().strip())
+    except OSError: pass
     sv = st.get("servicos") or []
     rod = sum(1 for s in sv if s.get("estado") == "running")
     info.append(rotulo("Programas") + f"{sq(sv and rod == len(sv))} {rod} de {len(sv)} rodando")
