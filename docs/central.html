@@ -138,10 +138,10 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
       <div class="d">Celulares dos ônibus: carga, bateria, eventos e mapa ao vivo.</div>
       <div class="go">Abrir →</div>
     </a>
-    <a class="card" href="index.html#ocorrencias">
+    <a class="card" href="vistoria/#ocorrencias">
       <div class="ic">💬</div>
-      <div class="t">Ocorrências WhatsApp <span class="soon" id="soonOcor">entra em breve</span></div>
-      <div class="d">Chamados do grupo, cruzados com vistoria e monitor, por prioridade.</div>
+      <div class="t">Ocorrências WhatsApp</div>
+      <div class="d">Chamados do grupo, tratados dentro do CHECK BDV: quem relatou, tempo de resolução e prioridade.</div>
       <div class="go">Abrir →</div>
     </a>
     <a class="card" href="vistoria/index.html">
@@ -276,9 +276,8 @@ async function loadOcor(){
 /* ---------- card availability ---------- */
 async function headOk(url){try{const r=await fetch(url,{method:'HEAD'});return r.ok}catch(e){return false}}
 async function checkCards(){
-  if(await headOk('vistoria/index.html'))document.getElementById('soonVist').remove();
-  // ocorrências = aba dentro do index.html; some quando a view responder
-  try{await sbGet("v_ocorrencias_cruzadas?limit=1");document.getElementById('soonOcor').remove();}catch(e){}
+  var sv=document.getElementById('soonVist');
+  if(sv && await headOk('vistoria/index.html'))sv.remove();
 }
 
 function start(){loadTiles();loadOcor();checkCards();setInterval(()=>{loadTiles();loadOcor()},60000);}
