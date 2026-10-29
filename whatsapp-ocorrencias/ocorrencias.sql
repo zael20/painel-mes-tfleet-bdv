@@ -187,6 +187,54 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function public.horas_uteis(timestamptz, timestamptz) to anon, authenticated;
 
+-- ---------------------------------------------------------------- numero do carro em mensagem separada
+-- Motorista manda o video/audio e, logo depois (ou antes), "Carro 76" numa mensagem a parte.
+-- numero_carro_texto: acha o numero do onibus num texto CURTO ("Carro 76", "76", "onibus 065", "carro n 7");
+-- ignora textos longos e horas ("05:05").
+-- p_so = true: so aceita mensagem que e APENAS o numero do carro.
+drop function if exists public.numero_carro_texto(text);
+create or replace function public.numero_carro_texto(t text, p_so boolean default false) returns text
+language sql immutable as $$
+  select public.normaliza_tag(coalesce(
+    substring(t from '(?i)^\s*(?:(?:o|a)\s+)?(?:(?:carro|[oô]nibus|onibus|ve[ií]culo|frota|bus|n[º°o])\.?\s*)?(?:n[º°o]\.?\s*)?(\d{1,4})\s*[.!,]?\s*$'),
+    case when not p_so then substring(t from '(?i)(?:carro|[oô]nibus|onibus|ve[ií]culo|frota)\s*(?:n[º°o]\.?\s*)?(\d{1,4})(?![\d:])') end))
+  where t is not null and length(trim(t)) <= 60;
+$$;
+
+-- Poe o numero numa ocorrencia que estava sem carro. Se ja existe outra aberta do mesmo carro e problema,
+-- junta as duas (mensagens vao para a existente; a sem carro fica descartada apontando para ela). Devolve o id final.
+create or replace function public.vincular_carro(p_oc bigint, p_tag text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare v_cat text; v_dest bigint;
+begin
+  select categoria into v_cat from ocorrencias where id = p_oc and tag is null;
+  if not found or public.normaliza_tag(p_tag) is null then return p_oc; end if;
+  select id into v_dest from ocorrencias where status in ('aberta','em_andamento') and tag = public.normaliza_tag(p_tag)
+     and categoria = v_cat and id <> p_oc order by ultima_msg_em desc limit 1;
+  if v_dest is null then
+    update ocorrencias set tag = public.normaliza_tag(p_tag) where id = p_oc;
+    return p_oc;
+  end if;
+  update whatsapp_msgs set ocorrencia_id = v_dest where ocorrencia_id = p_oc;
+  update ocorrencias d set reincidencias = d.reincidencias + 1, ultima_msg_em = greatest(d.ultima_msg_em, o.ultima_msg_em)
+    from ocorrencias o where d.id = v_dest and o.id = p_oc;
+  update ocorrencias set tag = public.normaliza_tag(p_tag), status = 'descartada', resolvido_por = 'sistema',
+         solucao = 'Juntada a ocorrencia #' || v_dest || ' (mesmo carro e problema)' where id = p_oc;
+  return v_dest;
+end $$;
+revoke all on function public.vincular_carro(bigint, text) from public, anon, authenticated;
+
+-- Ocorrencia aberta SEM carro do mesmo autor, com mensagem ate 30 min antes/depois de p_ts.
+create or replace function public.ocorrencia_sem_carro_do_autor(p_autor text, p_ts timestamptz) returns bigint
+language sql stable security definer set search_path = public as $$
+  select o.id from ocorrencias o
+   where o.status in ('aberta','em_andamento') and o.tag is null and coalesce(p_autor,'') <> ''
+     and exists (select 1 from whatsapp_msgs m where m.ocorrencia_id = o.id
+                  and coalesce(nullif(m.autor_jid,''), m.autor_nome) = p_autor
+                  and m.ts between p_ts - interval '30 minutes' and p_ts + interval '30 minutes')
+   order by o.ultima_msg_em desc limit 1;
+$$;
+
 -- ---------------------------------------------------------------- funcao chamada pelo n8n (1 chamada por mensagem)
 -- Entrada (jsonb): msg_id, ts, grupo_jid, autor_nome, autor_jid, tipo, texto, transcricao, midia_path,
 --   ia: { acao: nova|atualiza|resolve|ignorar, tag, categoria, problema, urgencia, ocorrencia_id, solucao, confianca }
@@ -203,6 +251,8 @@ declare
   v_conf  numeric := nullif(ia->>'confianca','')::numeric;
   v_ts    timestamptz := coalesce((p->>'ts')::timestamptz, now());
   v_id    bigint;
+  v_autor text;
+  v_num   text;
 begin
   if v_cat not in ('carregamento','abrir_viagem','contagem_passageiros','internet_chip','celular_defeito','suporte','som_musica','outro') then v_cat := 'outro'; end if;
   if v_urg not in ('baixa','media','alta') then v_urg := 'media'; end if;
@@ -213,6 +263,31 @@ begin
           p->>'midia_path', p->>'midia_tipo', v_acao, ia)
   on conflict (msg_id) do nothing;
   if not found then return jsonb_build_object('ok', true, 'duplicada', true); end if;
+  v_autor := coalesce(nullif(p->>'autor_jid',''), p->>'autor_nome');
+  v_num   := public.numero_carro_texto(p->>'texto', true);   -- mensagem que e so "Carro 76"
+
+  -- "Carro 76" mandado DEPOIS do video/audio: completa a ocorrencia sem carro do mesmo autor (nao cria outra)
+  if v_acao <> 'resolve' and coalesce(v_tag, v_num) is not null then
+    v_id := public.ocorrencia_sem_carro_do_autor(v_autor, v_ts);
+    -- so junta se a mensagem e so o numero, ou se a IA apontou essa ocorrencia / o mesmo problema
+    if v_id is not null and (v_num is not null or v_id::text = coalesce(ia->>'ocorrencia_id','')
+                             or v_cat = (select categoria from ocorrencias where id = v_id)) then
+      v_id := public.vincular_carro(v_id, coalesce(v_tag, v_num));
+      update ocorrencias set ultima_msg_em = greatest(ultima_msg_em, v_ts) where id = v_id;
+      update whatsapp_msgs set ocorrencia_id = v_id where msg_id = p->>'msg_id';
+      return jsonb_build_object('ok', true, 'acao', 'vincula_carro', 'ocorrencia_id', v_id);
+    end if;
+    v_id := null;
+  end if;
+
+  -- "Carro 76" mandado ANTES (ou que chegou primeiro: o video demora mais para ser lido pela IA):
+  -- problema novo sem carro usa o numero que o mesmo autor mandou ate 30 min antes/depois
+  if v_acao = 'nova' and v_tag is null then
+    select public.numero_carro_texto(m.texto) into v_tag from whatsapp_msgs m
+     where coalesce(nullif(m.autor_jid,''), m.autor_nome) = v_autor and m.msg_id <> p->>'msg_id'
+       and m.ts between v_ts - interval '30 minutes' and v_ts + interval '30 minutes' and public.numero_carro_texto(m.texto) is not null
+     order by abs(extract(epoch from m.ts - v_ts)) limit 1;
+  end if;
 
   if v_acao = 'ignorar' or v_acao = 'erro' then
     return jsonb_build_object('ok', true, 'acao', v_acao);
@@ -251,6 +326,22 @@ begin
 end $$;
 revoke all on function public.registrar_mensagem(jsonb) from public, anon, authenticated;
 grant execute on function public.registrar_mensagem(jsonb) to service_role;
+
+-- passada unica: ocorrencias abertas sem carro que ja tem "Carro NN" do mesmo autor ate 30 min antes/depois
+do $$
+declare r record; v_num text;
+begin
+  for r in select o.id, min(m.ts) as ts, min(coalesce(nullif(m.autor_jid,''), m.autor_nome)) as autor
+             from ocorrencias o join whatsapp_msgs m on m.ocorrencia_id = o.id
+            where o.status in ('aberta','em_andamento') and o.tag is null group by o.id loop
+    select public.numero_carro_texto(x.texto, true) into v_num from whatsapp_msgs x
+     where coalesce(nullif(x.autor_jid,''), x.autor_nome) = r.autor
+       and x.ts between r.ts - interval '30 minutes' and r.ts + interval '30 minutes'
+       and public.numero_carro_texto(x.texto, true) is not null
+     order by abs(extract(epoch from x.ts - r.ts)) limit 1;
+    if v_num is not null then perform public.vincular_carro(r.id, v_num); end if;
+  end loop;
+end $$;
 
 -- ---------------------------------------------------------------- permissoes
 alter table public.ocorrencias           enable row level security;
