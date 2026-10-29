@@ -43,6 +43,14 @@ create table if not exists public.ocorrencias (
   origem         text not null default 'whatsapp' check (origem in ('whatsapp','manual')),
   confianca      numeric(3,2)                                       -- 0 a 1, o quanto a IA teve certeza
 );
+-- Historico importado da conversa exportada (sudo servidor retroativo): origem 'retroativo'; sem desfecho no grupo
+-- = status 'historico' (aconteceu, mas nao se sabe se foi resolvido; nao conta como aberta).
+alter table public.ocorrencias drop constraint if exists ocorrencias_status_check;
+alter table public.ocorrencias add constraint ocorrencias_status_check
+  check (status in ('aberta','em_andamento','resolvida','descartada','historico'));
+alter table public.ocorrencias drop constraint if exists ocorrencias_origem_check;
+alter table public.ocorrencias add constraint ocorrencias_origem_check
+  check (origem in ('whatsapp','manual','retroativo'));
 create index if not exists ocorrencias_tag     on public.ocorrencias (tag, criado_em desc);
 create index if not exists ocorrencias_status  on public.ocorrencias (status, ultima_msg_em desc);
 -- Nao deixa existir duas ocorrencias ABERTAS do mesmo onibus e mesma categoria (anti-duplicata).

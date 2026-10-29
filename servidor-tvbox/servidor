@@ -21,6 +21,7 @@ servidor atualizar [n8n=X] [evolution=Y] -> troca a versao (com backup antes) e 
 servidor versoes           -> mostra as versoes em uso
 servidor atualizar-script  -> atualiza este comando a partir do GitHub
 servidor whatsapp          -> liga o fluxo de ocorrencias (Supabase, Gemini, grupo)
+servidor retroativo [dias] -> importa o historico do grupo (.txt exportado) para o Supabase
 servidor acessos           -> mostra os enderecos e a chave da Evolution
 TXT
 }
@@ -82,6 +83,7 @@ case "${1:-}" in
     curl -fsSL "$RAW/servidor" -o /usr/local/bin/servidor.novo && mv /usr/local/bin/servidor.novo /usr/local/bin/servidor \
       && chmod 755 /usr/local/bin/servidor && ok "Comando atualizado"
     curl -fsSL "$RAW/configurar-whatsapp.sh" -o "$DIR/configurar-whatsapp.sh" && ok "configurar-whatsapp.sh atualizado"
+    curl -fsSL "$RAW/whatsapp-retroativo.py" -o "$DIR/whatsapp-retroativo.py" && ok "whatsapp-retroativo.py atualizado"
     mkdir -p /usr/share/cockpit/central/vendor
     for f in manifest.json index.html central.css central.js vendor/xterm.js vendor/xterm.css vendor/addon-fit.js; do
       curl -fsSL "$RAW/central/$f" -o "/usr/share/cockpit/central/$f.novo" && mv "/usr/share/cockpit/central/$f.novo" "/usr/share/cockpit/central/$f"
@@ -224,6 +226,13 @@ PY
     tailscale status --json 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('AuthURL',''))" 2>/dev/null | grep . || true
     ;;
   whatsapp)   root "$@"; DIR=$DIR bash "$DIR/configurar-whatsapp.sh" ;;
+  retroativo)
+    # uso: servidor retroativo [dias]  -> le o .txt da conversa exportada em importar/ e grava o historico no Supabase
+    root "$@"
+    [ -f "$DIR/config.env" ] || { echo "Configure o WhatsApp antes:  sudo servidor whatsapp"; exit 1; }
+    [ -f "$DIR/whatsapp-retroativo.py" ] || curl -fsSL "$RAW/whatsapp-retroativo.py" -o "$DIR/whatsapp-retroativo.py"
+    ( set -a; source "$DIR/config.env"; set +a; DIR=$DIR python3 "$DIR/whatsapp-retroativo.py" "${2:-60}" )
+    ;;
   acessos)    root "$@"; cat "$DIR/ACESSOS.txt" ;;
   *)          ajuda ;;
 esac

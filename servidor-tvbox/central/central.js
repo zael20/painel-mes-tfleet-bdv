@@ -147,6 +147,18 @@
     }).catch(function (e) { saida("✖ " + (e.message || e) + "\n", true); });
   }
 
+  // conversa exportada do WhatsApp (.txt): vai para importar/ e o comando roda no terminal, para ver o andamento
+  function importarHistorico(arquivo) {
+    saida("▶ Enviando " + arquivo.name + "...\n");
+    arquivo.text().then(function (txt) {
+      return cockpit.file(BASE + "/importar/historico-whatsapp.txt", { superuser: "require" }).replace(txt);
+    }).then(function () {
+      saida("Enviado. A importação roda no terminal ao lado (pode levar alguns minutos).\n", true);
+      if (!document.body.classList.contains("com-terminal")) alternarTerminal();
+      setTimeout(function () { digitarNoTerminal("sudo servidor retroativo 60\r"); }, 800);
+    }).catch(function (e) { saida("✖ " + (e.message || e) + "\n", true); });
+  }
+
   /* ---------- configurar fluxo (blocos editaveis) ---------- */
   var TIPOS_HORARIO = [["minutes", "A cada X minutos"], ["hours", "A cada X horas"], ["days", "Todo dia no horário"], ["cronExpression", "Expressão cron (avançado)"]];
   function campoHorario(regra) {
@@ -479,6 +491,8 @@
     $("abrir-n8n").href = linkN8n("/");
     $("abrir-evo").href = "http://" + host() + ":8080/manager";
     $("arquivo-fluxo").addEventListener("change", function (ev) { if (ev.target.files.length) importarFluxos(ev.target.files); ev.target.value = ""; });
+    $("btn-historico").addEventListener("click", function () { $("arquivo-historico").click(); });
+    $("arquivo-historico").addEventListener("change", function (ev) { if (ev.target.files.length) importarHistorico(ev.target.files[0]); ev.target.value = ""; });
     $("enviar-arquivo").addEventListener("change", function (ev) { if (ev.target.files.length) enviarArquivos(ev.target.files); ev.target.value = ""; });
     $("novo-arquivo").addEventListener("click", novoArquivo);
     $("editor-salvar").addEventListener("click", salvarEditor);
