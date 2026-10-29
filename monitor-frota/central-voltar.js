@@ -17,13 +17,13 @@
     a.textContent = '← Central';
     a.setAttribute('aria-label', 'Voltar à Central');
     a.style.cssText =
-      'position:fixed;left:12px;z-index:2147483000;display:inline-flex;align-items:center;' +
+      'position:fixed;z-index:2147483000;display:inline-flex;align-items:center;' +
       'gap:6px;background:#2563eb;color:#fff;text-decoration:none;' +
-      'font:600 14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;' +
-      'padding:9px 14px;border-radius:999px;line-height:1;' +
-      'box-shadow:0 2px 10px rgba(0,0,0,.28);cursor:pointer;' +
-      'bottom:calc(14px + env(safe-area-inset-bottom,0px));' +
-      'padding-left:calc(14px + env(safe-area-inset-left,0px));';
+      'font:700 15px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;' +
+      'padding:10px 16px;border-radius:999px;line-height:1;' +
+      'box-shadow:0 3px 12px rgba(0,0,0,.30);cursor:pointer;' +
+      'top:calc(10px + env(safe-area-inset-top,0px));' +
+      'right:calc(12px + env(safe-area-inset-right,0px));';
     a.onmouseenter = function () { a.style.background = '#1d4ed8'; };
     a.onmouseleave = function () { a.style.background = '#2563eb'; };
     document.body.appendChild(a);
