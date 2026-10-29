@@ -10,6 +10,17 @@ ok()   { echo -e "\e[32m[OK]\e[0m $*"; }
 aviso(){ echo -e "\e[33m[!]\e[0m $*"; }
 root() { [ "$(id -u)" -eq 0 ] || { echo "Use com sudo:  sudo servidor $*"; exit 1; }; }
 
+# logo TFLEET + resumo em todo terminal que abrir (Central, Alt+F2, SSH); cache atualizado a cada 5 min
+instalar_boas_vindas() {
+  cat > /etc/profile.d/zz-servidor-boas-vindas.sh <<'SH'
+# boas-vindas do servidor da TV Box (servidor boas-vindas). Para tirar: apague este arquivo.
+case $- in *i*) [ -t 1 ] && [ -x /usr/local/bin/servidor ] && /usr/local/bin/servidor boas-vindas 2>/dev/null ;; esac
+SH
+  echo '*/5 * * * * root /usr/local/bin/servidor estado-cache >/dev/null 2>&1' > /etc/cron.d/servidor-estado
+  echo '@reboot root sleep 90; /usr/local/bin/servidor estado-cache >/dev/null 2>&1' >> /etc/cron.d/servidor-estado
+  /usr/local/bin/servidor estado-cache >/dev/null 2>&1 &
+}
+
 ajuda() {
 cat <<TXT
 servidor status            -> o que esta rodando, memoria, disco e temperatura
@@ -26,6 +37,7 @@ servidor acessos           -> mostra os enderecos e a chave da Evolution
 servidor tela              -> resumo do servidor numa tela so (o mesmo da tela HDMI)
 servidor tela-ligar        -> mostra esse resumo sozinho na TV ligada no HDMI (login fica no Alt+F2)
 servidor tela-desligar     -> volta a tela HDMI para o login normal
+servidor boas-vindas       -> logo TFLEET + resumo curto (aparece sozinho ao abrir um terminal)
 TXT
 }
 
@@ -91,6 +103,7 @@ case "${1:-}" in
     for f in manifest.json index.html central.css central.js vendor/xterm.js vendor/xterm.css vendor/addon-fit.js; do
       curl -fsSL "$RAW/central/$f" -o "/usr/share/cockpit/central/$f.novo" && mv "/usr/share/cockpit/central/$f.novo" "/usr/share/cockpit/central/$f"
     done && ok "Central da Frota atualizada (recarregue a pagina)"
+    instalar_boas_vindas && ok "Boas-vindas TFLEET ligada (aparece ao abrir um terminal)"
     ;;
   # ---- usados pela Central da Frota (interface no Cockpit); respondem em JSON
   status-json)
@@ -237,58 +250,128 @@ PY
     ( set -a; source "$DIR/config.env"; set +a; DIR=$DIR python3 "$DIR/whatsapp-retroativo.py" "${2:-60}" )
     ;;
   acessos)    root "$@"; cat "$DIR/ACESSOS.txt" ;;
-  tela)
-    # resumo para a TV ligada no HDMI (e para o terminal): programas, fluxos, WhatsApp, rede, memoria
+  estado-cache)
+    # junta Docker/fluxos/WhatsApp/rede num arquivo que qualquer terminal le sem sudo (boas-vindas)
     root "$@"
+    mkdir -p /run/servidor
     export SV_ST="$("$0" status-json 2>/dev/null)" SV_FL="$("$0" fluxos-json 2>/dev/null)" SV_WA="$("$0" whatsapp-json 2>/dev/null)"
     export SV_NET="$(curl -s -o /dev/null -m 6 -w '%{http_code}' https://www.google.com 2>/dev/null)"
     export SV_CABO="$(cat /sys/class/net/e*/operstate 2>/dev/null | head -1)"
     python3 - <<'PY'
 import json, os, time
-V, R, A, C, N, B = "\033[32m", "\033[31m", "\033[33m", "\033[36m", "\033[0m", "\033[1m"
 def lj(k, padrao):
     try: return json.loads(os.environ.get(k) or "")
     except ValueError: return padrao
-st, fl, wa = lj("SV_ST", {}), lj("SV_FL", []), lj("SV_WA", {})
-ponto = lambda bom: f"{V}[ok]{N}" if bom else f"{R}[!!]{N}"
-print(f"{B}CENTRAL DA FROTA - servidor da TV Box{N}        {time.strftime('%d/%m/%Y %H:%M')}")
-print("-" * 66)
-net = (os.environ.get("SV_NET") or "")[:1] in ("2", "3")
-cabo = os.environ.get("SV_CABO") == "up"
-print(f"{ponto(cabo)} Cabo de rede   {ponto(net)} Internet   {ponto(bool(st.get('ip_tailscale')))} Tailscale (acesso de fora)")
-print(f"  Casa: https://{st.get('ip_casa', '?')}:9090    Fora: https://{st.get('ip_tailscale') or '—'}:9090")
-print()
-print(f"{B}PROGRAMAS{N}")
-nomes = {"n8n": "n8n (fluxos)", "evolution": "Evolution (WhatsApp)", "postgres": "Banco da Evolution", "redis": "Cache da Evolution"}
-for sv in st.get("servicos", []) or [{"nome": "?", "estado": "", "detalhe": "nao consegui ler o Docker"}]:
-    print(f"  {ponto(sv.get('estado') == 'running')} {nomes.get(sv.get('nome'), sv.get('nome')):<24} {sv.get('detalhe', '')}")
-print()
-print(f"{B}FLUXOS{N}")
-for f in fl or [{"nome": "nenhum fluxo (ou n8n desligado)", "ativo": False}]:
-    print(f"  {ponto(f.get('ativo'))} {f.get('nome', '')[:52]:<52} {'ligado' if f.get('ativo') else 'DESLIGADO'}")
-print()
-print(f"{B}WHATSAPP{N}  numero do servidor: +{wa.get('esperado', '?')}")
-inst = wa.get("instancias") or []
-if not inst:
-    print(f"  {ponto(False)} nenhum numero conectado (Central > WhatsApp > Abrir tela do QR)")
-for i in inst:
-    aberto = i.get("estado") == "open"
-    print(f"  {ponto(aberto)} {i.get('nome')}: {'conectado' if aberto else 'DESCONECTADO - ler o QR de novo'}  +{i.get('numero') or ''}")
-print()
-livre, total = st.get("ram_livre_mb", 0), st.get("ram_total_mb", 0)
-temp = st.get("temp_c", 0)
-cor_t = R if temp >= 75 else A if temp >= 65 else V
+dados = {"ts": time.time(), "st": lj("SV_ST", {}), "fl": lj("SV_FL", []), "wa": lj("SV_WA", {}),
+         "net": (os.environ.get("SV_NET") or "")[:1] in ("2", "3"), "cabo": os.environ.get("SV_CABO") == "up"}
+with open("/run/servidor/estado.json.tmp", "w") as f: json.dump(dados, f)
+os.chmod("/run/servidor/estado.json.tmp", 0o644)
+os.replace("/run/servidor/estado.json.tmp", "/run/servidor/estado.json")
+PY
+    ;;
+  tela|boas-vindas)
+    # logo TFLEET + resumo (estilo neofetch). "tela" = completo (TV do HDMI); "boas-vindas" = ao abrir um terminal
+    if [ "$1" = tela ] && [ "$(id -u)" -eq 0 ]; then "$0" estado-cache >/dev/null 2>&1; fi
+    SV_MODO="$1" python3 - <<'PY'
+import json, os, time, shutil, socket, getpass
+N, B = "\033[0m", "\033[1m"
+V, R, A, C, CI = "\033[32m", "\033[31m", "\033[33m", "\033[36m", "\033[90m"
+MODO = os.environ.get("SV_MODO", "tela")
+try:
+    e = json.load(open("/run/servidor/estado.json"))
+except (OSError, ValueError):
+    e = {}
+idade_min = int((time.time() - e.get("ts", 0)) / 60) if e else None
+st, fl, wa = e.get("st") or {}, e.get("fl") or [], e.get("wa") or {}
+
+# ---- logo TFLEET (cada letra uma cor, verde -> ciano) ----
+LETRAS = {
+  "T": ["████████╗", "╚══██╔══╝", "   ██║   ", "   ██║   ", "   ██║   ", "   ╚═╝   "],
+  "F": ["███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "██║     ", "╚═╝     "],
+  "L": ["██╗     ", "██║     ", "██║     ", "██║     ", "███████╗", "╚══════╝"],
+  "E": ["███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "███████╗", "╚══════╝"],
+}
+CORES = ["\033[32m", "\033[32m", "\033[92m", "\033[92m", "\033[36m", "\033[96m"]
+LARG = sum(len(LETRAS[l][0]) for l in "TFLEET")
+logo = ["".join(cor + B + LETRAS[l][i] for l, cor in zip("TFLEET", CORES)) + N for i in range(6)]
+sub = "S E R V I D O R   M E S"
+logo += ["", " " * ((LARG - len(sub)) // 2) + A + B + sub + N]
+logo_larg = [LARG] * 6 + [0, (LARG - len(sub)) // 2 + len(sub)]
+
+# ---- informacoes (as locais sao lidas na hora; Docker/fluxos/WhatsApp vem do cache do root) ----
+mem = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo")}
+livre, total = mem.get("MemAvailable", 0) // 1024, mem.get("MemTotal", 0) // 1024
+du = shutil.disk_usage("/")
+try: temp = int(open("/sys/class/thermal/thermal_zone0/temp").read()) // 1000
+except (OSError, ValueError): temp = 0
+up = int(float(open("/proc/uptime").read().split()[0]))
+dias, resto = divmod(up, 86400)
+ligado = (f"{dias} d " if dias else "") + f"{resto // 3600} h {resto % 3600 // 60} min"
+sq = lambda bom: (V if bom else R) + "■" + N
+rotulo = lambda t: C + B + f"{t:<10}" + N
+info = [f"{V}{B}{getpass.getuser()}{N}@{V}{B}{socket.gethostname()}{N}", CI + "─" * 34 + N,
+        f"{B}Bem-vindo, Mizael!{N}",
+        rotulo("Data") + time.strftime("%d/%m/%Y %H:%M"),
+        rotulo("Ligado há") + ligado]
+if e:
+    ts = bool(st.get("ip_tailscale"))
+    info.append(rotulo("Rede") + f"{sq(e.get('cabo'))} cabo  {sq(e.get('net'))} internet  {sq(ts)} tailscale")
+    info.append(rotulo("Casa") + f"https://{st.get('ip_casa', '?')}:9090")
+    info.append(rotulo("Fora") + (f"https://{st['ip_tailscale']}:9090" if ts else R + "Tailscale desligado" + N))
+    sv = st.get("servicos") or []
+    rod = sum(1 for s in sv if s.get("estado") == "running")
+    info.append(rotulo("Programas") + f"{sq(sv and rod == len(sv))} {rod} de {len(sv)} rodando")
+    lig = sum(1 for f in fl if f.get("ativo"))
+    info.append(rotulo("Fluxos") + f"{sq(fl and lig == len(fl))} {lig} ligado(s)" + (f", {R}{len(fl) - lig} desligado(s){N}" if lig < len(fl) else ""))
+    inst = wa.get("instancias") or []
+    aberto = any(i.get("estado") == "open" for i in inst)
+    info.append(rotulo("WhatsApp") + f"{sq(aberto)} " + (f"conectado (+{wa.get('esperado', '')})" if aberto else "DESCONECTADO"))
+else:
+    info.append(rotulo("Status") + A + "sem dados ainda (rode: sudo servidor tela)" + N)
 cor_m = R if livre < 200 else A if livre < 400 else V
-print(f"Memoria livre: {cor_m}{livre} de {total} MB{N}   Cartao: {st.get('disco_usado_gb', '?')} de {st.get('disco_total_gb', '?')} GB"
-      f"   Temp: {cor_t}{temp} C{N}")
-print(f"Ultimo backup: {st.get('ultimo_backup') or A + 'nenhum ainda' + N}")
-print("-" * 66)
-print(f"{C}Atualiza a cada 1 minuto. Para entrar e digitar comandos: Alt+F2 (volta aqui com Alt+F1).{N}")
+cor_t = R if temp >= 75 else A if temp >= 65 else V
+info.append(rotulo("Memória") + f"{cor_m}{livre} MB{N} livres de {total} MB")
+info.append(rotulo("Cartão") + f"{du.used / 1e9:.1f} de {du.total / 1e9:.1f} GB usados")
+info.append(rotulo("Temp") + f"{cor_t}{temp} °C{N}")
+if e:
+    bk = os.path.basename(st.get("ultimo_backup") or "").replace(".tar.gz", "")
+    info.append(rotulo("Backup") + (bk or A + "nenhum ainda" + N))
+    if idade_min and idade_min > 10:
+        info.append(CI + f"(programas/fluxos lidos há {idade_min} min)" + N)
+info += ["", "".join(f"\033[{c}m   " for c in (40, 41, 42, 43, 44, 45, 46, 47)) + N]
+
+cols = shutil.get_terminal_size((80, 24)).columns
+if cols >= LARG + 4 + 46:      # logo do lado das informacoes (estilo neofetch)
+    topo = max(0, (len(info) - len(logo)) // 2)
+    esq = [("", 0)] * topo + list(zip(logo, logo_larg))
+    for i in range(max(len(esq), len(info))):
+        txt, w = esq[i] if i < len(esq) else ("", 0)
+        print("  " + txt + " " * (LARG - w + 4) + (info[i] if i < len(info) else ""))
+else:                           # tela estreita: logo em cima
+    if cols >= LARG + 2: print("\n".join(" " + l for l in logo))
+    else: print(f"  {V}{B}TFLEET{N} · {A}{B}SERVIDOR MES{N}")
+    print()
+    print("\n".join("  " + l for l in info))
+
+if MODO == "tela":              # detalhes so na tela do HDMI / comando "servidor tela"
+    ponto = lambda bom: f"{V}[ok]{N}" if bom else f"{R}[!!]{N}"
+    nomes = {"n8n": "n8n (fluxos)", "evolution": "Evolution (WhatsApp)", "postgres": "Banco da Evolution", "redis": "Cache da Evolution"}
+    print(f"\n  {B}PROGRAMAS{N}")
+    for s in st.get("servicos") or [{"nome": "?", "estado": "", "detalhe": "nao consegui ler o Docker"}]:
+        print(f"    {ponto(s.get('estado') == 'running')} {nomes.get(s.get('nome'), s.get('nome')):<24} {s.get('detalhe', '')}")
+    print(f"\n  {B}FLUXOS{N}")
+    for f in fl or [{"nome": "nenhum fluxo (ou n8n desligado)", "ativo": False}]:
+        print(f"    {ponto(f.get('ativo'))} {f.get('nome', '')[:52]:<52} {'ligado' if f.get('ativo') else 'DESLIGADO'}")
+    inst = wa.get("instancias") or []
+    if not inst:
+        print(f"\n    {ponto(False)} WhatsApp: nenhum numero conectado (Central > WhatsApp > Abrir tela do QR)")
+    print(f"\n  {C}Atualiza a cada 1 minuto. Para entrar e digitar comandos: Alt+F2 (volta aqui com Alt+F1).{N}")
 PY
     ;;
   tela-loop)
     root "$@"
     printf '\033[9;0]\033[14;0]'   # nao apagar a tela por inatividade
+    COLUMNS=$(stty size 2>/dev/null | awk '{print $2}'); export COLUMNS="${COLUMNS:-100}"
     while true; do t="$("$0" tela 2>&1)"; printf '\033[H\033[2J%s\n' "$t"; sleep 60; done
     ;;
   tela-ligar)
@@ -313,6 +396,7 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 UNIT
+    instalar_boas_vindas
     systemctl daemon-reload
     systemctl disable --now getty@tty1.service >/dev/null 2>&1
     systemctl enable --now getty@tty2.service >/dev/null 2>&1
