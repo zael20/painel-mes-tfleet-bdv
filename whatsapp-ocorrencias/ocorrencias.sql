@@ -594,7 +594,7 @@ end $$;
 create or replace function public.ocorrencias_regras_entrada() returns trigger language plpgsql as $$
 begin
   if new.status = 'aberta' and new.categoria = 'celular_defeito'
-     and new.problema ~* '(bateria inchad|inchad|tela trincad|tela quebrad|trincad)' then
+     and new.problema ~* '(bateria inchad|inchad|tela trincad|tela quebrad|trincad|carca[cç]a)' then
     new.status := 'em_andamento';
   end if;
   return new;
@@ -700,7 +700,7 @@ begin
                        when o.problema ~* '(lent|devagar|demor)' then 'media' else 'alta' end
                 when o.categoria = 'suporte' then 'media'
                 when o.categoria = 'celular_defeito' then
-                  case when o.problema ~* '(bateria inchad|inchad|tela trincad|tela quebrad|trincad)' then 'baixa'   -- nao se resolve rapido e nao para o carro
+                  case when o.problema ~* '(bateria inchad|inchad|tela trincad|tela quebrad|trincad|carca[cç]a)' then 'baixa'   -- nao se resolve rapido e nao para o carro
                        when o.problema ~* '(n[aã]o liga|desligad|apagad|sumi|morto|sem sinal de vida)' then 'alta' else 'media' end
                 else 'baixa' end as prioridade,
            r.nome      as reporter_nome,        -- nome dado no app; vazio = use relatado_por (nome do WhatsApp)
