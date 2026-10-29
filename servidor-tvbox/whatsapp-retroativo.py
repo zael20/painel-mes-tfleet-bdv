@@ -49,8 +49,21 @@ MIDIA = re.compile(r"m[ií]dia oculta|arquivo de m[ií]dia oculto|omitid[oa]|ocu
                    r"<attached:|media omitted|imagem ocultada|figurinha omitida", re.I)
 
 
+def ordem_datas(caminho):
+    """'MDA' quando o arquivo usa mes/dia (iPhone em ingles: 10/23/26), senao 'DMA'. Decide pelo arquivo todo."""
+    for linha in open(caminho, encoding="utf-8-sig", errors="replace"):
+        m = RE_LINHA.match(linha.replace("\u200e", "").strip())
+        if m and len(m.group(1)) <= 2:
+            if int(m.group(2)) > 12:
+                return "MDA"
+            if int(m.group(1)) > 12:
+                return "DMA"
+    return "DMA"
+
+
 def ler_conversa(caminho, pasta_midia=None):
     msgs = []
+    ordem = ordem_datas(caminho)
     for linha in open(caminho, encoding="utf-8-sig", errors="replace"):
         linha = linha.replace("‎", "").replace(" ", " ").rstrip("\r\n")
         m = RE_LINHA.match(linha)
@@ -63,7 +76,7 @@ def ler_conversa(caminho, pasta_midia=None):
             ano, mes, d = int(a), int(b), int(c)          # 2026-10-29
         else:
             d, mes, ano = int(a), int(b), int(c)          # 29/10/2026
-            if mes > 12 and d <= 12:
+            if ordem == "MDA":
                 d, mes = mes, d                           # 10/29/2026 (formato americano)
         ano += 2000 if ano < 100 else 0
         hh = int(hh)
