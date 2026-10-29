@@ -59,6 +59,10 @@ a { color: var(--accent); }
 .tabs { display: flex; gap: 2px; max-width: 760px; margin: 10px auto 0; }
 .tabs button { flex: 1; border: 0; border-radius: 8px 8px 0 0; padding: 9px 2px; background: transparent; color: var(--accent-fg); opacity: .78;
   font: 600 15px var(--font-body); min-width: 0; }
+@media (max-width: 460px) {
+  .tabs button { font-size: 13px; letter-spacing: -.02em; white-space: nowrap; padding: 12px 1px 8px; position: relative; overflow: visible; }
+  .tabs .tabcount { position: absolute; top: -5px; right: 0; min-width: 16px; padding: 0 4px; font-size: 11px; line-height: 16px; }
+}
 .tabs button[aria-pressed="true"] { background: var(--bg); color: var(--fg); opacity: 1; }
 
 main { max-width: 760px; margin: 0 auto; padding-block: 16px 120px;
@@ -264,6 +268,11 @@ button.kpi:hover, .open button:hover, .legend button:hover { border-color: var(-
 .open .n { font: 700 24px/1 var(--font-display); }
 .open .w { font-size: 14px; min-width: 0; }
 .open .a { font: 500 12px var(--font-data); color: var(--muted); white-space: nowrap; }
+.open button.late { border: 2px solid var(--nok); }
+.col .slowp { background: var(--warn); }
+.col { position: relative; }
+.col .abmark { position: absolute; left: 0; right: 0; height: 2px; background: var(--fg); }
+.msg { display: grid; gap: 2px; border-top: 1px solid var(--grid); padding-top: 8px; }
 
 /* enviadas */
 .list { display: grid; gap: 10px; }
@@ -295,6 +304,7 @@ button.kpi:hover, .open button:hover, .legend button:hover { border-color: var(-
   <nav class="tabs" id="tabs">
     <button type="button" data-view="nova" aria-pressed="true">Vistoria</button>
     <button type="button" data-view="carros" aria-pressed="false">Carros</button>
+    <button type="button" data-view="oc" aria-pressed="false">Ocorrências <span class="tabcount" id="tabOc" hidden></span></button>
     <button type="button" data-view="dash" aria-pressed="false">Dashboard <span class="tabcount" id="tabPend" hidden></span></button>
     <button type="button" data-view="enviadas" aria-pressed="false">Enviadas</button>
   </nav>
@@ -440,6 +450,58 @@ button.kpi:hover, .open button:hover, .legend button:hover { border-color: var(-
       <h3>Carros com mais NOK</h3>
       <div class="sub">Vistorias com NOK no período.</div>
       <div class="hbars" id="dRank"></div>
+    </div>
+  </section>
+
+  <!-- ======================= OCORRENCIAS DOS MOTORISTAS ======================= -->
+  <section class="view" id="v-oc" hidden>
+    <div class="field">
+      <h2>Ocorrências dos motoristas</h2>
+      <span class="src" id="ocSrc"></span>
+      <div class="seg small" id="ocPer">
+        <button type="button" data-d="30" aria-pressed="false">30 dias</button>
+        <button type="button" data-d="90" aria-pressed="true">90 dias</button>
+        <button type="button" data-d="180" aria-pressed="false">6 meses</button>
+        <button type="button" data-d="0" aria-pressed="false">Tudo</button>
+      </div>
+    </div>
+    <div class="kpis" id="ocKpis"></div>
+    <div class="src" id="ocBh"></div>
+    <div class="card">
+      <h3>Lista</h3>
+      <div class="seg small" id="ocFilt">
+        <button type="button" data-f="open" aria-pressed="true">Abertas</button>
+        <button type="button" data-f="res" aria-pressed="false">Resolvidas</button>
+        <button type="button" data-f="all" aria-pressed="false">Todas</button>
+      </div>
+      <input class="text" id="ocQ" inputmode="numeric" placeholder="Filtrar por carro (ex.: 65)" maxlength="4" aria-label="Filtrar por carro">
+      <div class="open rows" id="ocList"></div>
+    </div>
+    <div class="card">
+      <h3>Resolvidas por semana</h3>
+      <div class="sub">Toque numa coluna para ver as ocorrências da semana.</div>
+      <div class="legend"><span style="--c: var(--ok)">em até 1 dia útil</span><span style="--c: var(--warn)">mais de 1 dia útil</span><span style="--c: var(--fg)">abertas na semana (traço)</span></div>
+      <div class="cols-wrap"><div class="cols" id="ocWeeks"></div></div>
+      <div class="cols-ax" id="ocWeeksAx"></div>
+    </div>
+    <div class="card">
+      <h3>Por categoria</h3>
+      <div class="sub">Ocorrências abertas no período e tempo médio para resolver.</div>
+      <div class="hbars" id="ocCat"></div>
+    </div>
+    <div class="card">
+      <h3>Carros com mais ocorrências</h3>
+      <div class="hbars" id="ocCar"></div>
+    </div>
+    <div class="card">
+      <h3>Quem resolveu</h3>
+      <div class="sub">Resolvidas no período, com o tempo médio.</div>
+      <div class="hbars" id="ocPor"></div>
+    </div>
+    <div class="card">
+      <h3>Quem mais relata</h3>
+      <div class="sub">Toque para ver os relatos. Para dar nome ou matrícula, abra uma ocorrência da pessoa.</div>
+      <div class="hbars" id="ocRel"></div>
     </div>
   </section>
 
@@ -806,7 +868,7 @@ function demoCham() { // so na previa, para ver como fica; nunca vai para o serv
 function openCham(tag) { return (chamados || (IS_PREVIEW ? demoCham() : [])).filter(function (c) { return c.tag === tag; }); }
 function fetchChamados() {
   if (!navigator.onLine) return;
-  fetch(SB.url + "/rest/v1/ocorrencias?select=id,tag,categoria,problema,relatado_por,primeira_msg_em,criado_em,urgencia&status=in.(aberta,em_andamento)&tag=not.is.null&order=criado_em.asc", { headers: hdr({}) })
+  fetch(SB.url + "/rest/v1/ocorrencias?select=id,tag,categoria,problema,relatado_por,reporter_phone,primeira_msg_em,criado_em,urgencia&status=in.(aberta,em_andamento)&tag=not.is.null&order=criado_em.asc", { headers: hdr({}) })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (rows) { chamados = rows; ls("vb_cham", JSON.stringify(rows)); paintForm(); if (view === "dash") paintDash(); })
     .catch(function () {});
@@ -824,7 +886,7 @@ function paintCham() {
     box.appendChild(el("div", { class: "chamc" + (on ? " done" : "") }, [
       el("span", { class: "h", text: "Chamado do motorista" + (c.demo ? " · exemplo da prévia" : "") }),
       el("span", { class: "p", text: c.problema }),
-      el("span", { class: "m", text: (c.relatado_por || "Motorista") + " · aberto em " + fmtDT(c.primeira_msg_em || c.criado_em) + " · há " + plural(Math.max(0, Math.floor((Date.now() - new Date(c.primeira_msg_em || c.criado_em)) / 86400000)), "dia", "dias") }),
+      el("span", { class: "m", text: (c.demo ? c.relatado_por : relTxt(fromOc(c))) + " · aberto em " + fmtDT(c.primeira_msg_em || c.criado_em) + " · há " + plural(Math.max(0, Math.floor((Date.now() - new Date(c.primeira_msg_em || c.criado_em)) / 86400000)), "dia", "dias") }),
       bt]));
   });
 }
@@ -915,7 +977,7 @@ function syncNow() {
   all().then(function (list) {
     var pend = list.filter(function (r) { return r.state !== "sent"; }).reverse(); // mais antiga primeiro
     return pend.reduce(function (p, r) { return p.then(function () { if (lastNetErr && !navigator.onLine) return; return sendOne(r); }); }, Promise.resolve());
-  }).then(function () { return prune(); }).then(function () { syncing = false; refreshAll(); fetchServer(); fetchChamados(); }, function () { syncing = false; refreshAll(); });
+  }).then(function () { return prune(); }).then(function () { syncing = false; refreshAll(); fetchServer(); fetchChamados(); fetchOcSoon(); }, function () { syncing = false; refreshAll(); });
 }
 function prune() { // guarda so as 60 ultimas enviadas no celular
   return all().then(function (list) { var sent = list.filter(function (r) { return r.state === "sent"; }); return Promise.all(sent.slice(60).map(function (r) { return del(r.id); })); });
@@ -982,16 +1044,16 @@ function openCar(t) { showSheet(function () { shTag = t; paintSheet(); }); }
 function closeCar() { stack.pop(); if (stack.length) { renderTop(); $("sheet").scrollTop = 0; return; } $("sheet").hidden = true; document.body.style.overflow = ""; }
 function closeAll() { stack = []; $("sheet").hidden = true; document.body.style.overflow = ""; }
 // Lista de drill-down: build() devolve [{tag, main, side, cls}] (carro ou vistoria); tocar abre o historico do carro
-function openList(title, sub, build) {
+function openList(title, sub, build, noun) {
   showSheet(function () {
     shTag = null; $("shTitle").textContent = title; $("shNew").hidden = true;
     var b = $("shBody"); b.textContent = ""; var rows = build();
-    b.appendChild(el("div", { class: "src", text: sub + " · " + plural(rows.length, "item", "itens") + ". Toque para ver o histórico do carro." }));
+    b.appendChild(el("div", { class: "src", text: sub + " · " + plural(rows.length, "item", "itens") + (noun ? ". Toque para ver a " + noun + "." : ". Toque para ver o histórico do carro.") }));
     var box = el("div", { class: "open rows" });
     if (!rows.length) box.appendChild(el("div", { class: "empty", text: "Nada aqui." }));
     rows.forEach(function (r) {
       var bt = el("button", { type: "button" }, [el("span", { class: "n", text: r.tag }), el("span", { class: "w" }, r.main), el("span", { class: "a", text: r.side })]);
-      bt.addEventListener("click", function () { openCar(r.tag); });
+      bt.addEventListener("click", function () { if (r.go) r.go(); else openCar(r.tag); });
       box.appendChild(bt);
     });
     b.appendChild(box);
@@ -1006,7 +1068,8 @@ function newestFirst(a, b) { return -cmpV(a, b); }
 function paintSheet() {
   var t = shTag, h = byTag[t] || [], b = $("shBody"); b.textContent = "";
   $("shTitle").textContent = "Carro " + t; $("shNew").hidden = false;
-  if (!h.length) { b.appendChild(el("div", { class: "empty", text: "Sem vistorias." })); return; }
+  var ocb = carOcBlock(t);
+  if (!h.length) { b.appendChild(el("div", { class: "empty", text: "Sem vistorias." })); if (ocb) b.appendChild(ocb); return; }
   var noks = h.filter(isNok).length, first = h[0], last = h[h.length - 1];
   var gaps = []; for (var i = 1; i < h.length; i++) gaps.push(dayNum(h[i].dia) - dayNum(h[i - 1].dia));
   var avg = gaps.length ? Math.round(gaps.reduce(function (a, x) { return a + x; }, 0) / gaps.length) : null;
@@ -1062,6 +1125,7 @@ function paintSheet() {
     ]));
   });
   b.appendChild(tl);
+  if (ocb) b.insertBefore(ocb, b.children[1] || null);
 }
 
 // ---------------------------------------------------------------- dashboard gerencial
@@ -1238,9 +1302,284 @@ function paintSync(list) {
 function refreshAll() {
   return all().then(function (list) {
     rebuild(list); paintSync(list); paintLast(); paintAlert();
-    if (view === "carros") paintCars(); if (view === "dash") paintDash(); if (view === "enviadas") paintList();
+    paintOcBadge();
+    if (view === "carros") paintCars(); if (view === "oc") paintOc(); if (view === "dash") paintDash(); if (view === "enviadas") paintList();
     if (!$("sheet").hidden) renderTop();
   });
+}
+
+// ---------------------------------------------------------------- ocorrencias dos motoristas (WhatsApp) e eficiencia
+// Le a tabela ocorrencias (thread WhatsApp). Tempo em HORAS UTEIS pela regra do servidor (tabelas expediente e feriados):
+// padrao 07:30 as 17:00 (Belem), segunda a sexta, sem feriado. Resolvidas usam horas_uteis da view; abertas sao contadas aqui.
+var OC_CAT = { carregamento: "Carregamento", abrir_viagem: "Abrir viagem", contagem_passageiros: "Contagem de passageiros",
+  internet_chip: "Internet / chip", celular_defeito: "Celular com defeito", suporte: "Suporte", som_musica: "Som / música", outro: "Outro" };
+var OC_ST = { aberta: ["Aberta", "nok"], em_andamento: ["Em andamento", "warn"], resolvida: ["Resolvida", "res"], descartada: ["Descartada", ""], historico: ["Sem desfecho", ""] };
+var EXP = { ini: 7.5, fim: 17, sab: false, dom: false, fer: false, feriados: {} };
+try { var ex0 = JSON.parse(ls("vb_exped") || "null"); if (ex0) EXP = ex0; } catch (e) {}
+function bhDia() { return Math.round((EXP.fim - EXP.ini) * 60); }   // 570 min = 1 dia util no padrao
+var ocRows = null, ocAt = null, ocMsgs = {}, relMap = {}, relServer = null, ocFilt = ls("vb_oc_filt") || "open", ocQ = "", ocDays = 90;
+try { ocRows = JSON.parse(ls("vb_oc_all") || "null"); ocAt = ls("vb_oc_at"); relMap = JSON.parse(ls("vb_rel") || "{}"); } catch (e) {}
+// minutos uteis entre a e b (Belem = UTC-3 o ano todo, sem horario de verao)
+function bhMin(a, b) {
+  var t0 = new Date(a).getTime() - 3 * 3600000, t1 = new Date(b).getTime() - 3 * 3600000;
+  if (!(t1 > t0)) return 0;
+  var tot = 0, d0 = Math.floor(t0 / 86400000), d1 = Math.floor(t1 / 86400000);
+  for (var d = d0; d <= d1; d++) {
+    var wd = new Date(d * 86400000).getUTCDay();
+    if ((wd === 6 && !EXP.sab) || (wd === 0 && !EXP.dom)) continue;
+    if (!EXP.fer && EXP.feriados[new Date(d * 86400000).toISOString().slice(0, 10)]) continue;
+    var s = d * 86400000 + EXP.ini * 3600000, e = d * 86400000 + EXP.fim * 3600000;
+    var x = Math.min(e, t1) - Math.max(s, t0); if (x > 0) tot += x;
+  }
+  return Math.round(tot / 60000);
+}
+function fmtBh(m) {
+  if (m == null) return "—";
+  if (m < 60) return m + " min úteis";
+  var h = m / 60; return (h < 10 ? h.toFixed(1).replace(".", ",") : String(Math.round(h))) + " h úteis";
+}
+function fmtBhShort(m) { if (m == null) return "—"; if (m < 60) return m + "min"; var h = m / 60; return (h < 10 ? h.toFixed(1).replace(".", ",") : String(Math.round(h))) + "h"; }
+function agoTxt(iso) { var m = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000)); return m < 60 ? "há " + m + " min" : m < 1440 ? "há " + Math.round(m / 60) + " h" : "há " + plural(Math.round(m / 1440), "dia", "dias"); }
+function agoShort(iso) { var m = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000)); return m < 60 ? m + "min" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
+function phoneOf(jid) { if (!jid) return ""; var s = String(jid); if (/@lid$/.test(s)) return "lid:" + s.split("@")[0]; return s.split("@")[0].replace(/\D/g, ""); }
+function fmtPhone(p) {
+  if (!p) return ""; if (p.indexOf("lid:") === 0) return "contato oculto …" + p.slice(-4);
+  var n = p.replace(/^55/, ""); return n.length >= 10 ? "(" + n.slice(0, 2) + ") " + n.slice(2, n.length - 4) + "-" + n.slice(-4) : p;
+}
+function fromOc(r) {
+  var ph = r.reporter_phone ? phoneOf(r.reporter_phone) : (ocMsgs[r.id] || "");
+  return { id: r.id, tag: r.tag ? normTag(r.tag) : "", cat: r.categoria || "outro", problema: r.problema || "", status: r.status || "aberta",
+    urg: r.urgencia, prio: r.prioridade || r.urgencia, ini: r.primeira_msg_em || r.criado_em, fim: r.status === "resolvida" ? (r.resolvido_em || r.atualizado_em) : null,
+    por: r.resolvido_por, sol: r.solucao, phone: ph, perfil: r.relatado_por || "", reinc: r.reincidencias || 0, origem: r.origem,
+    vistId: r.vistoria_id, bt: r.bt_causa, monSinal: r.mon_ultimo_sinal, demo: !!r.demo,
+    relNome: r.reporter_nome || null, relMat: r.reporter_matricula || null, bhSrv: r.status === "resolvida" && r.horas_uteis != null ? +r.horas_uteis : null };
+}
+function isOpenOc(o) { return o.status === "aberta" || o.status === "em_andamento"; }
+function ocList() { return (ocRows || (IS_PREVIEW ? demoOc() : [])).map(fromOc).filter(function (o) { return o.status !== "descartada"; }); }
+function relKey(o) { return o.phone || (o.perfil ? "nome:" + o.perfil : ""); }
+function relOf(o) { var k = relKey(o), r = k && relMap[k]; if (r) return r; if (o.relNome || o.relMat) return { nome: o.relNome, matricula: o.relMat }; return null; }
+function relTxt(o) {
+  var r = relOf(o);
+  if (r && (r.nome || r.matricula)) return (r.nome || "") + (r.matricula ? (r.nome ? " · " : "") + "mat. " + r.matricula : "");
+  return (o.perfil || "Sem nome") + (o.phone ? " · " + fmtPhone(o.phone) : "");
+}
+function ocOpenMin(o) { return bhMin(o.ini, o.fim || new Date().toISOString()); }
+function ocResMin(o) { return o.fim ? (o.bhSrv != null ? Math.round(o.bhSrv * 60) : bhMin(o.ini, o.fim)) : null; }
+function porTxt(p) { return !p ? "—" : p === "vistoria" ? "Vistoria (CHECK BDV)" : p === "painel" ? "Painel" : p; }
+function demoOc() { // so na previa: exemplos para ver a tela; nunca vao para o servidor
+  var tags = Object.keys(latest).sort().slice(0, 40), cats = Object.keys(OC_CAT), out = [], seed = 7;
+  function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+  var probs = { carregamento: "Celular não carrega", abrir_viagem: "App BDV não abre a viagem", contagem_passageiros: "Leitor não está contando passageiros",
+    internet_chip: "Sem internet no celular", celular_defeito: "Celular travando", suporte: "Suporte do celular solto", som_musica: "Celular tocando música alto", outro: "Dúvida sobre o app" };
+  var pessoas = [["559199990001", "Motorista João"], ["559199990002", "Carlos"], ["559199990003", ""], ["559199990004", "Rose"], ["559199990005", "Zé do 65"]];
+  for (var i = 0; i < 34; i++) {
+    var cat = cats[Math.floor(rnd() * 6)], ini = Date.now() - Math.floor(rnd() * 70 * 86400000), p = pessoas[Math.floor(rnd() * pessoas.length)];
+    var st = i < 7 ? "aberta" : rnd() < .12 ? "historico" : "resolvida";
+    if (i < 7) ini = Date.now() - Math.floor(rnd() * 5 * 86400000);
+    var fim = st === "resolvida" ? Math.min(Date.now(), ini + Math.floor((0.1 + rnd() * rnd() * 4) * 86400000)) : null;
+    out.push({ id: -100 - i, tag: tags[Math.floor(rnd() * tags.length)] || "80", categoria: cat, problema: probs[cat], status: st, urgencia: cat === "carregamento" ? "alta" : "media",
+      relatado_por: p[1], reporter_phone: p[0], primeira_msg_em: new Date(ini).toISOString(), criado_em: new Date(ini).toISOString(),
+      resolvido_em: fim ? new Date(fim).toISOString() : null, resolvido_por: fim ? (rnd() < .6 ? "vistoria" : "Mizael") : null,
+      solucao: fim ? "Cabo trocado na vistoria" : null, demo: true });
+  }
+  return out;
+}
+// ---- servidor
+function fetchOc() {
+  if (!navigator.onLine) return Promise.resolve();
+  function get(path) { return fetch(SB.url + "/rest/v1/" + path, { headers: hdr({}) }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
+  var msgs = get("whatsapp_msgs?select=ocorrencia_id,autor_jid,ts&ocorrencia_id=not.is.null&order=ts.asc&limit=20000").then(function (rows) {
+    var m = {}; rows.forEach(function (x) { if (!m[x.ocorrencia_id] && x.autor_jid) m[x.ocorrencia_id] = phoneOf(x.autor_jid); }); ocMsgs = m;
+  }).catch(function () {});
+  var rel = get("relatores?select=*").then(function (rows) {
+    relServer = true; rows.forEach(function (r) { if (!relMap[r.phone] || !relMap[r.phone].q) relMap[r.phone] = { nome: r.nome, matricula: r.matricula }; });
+    ls("vb_rel", JSON.stringify(relMap)); pushRel();
+  }).catch(function () { relServer = false; });
+  var exp = Promise.all([get("expediente?select=*&id=eq.1"), get("feriados?select=dia")]).then(function (x) {
+    var e = x[0][0]; if (!e) return;
+    function hh(t) { var p = String(t).split(":"); return +p[0] + (+p[1] || 0) / 60; }
+    var f = {}; x[1].forEach(function (r) { f[r.dia] = 1; });
+    EXP = { ini: hh(e.inicio), fim: hh(e.fim), sab: !!e.conta_sabado, dom: !!e.conta_domingo, fer: !!e.conta_feriado, feriados: f, srv: true };
+    ls("vb_exped", JSON.stringify(EXP));
+  }).catch(function () {});
+  // a view cruzada traz prioridade e evidencias; se nao existir, usa a tabela
+  var oc = get("v_ocorrencias_cruzadas?select=*&order=criado_em.desc&limit=3000")
+    .catch(function () { return get("ocorrencias?select=*&order=criado_em.desc&limit=3000"); })
+    .then(function (rows) { ocRows = rows; ocAt = new Date().toISOString(); });
+  return Promise.all([msgs, rel, exp, oc.catch(function () {})]).then(function () {
+    if (ocRows) { ocRows.forEach(function (r) { if (!r.reporter_phone && ocMsgs[r.id]) r.reporter_phone = ocMsgs[r.id]; });
+      try { ls("vb_oc_all", JSON.stringify(ocRows)); ls("vb_oc_at", ocAt); } catch (e) {} }
+    paintOcBadge(); if (view === "oc") paintOc(); if (!$("sheet").hidden) renderTop();
+  });
+}
+var ocLast = 0;
+function fetchOcSoon(force) { if (force || Date.now() - ocLast > 5 * 60000) { ocLast = Date.now(); fetchOc(); } }   // no maximo a cada 5 min
+function pushRel() { // nomes dados neste aparelho que ainda nao subiram
+  if (!navigator.onLine || relServer === false) return;
+  Object.keys(relMap).forEach(function (k) {
+    var r = relMap[k]; if (!r.q || !/^\d{10,13}$/.test(k)) return;   // @lid e "nome:" ficam so no aparelho
+    fetch(SB.url + "/rest/v1/relatores?on_conflict=phone", { method: "POST", headers: hdr({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify({ phone: k, nome: r.nome || null, matricula: r.matricula || null, atualizado_em: new Date().toISOString() }) })
+      .then(function (x) { if (x.ok) { delete r.q; ls("vb_rel", JSON.stringify(relMap)); } }).catch(function () {});
+  });
+}
+function patchOc(o, body, okMsg) {
+  if (o.demo) { toast("Exemplo da prévia: nada foi enviado."); return; }
+  if (!navigator.onLine) { toast("Sem internet: tente de novo quando conectar."); return; }
+  fetch(SB.url + "/rest/v1/ocorrencias?id=eq." + o.id, { method: "PATCH", headers: hdr({ "Content-Type": "application/json", Prefer: "return=minimal" }), body: JSON.stringify(body) })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); toast(okMsg); return fetchOc(); })
+    .catch(function (e) { toast("Não consegui salvar (" + e.message + ")."); });
+}
+// ---- linhas para listas
+function ocRow(o) {
+  var st = OC_ST[o.status] || [o.status, ""];
+  var side = isOpenOc(o) ? agoShort(o.ini) + " · " + fmtBhShort(ocOpenMin(o)) : o.fim ? "em " + fmtBhShort(ocResMin(o)) : fmtDate(todayBelemOf(o.ini));
+  return { tag: o.tag || "?", side: side, go: function () { openOc(o.id); },
+    main: [el("span", { class: "badge " + st[1], text: st[0] }), " ", o.problema, el("span", { class: "hint", text: " · " + relTxt(o) })] };
+}
+function byOld(a, b) { return a.ini < b.ini ? -1 : 1; }
+function byNew(a, b) { return a.ini < b.ini ? 1 : -1; }
+function ocInPer(iso) { return !ocDays || (iso && (Date.now() - new Date(iso)) < ocDays * 86400000); }
+function paintOcBadge() { var n = ocList().filter(isOpenOc).length, b = $("tabOc"); b.hidden = !n; b.textContent = n; }
+// ---- tela
+function paintOc() {
+  var all = ocList(), open = all.filter(isOpenOc);
+  var resP = all.filter(function (o) { return o.fim && ocInPer(o.fim); }), abP = all.filter(function (o) { return ocInPer(o.ini); });
+  var perTxt = ocDays ? "Últimos " + ocDays + " dias" : "Todo o histórico";
+  $("ocSrc").textContent = ocRows ? "Servidor, atualizado " + fmtDT(ocAt) + "." : IS_PREVIEW ? "Prévia: ocorrências de EXEMPLO, só para ver a tela." : "Ainda sem dados do servidor (precisa de internet uma vez).";
+  var mins = resP.map(ocResMin).filter(function (m) { return m != null; }).sort(function (a, b) { return a - b; });
+  var avg = mins.length ? Math.round(mins.reduce(function (a, x) { return a + x; }, 0) / mins.length) : null, med = mins.length ? mins[Math.floor(mins.length / 2)] : null;
+  var in1 = mins.filter(function (m) { return m <= bhDia(); }).length;
+  var old2 = open.filter(function (o) { return ocOpenMin(o) > 2 * bhDia(); }).length;
+  var k = $("ocKpis"); k.textContent = "";
+  [[String(open.length), "abertas agora" + (old2 ? " · " + old2 + " há +2 dias úteis" : ""), open.length > 0, function () { openList("Ocorrências abertas", "Mais antigas primeiro", function () { return ocList().filter(isOpenOc).sort(byOld).map(ocRow); }, "ocorrência"); }],
+   [String(resP.length), "resolvidas · " + abP.length + " abertas no período", false, function () { openList("Resolvidas", perTxt, function () { return resP.slice().sort(function (a, b) { return a.fim < b.fim ? 1 : -1; }).map(ocRow); }, "ocorrência"); }],
+   [fmtBhShort(avg), "tempo médio de resolução (mediana " + fmtBhShort(med) + ")", false, function () { openList("Tempo de resolução", perTxt + ", mais demoradas primeiro", function () { return resP.slice().sort(function (a, b) { return ocResMin(b) - ocResMin(a); }).map(ocRow); }, "ocorrência"); }],
+   [mins.length ? Math.round(in1 * 100 / mins.length) + "%" : "—", "resolvidas em até 1 dia útil", false, function () { openList("Resolvidas em até 1 dia útil", perTxt, function () { return resP.filter(function (o) { return ocResMin(o) <= bhDia(); }).sort(byNew).map(ocRow); }, "ocorrência"); }]
+  ].forEach(function (x) { var bt = el("button", { type: "button", class: "kpi" + (x[2] ? " alert" : "") }, [el("b", { text: x[0] }), el("span", { text: x[1] })]); bt.addEventListener("click", x[3]); k.appendChild(bt); });
+  function hm(h) { return String(Math.floor(h)).padStart(2, "0") + ":" + String(Math.round(h % 1 * 60)).padStart(2, "0"); }
+  var dias = EXP.sab && EXP.dom ? "todos os dias" : EXP.sab ? "segunda a sábado" : EXP.dom ? "domingo a sexta" : "segunda a sexta";
+  $("ocBh").textContent = "Horas úteis: " + hm(EXP.ini) + " às " + hm(EXP.fim) + ", " + dias + (EXP.fer ? "" : ", sem feriados") + ". 1 dia útil = " + fmtBhShort(bhDia()) + "." + (EXP.srv ? "" : " (Regra padrão; o servidor ainda não respondeu.)");
+  // lista
+  var q = normTag(ocQ), L = (ocFilt === "open" ? open : ocFilt === "res" ? all.filter(function (o) { return o.fim; }) : all)
+    .filter(function (o) { return !q || o.tag === q; }).sort(ocFilt === "open" ? byOld : byNew);
+  var box = $("ocList"); box.textContent = "";
+  if (!L.length) box.appendChild(el("div", { class: "empty", text: ocFilt === "open" ? "Nenhuma ocorrência aberta." : "Nada aqui." }));
+  L.slice(0, 200).forEach(function (o) {
+    var r = ocRow(o), bt = el("button", { type: "button", class: isOpenOc(o) && ocOpenMin(o) > 2 * bhDia() ? "late" : "" }, [el("span", { class: "n", text: r.tag }), el("span", { class: "w" }, r.main), el("span", { class: "a", text: r.side })]);
+    bt.addEventListener("click", r.go); box.appendChild(bt);
+  });
+  // resolvidas por semana: verde = ate 1 dia util, laranja = mais
+  function weekOfIso(iso) { var dn = dayNum(todayBelemOf(iso)); return dn - (new Date(dn * 86400000).getUTCDay() + 6) % 7; }
+  function wd(w) { var d = new Date(w * 86400000); return String(d.getUTCDate()).padStart(2, "0") + "/" + String(d.getUTCMonth() + 1).padStart(2, "0"); }
+  var wk = {}; resP.forEach(function (o) { var w = weekOfIso(o.fim), e = wk[w] = wk[w] || { fast: 0, slow: 0, ab: 0 }; if (ocResMin(o) <= bhDia()) e.fast++; else e.slow++; });
+  abP.forEach(function (o) { var w = weekOfIso(o.ini); (wk[w] = wk[w] || { fast: 0, slow: 0, ab: 0 }).ab++; });
+  var ws = Object.keys(wk).map(Number).sort(function (a, b) { return a - b; });
+  if (ws.length) { var allw = []; for (var w = ws[0]; w <= ws[ws.length - 1]; w += 7) allw.push(w); ws = allw; }
+  var wmax = Math.max.apply(null, ws.map(function (w) { var e = wk[w] || {}; return Math.max((e.fast || 0) + (e.slow || 0), e.ab || 0); }).concat(1));
+  var cols = $("ocWeeks"); cols.textContent = "";
+  ws.forEach(function (w) {
+    var e = wk[w] || { fast: 0, slow: 0, ab: 0 }, tot = e.fast + e.slow;
+    var lab = "Semana de " + wd(w) + ": " + e.ab + " abertas, " + tot + " resolvidas (" + e.fast + " em até 1 dia útil)";
+    var c = el("button", { type: "button", class: "col", title: lab, "aria-label": lab });
+    if (e.fast) c.appendChild(el("div", { class: "okp", style: "height:" + (e.fast * 100 / wmax) + "%" }));
+    if (e.slow) c.appendChild(el("div", { class: "slowp", style: "height:" + (e.slow * 100 / wmax) + "%" }));
+    if (e.ab) c.appendChild(el("i", { class: "abmark", style: "bottom:" + (e.ab * 100 / wmax) + "%" }));
+    c.addEventListener("click", function () { openList("Semana de " + wd(w), "Abertas ou resolvidas na semana (segunda a domingo)", function () {
+      return ocList().filter(function (o) { return weekOfIso(o.ini) === w || (o.fim && weekOfIso(o.fim) === w); }).sort(byNew).map(ocRow); }, "ocorrência"); });
+    cols.appendChild(c);
+  });
+  var ax = $("ocWeeksAx"); ax.textContent = "";
+  if (ws.length) { ax.appendChild(el("span", { text: wd(ws[0]) })); ax.appendChild(el("span", { text: "máx. " + wmax + "/semana" })); ax.appendChild(el("span", { text: wd(ws[ws.length - 1]) })); }
+  // agrupamentos com drill-down
+  function group(list, keyFn, labelFn, box, cls, key) {
+    var g = {}; list.forEach(function (o) { var kk = keyFn(o); if (!kk) return; (g[kk] = g[kk] || []).push(o); });
+    var rows = Object.keys(g).map(function (kk) {
+      var it = g[kk], rm = it.map(ocResMin).filter(function (m) { return m != null; });
+      var av = rm.length ? Math.round(rm.reduce(function (a, x) { return a + x; }, 0) / rm.length) : null, op = it.filter(isOpenOc).length;
+      return { k: kk, label: labelFn(kk, it), v: it.length, extra: [op ? plural(op, "aberta", "abertas") : null, av != null ? "média " + fmtBhShort(av) : null].filter(Boolean).join(" · "),
+        onClick: function () { openList(labelFn(kk, it), perTxt, function () { return it.slice().sort(byNew).map(ocRow); }, "ocorrência"); } };
+    }).sort(function (a, b) { return b.v - a.v || String(a.label).localeCompare(String(b.label)); }).slice(0, 12);
+    hbars(box, rows, Math.max.apply(null, rows.map(function (r) { return r.v; }).concat(1)), cls, key);
+  }
+  group(abP, function (o) { return o.cat; }, function (c) { return OC_CAT[c] || c; }, $("ocCat"), "", "oc_cat:");
+  group(abP, function (o) { return o.tag; }, function (t) { return "Carro " + t; }, $("ocCar"), "nok", "oc_car:");
+  group(resP, function (o) { return o.por || "?"; }, function (p) { return porTxt(p); }, $("ocPor"), "", "oc_por:");
+  group(abP, function (o) { return relKey(o); }, function (kk, it) { return relTxt(it[0]); }, $("ocRel"), "", "oc_rel:");
+}
+// ---- detalhe de uma ocorrencia
+function openOc(id) { showSheet(function () { paintOcSheet(id); }); }
+function paintOcSheet(id) {
+  var o = ocList().filter(function (x) { return x.id === id; })[0], b = $("shBody"); b.textContent = ""; shTag = null; $("shNew").hidden = true;
+  if (!o) { $("shTitle").textContent = "Ocorrência"; b.appendChild(el("div", { class: "empty", text: "Não encontrada." })); return; }
+  $("shTitle").textContent = "Carro " + (o.tag || "?") + " · " + (OC_CAT[o.cat] || o.cat);
+  var st = OC_ST[o.status] || [o.status, ""];
+  b.appendChild(el("div", { class: "field" }, [el("div", { class: "rec-h" }, [el("span", { class: "badge " + st[1], text: st[0] }), o.prio ? el("span", { class: "badge " + (o.prio === "alta" ? "nok" : o.prio === "media" ? "warn" : ""), text: "prioridade " + o.prio }) : null,
+    o.demo ? el("span", { class: "badge warn", text: "exemplo da prévia" }) : null]), el("b", { style: "font-size:18px", text: o.problema }),
+    o.reinc ? el("span", { class: "hint", text: "Relatado de novo " + plural(o.reinc, "vez", "vezes") + " enquanto estava aberta." }) : null]));
+  b.appendChild(el("div", { class: "facts" }, [
+    el("div", { class: "fact" }, [el("b", { text: fmtDT(o.ini).slice(0, 8) }), el("span", { text: "aberta às " + fmtDT(o.ini).slice(-5) + " · " + agoTxt(o.ini) })]),
+    o.fim ? el("div", { class: "fact" }, [el("b", { text: fmtBhShort(ocResMin(o)) }), el("span", { text: "para resolver (horas úteis)" })])
+          : el("div", { class: "fact" }, [el("b", { text: fmtBhShort(ocOpenMin(o)) }), el("span", { text: "aberta (horas úteis)" })]),
+    o.fim ? el("div", { class: "fact" }, [el("b", { text: fmtDT(o.fim).slice(0, 8) }), el("span", { text: "resolvida " + agoTxt(o.fim) })]) : null
+  ]));
+  // quem relatou
+  var r = relOf(o), rb = el("div", { class: "card" }, [el("h3", { text: "Quem relatou" }),
+    el("div", {}, [el("b", { text: r && (r.nome || r.matricula) ? relTxt(o) : (o.perfil || "Sem nome no WhatsApp") }),
+      el("div", { class: "hint", text: (o.phone ? fmtPhone(o.phone) : "número não registrado") + (r && (r.nome || r.matricula) && o.perfil ? " · no WhatsApp: " + o.perfil : "") })])]);
+  var fN = el("input", { class: "text", placeholder: "Nome (opcional)", maxlength: "80", value: r && r.nome || "" }), fM = el("input", { class: "text", placeholder: "Matrícula", inputmode: "numeric", maxlength: "20", value: r && r.matricula || "" });
+  var sv = el("button", { type: "button", class: "btn", text: r ? "Salvar alteração" : "Nomear esta pessoa" });
+  sv.addEventListener("click", function () {
+    var kk = relKey(o); if (!kk) { toast("Sem número para guardar."); return; }
+    relMap[kk] = { nome: fN.value.trim() || null, matricula: fM.value.trim() || null, q: true }; ls("vb_rel", JSON.stringify(relMap)); pushRel();
+    toast("Guardado. Vale para os próximos relatos deste número."); renderTop(); if (view === "oc") paintOc();
+  });
+  rb.appendChild(el("div", { class: "hint", text: "Pela LGPD, prefira a matrícula. O nome vale para todas as ocorrências deste número." + (relServer === false ? " (Ainda só neste aparelho: o servidor não tem a tabela de relatores.)" : "") }));
+  rb.appendChild(fN); rb.appendChild(fM); rb.appendChild(sv); b.appendChild(rb);
+  // resolucao
+  if (o.fim || o.sol) b.appendChild(el("div", { class: "card" }, [el("h3", { text: "Resolução" }), el("div", { text: "Por: " + porTxt(o.por) }), o.sol ? el("div", { class: "hint", text: o.sol }) : null]));
+  // evidencias do cruzamento
+  var ev = [];
+  if (o.bt) ev.push("Monitor (18h antes do relato): " + ({ bluetooth_desligado: "Bluetooth desligado", leitor_desconectado: "leitor desconectado", nao_rodou: "ônibus não rodou", bluetooth_ok: "Bluetooth OK", sem_dados: "sem dados" }[o.bt] || o.bt));
+  if (o.monSinal) ev.push("Último sinal do celular: " + fmtDT(o.monSinal));
+  var lv = o.tag && lastChecked(o.tag); if (lv) ev.push("Última vistoria: " + fmtDate(lv.dia) + " · " + resTxt(lv));
+  if (ev.length) b.appendChild(el("div", { class: "card" }, [el("h3", { text: "Cruzamento" })].concat(ev.map(function (t) { return el("div", { class: "hint", text: t }); }))));
+  // acoes
+  var act = el("div", { class: "addrow", style: "flex-wrap:wrap" });
+  if (o.tag) { var nv = el("button", { type: "button", class: "btn primary", text: "Fazer vistoria do carro " + o.tag }); nv.addEventListener("click", function () { closeAll(); form.pref = null; switchView("nova"); setTag(o.tag); }); act.appendChild(nv);
+    var hc = el("button", { type: "button", class: "btn", text: "Histórico do carro" }); hc.addEventListener("click", function () { openCar(o.tag); }); act.appendChild(hc); }
+  if (isOpenOc(o)) { var rs = el("button", { type: "button", class: "btn", text: "Marcar resolvida" }); rs.addEventListener("click", function () {
+      var s = window.prompt("O que foi feito?", ""); if (s === null) return;
+      patchOc(o, { status: "resolvida", resolvido_por: ($("nome").value || "CHECK BDV").slice(0, 80), solucao: s.slice(0, 1000) || null }, "Ocorrência resolvida."); }); act.appendChild(rs);
+    var ds = el("button", { type: "button", class: "btn", text: "Descartar" }); ds.addEventListener("click", function () { if (window.confirm("Descartar esta ocorrência? (não era problema)")) patchOc(o, { status: "descartada" }, "Descartada."); }); act.appendChild(ds); }
+  else if (o.status === "resolvida" || o.status === "historico") { var ra = el("button", { type: "button", class: "btn", text: "Reabrir" }); ra.addEventListener("click", function () { patchOc(o, { status: "aberta" }, "Reaberta."); }); act.appendChild(ra); }
+  b.appendChild(act);
+  // mensagens do grupo
+  var mb = el("div", { class: "card" }, [el("h3", { text: "O que foi enviado no grupo" })]); b.appendChild(mb);
+  if (o.demo) { mb.appendChild(el("div", { class: "hint", text: "Na prévia não há mensagens." })); return; }
+  var ck = "vb_ocm_" + o.id, cached = null; try { cached = JSON.parse(ls(ck) || "null"); } catch (e) {}
+  function paintMsgs(rows) {
+    mb.querySelectorAll(".msg").forEach(function (n) { n.remove(); });
+    if (!rows || !rows.length) { mb.appendChild(el("div", { class: "hint msg", text: rows ? "Nenhuma mensagem ligada." : "Precisa de internet para carregar." })); return; }
+    rows.forEach(function (m) {
+      var txt = m.texto || m.transcricao || "(" + m.tipo + ")";
+      mb.appendChild(el("div", { class: "msg" }, [el("div", { class: "hint", text: fmtDT(m.ts) + " · " + (m.autor_nome || fmtPhone(phoneOf(m.autor_jid))) + (m.tipo !== "texto" ? " · " + m.tipo : "") }),
+        el("div", { text: txt }), m.texto && m.transcricao ? el("div", { class: "hint", text: "Transcrição: " + m.transcricao }) : null,
+        m.midia_path ? el("a", { href: m.midia_path, target: "_blank", rel: "noopener", text: "Abrir " + m.tipo }) : null]));
+    });
+  }
+  paintMsgs(cached);
+  if (navigator.onLine) fetch(SB.url + "/rest/v1/whatsapp_msgs?select=ts,autor_nome,autor_jid,tipo,texto,transcricao,midia_path&ocorrencia_id=eq." + o.id + "&order=ts.asc", { headers: hdr({}) })
+    .then(function (x) { if (!x.ok) throw new Error(x.status); return x.json(); })
+    .then(function (rows) { try { ls(ck, JSON.stringify(rows)); } catch (e) {} if (mb.isConnected) paintMsgs(rows); }).catch(function () {});
+}
+// ocorrencias do carro, para o historico do carro
+function carOcBlock(t) {
+  var L = ocList().filter(function (o) { return o.tag === t; }).sort(byNew);
+  if (!L.length) return null;
+  var box = el("div", { class: "open rows" });
+  L.slice(0, 30).forEach(function (o) { var r = ocRow(o); var bt = el("button", { type: "button" }, [el("span", { class: "n", text: OC_ST[o.status] && isOpenOc(o) ? "!" : "✓" }), el("span", { class: "w" }, r.main), el("span", { class: "a", text: r.side })]); bt.addEventListener("click", r.go); box.appendChild(bt); });
+  return el("div", { class: "field" }, [el("span", { class: "label", text: "Ocorrências dos motoristas · " + L.filter(isOpenOc).length + " abertas de " + L.length }), box]);
 }
 
 // ---------------------------------------------------------------- navegacao e eventos
@@ -1248,7 +1587,8 @@ var view = "nova";
 function switchView(v) {
   view = v;
   document.querySelectorAll("#tabs button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.view === v)); });
-  ["nova", "carros", "dash", "enviadas"].forEach(function (k) { $("v-" + k).hidden = k !== v; });
+  if (v === "oc") fetchOcSoon();
+  ["nova", "carros", "oc", "dash", "enviadas"].forEach(function (k) { $("v-" + k).hidden = k !== v; });
   $("savebar").hidden = v !== "nova";
   refreshAll(); window.scrollTo(0, 0);
 }
@@ -1262,6 +1602,16 @@ document.querySelectorAll("#v-nova .seg").forEach(function (seg) {
     paintForm();
   });
 });
+$("ocPer").addEventListener("click", function (e) {
+  var b = e.target.closest("button"); if (!b) return;
+  ocDays = +b.dataset.d; this.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); paintOc();
+});
+$("ocFilt").addEventListener("click", function (e) {
+  var b = e.target.closest("button"); if (!b) return;
+  ocFilt = b.dataset.f; ls("vb_oc_filt", ocFilt); this.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); paintOc();
+});
+$("ocQ").addEventListener("input", function () { this.value = this.value.replace(/\D/g, "").slice(0, 4); ocQ = this.value; paintOc(); });
+document.querySelectorAll("#ocFilt button").forEach(function (x) { x.setAttribute("aria-pressed", String(x.dataset.f === ocFilt)); });
 $("perSeg").addEventListener("click", function (e) {
   var b = e.target.closest("button"); if (!b) return;
   dashDays = +b.dataset.d; dashOpen = null;
