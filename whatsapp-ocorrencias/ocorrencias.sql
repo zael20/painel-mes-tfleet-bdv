@@ -214,21 +214,26 @@ grant execute on function public.contexto_ia(text, text) to service_role;
 -- Para cada ocorrencia: ultimo sinal do monitor daquele onibus e ultima vistoria (com o item ligado a categoria).
 -- O monitor identifica o onibus por device_name (numero digitado no admin); comparamos pela tag padronizada.
 -- Se a tabela vistorias ainda nao existir, a view sai sem as colunas de vistoria; rode este arquivo de novo depois.
+-- Colunas do monitor que nao existirem em v_last_sample (versao antiga do schema) saem vazias (null).
 do $$
 declare v_vist boolean := to_regclass('public.vistorias') is not null;
+        v_mon  text;
 begin
+  select string_agg(case when c.column_name is not null then 'm.' || x.col else 'null::' || x.tipo end || ' as ' || x.apelido,
+                    E',\n           ' order by x.ordem)
+    into v_mon
+    from (values (1, 'device_id', 'text', 'mon_device_id'), (2, 'ts', 'timestamptz', 'mon_ultimo_sinal'),
+                 (3, 'battery_pct', 'integer', 'mon_bateria'), (4, 'plugged', 'boolean', 'mon_na_tomada'),
+                 (5, 'current_ma', 'integer', 'mon_corrente_ma'), (6, 'bt_connected', 'text', 'mon_bt_conectado'),
+                 (7, 'mobile_data_on', 'boolean', 'mon_dados_moveis'), (8, 'app_version', 'text', 'mon_versao_app'))
+         as x(ordem, col, tipo, apelido)
+    left join information_schema.columns c
+      on c.table_schema = 'public' and c.table_name = 'v_last_sample' and c.column_name = x.col;
   execute 'drop view if exists public.v_ocorrencias_cruzadas';
   execute format($v$
     create view public.v_ocorrencias_cruzadas with (security_invoker = on) as
     select o.*,
-           m.device_id        as mon_device_id,
-           m.ts               as mon_ultimo_sinal,
-           m.battery_pct      as mon_bateria,
-           m.plugged          as mon_na_tomada,
-           m.current_ma       as mon_corrente_ma,
-           m.bt_connected     as mon_bt_conectado,
-           m.mobile_data_on   as mon_dados_moveis,
-           m.app_version      as mon_versao_app
+           %s
            %s
     from public.ocorrencias o
     left join lateral (
@@ -237,6 +242,7 @@ begin
       order by s.ts desc limit 1) m on true
     %s
   $v$,
+  v_mon,
   case when v_vist then $c$,
            v.data_vistoria    as vist_data,
            v.status           as vist_status,
