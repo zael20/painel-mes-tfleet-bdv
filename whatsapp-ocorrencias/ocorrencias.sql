@@ -589,6 +589,72 @@ do $$ declare r record; begin
   end loop;
 end $$;
 
+-- ---------------------------------------------------------------- regras automaticas do usuario (29/10)
+-- 1) Bateria inchada / tela trincada: ja nasce "em andamento" (nao se resolve na hora; prioridade baixa na view).
+create or replace function public.ocorrencias_regras_entrada() returns trigger language plpgsql as $$
+begin
+  if new.status = 'aberta' and new.categoria = 'celular_defeito'
+     and new.problema ~* '(bateria inchad|inchad|tela trincad|tela quebrad|trincad)' then
+    new.status := 'em_andamento';
+  end if;
+  return new;
+end $$;
+drop trigger if exists ocorrencias_regras_entrada on public.ocorrencias;
+create trigger ocorrencias_regras_entrada before insert on public.ocorrencias
+  for each row execute function public.ocorrencias_regras_entrada();
+
+-- 2) "Nao esta lendo / contando passageiro": se a API TFleet mostra uma viagem do carro que SAIU DEPOIS do relato
+--    com pelo menos 3 passageiros registrados, o leitor voltou a funcionar (ex.: ligaram o Bluetooth) -> resolvida.
+--    Leitor LENTO (lento/devagar/demora) nao fecha assim: continua aberta, prioridade media.
+create or replace function public.resolver_contagem_pela_api(p_tag text default null, p_id bigint default null)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if to_regclass('public.viagens') is null then return 0; end if;
+  with alvo as (
+    select o.id, v.saida_ts, v.ocupacao, v.linha
+    from ocorrencias o
+    cross join lateral (
+      select x.* from viagens x
+      where public.normaliza_tag(x.frota) = o.tag and x.saida_ts > coalesce(o.primeira_msg_em, o.criado_em)
+        and coalesce(x.ocupacao, 0) >= 3
+        -- reaberta no painel: so vale viagem depois da reabertura
+        and x.saida_ts > coalesce((select max(l.em) from ocorrencia_status_log l where l.ocorrencia_id = o.id
+                                    and l.de = 'resolvida' and l.para in ('aberta','em_andamento')), '-infinity')
+      order by x.saida_ts limit 1) v
+    where o.categoria = 'contagem_passageiros' and o.status in ('aberta','em_andamento','historico') and o.tag is not null
+      and o.problema !~* '(lent|devagar|demor)'
+      and (p_tag is null or o.tag = public.normaliza_tag(p_tag)) and (p_id is null or o.id = p_id))
+  update ocorrencias o set status = 'resolvida', resolvido_por = 'api', resolvido_em = a.saida_ts,
+         solucao = coalesce(nullif(o.solucao,''), left('API TFleet: o carro voltou a registrar passageiros (' || a.ocupacao ||
+                   ' na viagem de ' || to_char(a.saida_ts at time zone 'America/Belem', 'DD/MM HH24:MI') ||
+                   coalesce(', ' || a.linha, '') || ').', 1000))
+    from alvo a where o.id = a.id;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.resolver_contagem_pela_api(text, bigint) from public, anon, authenticated;
+
+create or replace function public.contagem_api_gatilho() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_table_name = 'viagens' then perform public.resolver_contagem_pela_api(new.frota, null);
+  else perform public.resolver_contagem_pela_api(null, new.id); end if;
+  return null;
+end $$;
+drop trigger if exists ocorrencias_contagem_api on public.ocorrencias;
+create trigger ocorrencias_contagem_api after insert on public.ocorrencias
+  for each row when (new.categoria = 'contagem_passageiros' and new.tag is not null)
+  execute function public.contagem_api_gatilho();
+do $$ begin
+  if to_regclass('public.viagens') is not null then
+    execute 'drop trigger if exists viagem_fecha_contagem on public.viagens';
+    execute 'create trigger viagem_fecha_contagem after insert or update of ocupacao, saida_ts on public.viagens
+               for each row when (coalesce(new.ocupacao, 0) >= 3) execute function public.contagem_api_gatilho()';
+  end if;
+end $$;
+select public.resolver_contagem_pela_api() as ocorrencias_fechadas_pela_api;   -- passada unica no que ja existe
+
 -- ---------------------------------------------------------------- cruzamento: RELATO x MONITOR x VISTORIA
 -- Para cada ocorrencia: ultimo sinal do monitor daquele onibus e ultima vistoria (com o item ligado a categoria).
 -- O monitor identifica o onibus por device_name (numero digitado no admin); comparamos pela tag padronizada.
@@ -634,7 +700,8 @@ begin
                        when o.problema ~* '(lent|devagar|demor)' then 'media' else 'alta' end
                 when o.categoria = 'suporte' then 'media'
                 when o.categoria = 'celular_defeito' then
-                  case when o.problema ~* '(n[aã]o liga|desligad|apagad|sumi|morto|sem sinal de vida)' then 'alta' else 'media' end
+                  case when o.problema ~* '(bateria inchad|inchad|tela trincad|tela quebrad|trincad)' then 'baixa'   -- nao se resolve rapido e nao para o carro
+                       when o.problema ~* '(n[aã]o liga|desligad|apagad|sumi|morto|sem sinal de vida)' then 'alta' else 'media' end
                 else 'baixa' end as prioridade,
            r.nome      as reporter_nome,        -- nome dado no app; vazio = use relatado_por (nome do WhatsApp)
            r.matricula as reporter_matricula,
@@ -768,7 +835,7 @@ begin
     cross join lateral (select w.* from whatsapp_msgs w where w.ocorrencia_id = o.id and w.grupo_jid like '%@g.us'
                          order by w.ts limit 1) m
     left join relatores r on r.phone = o.reporter_phone
-    where o.status = 'resolvida' and o.aviso_status is null and o.origem = 'whatsapp'
+    where o.status = 'resolvida' and o.aviso_status is null and o.origem = 'whatsapp' and coalesce(o.resolvido_por,'') <> 'api'
       and coalesce(o.primeira_msg_em, o.criado_em) >= c.desde and o.resolvido_em >= c.desde
       and not exists (select 1 from whatsapp_msgs w where w.ocorrencia_id = o.id and w.acao_ia = 'resolve')  -- ja avisaram no grupo
     order by o.resolvido_em
