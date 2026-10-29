@@ -152,17 +152,23 @@ update public.ocorrencias o set reporter_phone = coalesce(
  where o.reporter_phone is null;
 
 -- ---------------------------------------------------------------- horas uteis (tempo de atendimento)
--- Expediente padrao 07:30-17:00, segunda a sexta, horario de Paragominas (America/Belem), sem feriados.
+-- Expediente padrao 08:00-17:00, segunda a sexta, horario de Paragominas (America/Belem), sem feriados.
 -- Para mudar (ex.: contar sabado): update public.expediente set conta_sabado = true;  feriado: insert into public.feriados.
 create table if not exists public.expediente (
   id             smallint primary key default 1 check (id = 1),
-  inicio         time not null default '07:30',
+  inicio         time not null default '08:00',
   fim            time not null default '17:00',
   conta_sabado   boolean not null default false,
   conta_domingo  boolean not null default false,
   conta_feriado  boolean not null default false
 );
 insert into public.expediente (id) values (1) on conflict (id) do nothing;
+-- 29/10: expediente passou a 08:00-17:00 (pedido do usuario). So troca se ainda estiver no padrao antigo.
+alter table public.expediente alter column inicio set default '08:00';
+update public.expediente set inicio = '08:00' where id = 1 and inicio = '07:30';
+-- Media de tempo de resolucao so conta relatos a partir desta data (o historico antigo foi conferido depois,
+-- em lote, e distorce a media). Para mudar: update public.expediente set metricas_desde = '2026-11-01';
+alter table public.expediente add column if not exists metricas_desde timestamptz not null default '2026-10-29 00:00-03';
 create table if not exists public.feriados (dia date primary key, nome text check (length(nome) <= 80));
 alter table public.expediente enable row level security;
 alter table public.feriados   enable row level security;
@@ -173,7 +179,7 @@ create policy "painel le feriados" on public.feriados for select to anon, authen
 revoke all on public.expediente, public.feriados from anon;
 grant select on public.expediente, public.feriados to anon, authenticated;
 
--- Horas de expediente entre dois instantes (ex.: aberta 07:30, resolvida 12:00 do mesmo dia = 4,5 h).
+-- Horas de expediente entre dois instantes (ex.: aberta 08:00, resolvida 12:00 do mesmo dia = 4 h).
 create or replace function public.horas_uteis(p_ini timestamptz, p_fim timestamptz) returns numeric
 language sql stable security definer set search_path = public as $$
   select case when p_ini is null or p_fim is null then null when p_fim <= p_ini then 0 else
@@ -629,6 +635,9 @@ begin
            public.horas_uteis(coalesce(o.primeira_msg_em, o.criado_em),
                               case when o.status in ('resolvida','descartada') then coalesce(o.resolvido_em, o.atualizado_em)
                                    when o.status = 'historico' then null else now() end) as horas_uteis,
+           -- entra na media de tempo? (relato do WhatsApp ao vivo, a partir de expediente.metricas_desde)
+           (o.origem <> 'retroativo' and coalesce(o.primeira_msg_em, o.criado_em) >=
+              coalesce((select e.metricas_desde from public.expediente e where e.id = 1), '-infinity')) as conta_no_tempo,
            round(extract(epoch from (case when o.status in ('resolvida','descartada') then coalesce(o.resolvido_em, o.atualizado_em)
                                           when o.status = 'historico' then null else now() end)
                                     - coalesce(o.primeira_msg_em, o.criado_em)) / 86400.0, 1) as dias_corridos
