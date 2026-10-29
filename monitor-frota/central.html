@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Central TFleet</title>
+<meta name="theme-color" content="#0f172a">
+<style>
+:root{
+  --bg:#f4f6fb; --card:#ffffff; --card2:#f8fafc; --ink:#0f172a; --muted:#5b6678;
+  --line:#e4e8f0; --brand:#2563eb; --brand-ink:#1d4ed8;
+  --ok:#16a34a; --warn:#d97706; --bad:#dc2626; --info:#0891b2;
+  --shadow:0 1px 2px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.06);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b1120; --card:#131c2e; --card2:#0f1829; --ink:#e8edf6; --muted:#94a3b8;
+    --line:#223049; --brand:#3b82f6; --brand-ink:#60a5fa;
+    --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --info:#22d3ee;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b1120; --card:#131c2e; --card2:#0f1829; --ink:#e8edf6; --muted:#94a3b8;
+  --line:#223049; --brand:#3b82f6; --brand-ink:#60a5fa;
+  --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --info:#22d3ee;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:1040px;margin:0 auto;padding:20px 16px 48px}
+header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+header.top h1{font-size:20px;margin:0;letter-spacing:.2px}
+header.top .sub{color:var(--muted);font-size:13px;margin:0}
+.badge{margin-left:auto;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.on{background:var(--ok)} .dot.err{background:var(--bad)}
+
+h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:28px 0 10px}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+.tile .n{font-size:30px;font-weight:700;line-height:1.1;letter-spacing:-.5px}
+.tile .l{color:var(--muted);font-size:13px;margin-top:2px}
+.tile .foot{font-size:12px;margin-top:8px;color:var(--muted)}
+.tile.alert .n{color:var(--bad)} .tile.warn .n{color:var(--warn)} .tile.good .n{color:var(--ok)}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.panel .ph{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.panel .ph h3{margin:0;font-size:15px} .panel .ph .hint{color:var(--muted);font-size:12px;margin-left:auto}
+.tbl-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:620px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;background:var(--card2);position:sticky;top:0}
+tr:last-child td{border-bottom:0}
+.car{font-weight:700;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill.alta{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.pill.media{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.pill.baixa{background:color-mix(in srgb,var(--info) 16%,transparent);color:var(--info)}
+.pill.ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.pill.nok{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.pill.mut{background:var(--card2);color:var(--muted)}
+.empty,.loading{padding:26px 16px;text-align:center;color:var(--muted);font-size:14px}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+a.card{display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);transition:transform .08s,border-color .12s}
+a.card:hover{transform:translateY(-2px);border-color:var(--brand)}
+a.card .ic{font-size:22px}
+a.card .t{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+a.card .d{color:var(--muted);font-size:13px}
+a.card .go{margin-top:6px;color:var(--brand-ink);font-size:13px;font-weight:600}
+.soon{font-size:11px;font-weight:600;color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);border-radius:999px;padding:1px 7px}
+
+footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
+.linkish{color:var(--brand-ink);cursor:pointer;background:none;border:0;font:inherit;padding:0}
+
+/* gate */
+#gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
+#gate .box{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:24px;max-width:320px;width:100%;text-align:center}
+#gate h1{font-size:18px;margin:0 0 4px} #gate p{color:var(--muted);font-size:13px;margin:0 0 16px}
+#gate input{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--card2);color:var(--ink);font-size:18px;text-align:center;letter-spacing:4px}
+#gate button{margin-top:12px;width:100%;padding:12px;border:0;border-radius:10px;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+#gate .err{color:var(--bad);font-size:13px;min-height:18px;margin-top:8px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="gate">
+  <form class="box" id="gateForm">
+    <h1>Central TFleet</h1>
+    <p>Digite o código de acesso</p>
+    <input id="gateInput" inputmode="numeric" autocomplete="off" placeholder="••••" aria-label="código">
+    <button type="submit">Entrar</button>
+    <div class="err" id="gateErr"></div>
+  </form>
+</div>
+
+<div class="wrap hidden" id="app">
+  <header class="top">
+    <div>
+      <h1>Central TFleet</h1>
+      <p class="sub">Tudo da operação num lugar só — Paragominas / Hydro</p>
+    </div>
+    <div class="badge"><span class="dot" id="statusDot"></span><span id="statusTxt">conectando…</span></div>
+  </header>
+
+  <h2 class="sec">Visão geral do dia</h2>
+  <div class="tiles" id="tiles">
+    <div class="tile"><div class="n" id="tOcor">—</div><div class="l">Ocorrências abertas</div><div class="foot" id="tOcorFoot">&nbsp;</div></div>
+    <div class="tile"><div class="n" id="tVist">—</div><div class="l">Vistorias hoje</div><div class="foot" id="tVistFoot">&nbsp;</div></div>
+    <div class="tile"><div class="n" id="tNok">—</div><div class="l">Vistorias com NOK hoje</div><div class="foot">itens reprovados</div></div>
+    <div class="tile"><div class="n" id="tAtivos">—</div><div class="l">Aparelhos ativos hoje</div><div class="foot">enviaram dados</div></div>
+  </div>
+
+  <h2 class="sec">Precisam de atenção <span style="font-weight:400;text-transform:none;letter-spacing:0">— ocorrências abertas cruzadas pela TAG</span></h2>
+  <div class="panel">
+    <div class="ph">
+      <h3>Ocorrências abertas</h3>
+      <span class="hint">atualiza a cada 60s · <button class="linkish" id="reload">recarregar</button></span>
+    </div>
+    <div class="tbl-scroll">
+      <table id="ocorTbl">
+        <thead><tr>
+          <th>Carro</th><th>Problema</th><th>Urgência</th><th>Última vistoria</th><th>Aberta há</th>
+        </tr></thead>
+        <tbody><tr><td colspan="5"><div class="loading" id="ocorLoad">Carregando…</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2 class="sec">Painéis</h2>
+  <div class="cards" id="cards">
+    <a class="card" href="index.html">
+      <div class="ic">🚍</div>
+      <div class="t">Monitor Frota</div>
+      <div class="d">Celulares dos ônibus: carga, bateria, eventos e mapa ao vivo.</div>
+      <div class="go">Abrir →</div>
+    </a>
+    <a class="card" href="index.html#ocorrencias">
+      <div class="ic">💬</div>
+      <div class="t">Ocorrências WhatsApp <span class="soon" id="soonOcor">entra em breve</span></div>
+      <div class="d">Chamados do grupo, cruzados com vistoria e monitor, por prioridade.</div>
+      <div class="go">Abrir →</div>
+    </a>
+    <a class="card" href="vistoria/index.html">
+      <div class="ic">✅</div>
+      <div class="t">Vistorias BDV <span class="soon" id="soonVist">entra em breve</span></div>
+      <div class="d">Checklist dos ônibus. No celular funciona offline, com foto e observação.</div>
+      <div class="go">Abrir →</div>
+    </a>
+    <a class="card" href="lotacao.html">
+      <div class="ic">📊</div>
+      <div class="t">Lotação das rotas</div>
+      <div class="d">Ocupação por rota e horário, com relatório para os gestores.</div>
+      <div class="go">Abrir →</div>
+    </a>
+    <a class="card" href="roteador-tratativa.html">
+      <div class="ic">📶</div>
+      <div class="t">Roteador — tratativas</div>
+      <div class="d">Tratar alertas de uso de roteador (hotspot) nos ônibus.</div>
+      <div class="go">Abrir →</div>
+    </a>
+  </div>
+
+  <footer>
+    <div>Central TFleet · dados do Supabase em tempo real · código de acesso 8015</div>
+    <div style="margin-top:6px"><button class="linkish" id="themeBtn">alternar tema claro/escuro</button></div>
+  </footer>
+</div>
+
+<script>
+const SB_URL = "https://orhuxmsrdnugpogvtnbg.supabase.co";
+const SB_KEY = "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL";
+const ADMIN_PIN_SHA256 = "0eadf1d576bd3ec3f0e6d305a44136b198701bf1f369a001a848c4c561b3c0e6";
+
+/* ---------- gate ---------- */
+const gate=document.getElementById('gate'), app=document.getElementById('app');
+async function sha256hex(s){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){return null}}
+function openApp(){gate.classList.add('hidden');app.classList.remove('hidden');start()}
+try{if(sessionStorage.getItem('tf_central_ok')==='1') openApp();}catch(e){}
+document.getElementById('gateForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const v=document.getElementById('gateInput').value.trim();
+  const h=await sha256hex(v);
+  if((h&&h===ADMIN_PIN_SHA256)||v==='8015'){try{sessionStorage.setItem('tf_central_ok','1')}catch(e){}openApp();}
+  else{document.getElementById('gateErr').textContent='Código incorreto.';}
+});
+
+/* ---------- theme ---------- */
+document.getElementById('themeBtn').addEventListener('click',()=>{
+  const cur=document.documentElement.getAttribute('data-theme');
+  const dark=cur? cur==='dark' : matchMedia('(prefers-color-scheme:dark)').matches;
+  document.documentElement.setAttribute('data-theme', dark?'light':'dark');
+});
+
+/* ---------- supabase REST ---------- */
+function hdr(extra){return Object.assign({apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,Accept:'application/json'},extra||{})}
+async function sbGet(path){const r=await fetch(SB_URL+'/rest/v1/'+path,{headers:hdr()});if(!r.ok)throw new Error(path+' → '+r.status);return r.json()}
+async function sbCount(path){
+  const sep=path.includes('?')?'&':'?';
+  const r=await fetch(SB_URL+'/rest/v1/'+path+sep+'select=*',{headers:hdr({Prefer:'count=exact',Range:'0-0'})});
+  if(!r.ok)throw new Error(path+' → '+r.status);
+  const cr=r.headers.get('content-range')||'';const n=cr.split('/')[1];
+  if(n&&n!=='*')return parseInt(n,10);
+  const a=await r.json();return Array.isArray(a)?a.length:0;
+}
+
+/* ---------- dates ---------- */
+const now=new Date();
+const startISO=new Date(now.getFullYear(),now.getMonth(),now.getDate()).toISOString();
+const ymd=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+function setStatus(ok,txt){const d=document.getElementById('statusDot');d.className='dot '+(ok?'on':'err');document.getElementById('statusTxt').textContent=txt}
+function fail(id,foot){document.getElementById(id).textContent='—';if(foot)document.getElementById(foot).textContent='indisponível';}
+
+/* ---------- tiles ---------- */
+async function loadTiles(){
+  let anyOk=false;
+  // ocorrências abertas
+  try{const n=await sbCount("v_ocorrencias_cruzadas?status=in.(aberta,em_andamento)");
+    document.getElementById('tOcor').textContent=n;
+    document.getElementById('tiles').children[0].classList.toggle('alert',n>0);
+    document.getElementById('tOcorFoot').textContent=n===0?'nada aberto 👌':'aguardando tratativa';anyOk=true;
+  }catch(e){fail('tOcor','tOcorFoot')}
+  // vistorias hoje
+  try{const n=await sbCount("vistorias?data_vistoria=eq."+ymd);
+    document.getElementById('tVist').textContent=n;
+    document.getElementById('tVistFoot').textContent='ônibus vistoriados';anyOk=true;
+  }catch(e){fail('tVist','tVistFoot')}
+  // NOK hoje
+  try{const n=await sbCount("vistorias?data_vistoria=eq."+ymd+"&resultado=eq.NOK");
+    const el=document.getElementById('tNok');el.textContent=n;
+    document.getElementById('tiles').children[2].classList.toggle('warn',n>0);anyOk=true;
+  }catch(e){fail('tNok')}
+  // aparelhos ativos hoje
+  try{const n=await sbCount("v_last_sample?ts=gte."+startISO);
+    document.getElementById('tAtivos').textContent=n;anyOk=true;
+  }catch(e){fail('tAtivos')}
+  setStatus(anyOk, anyOk?('atualizado '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})):'sem conexão com o Supabase');
+}
+
+/* ---------- tabela de ocorrências abertas ---------- */
+const URG={alta:3,media:2,baixa:1};
+function esc(s){return (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function since(iso){if(!iso)return '—';const d=new Date(iso),m=Math.floor((now-d)/60000);
+  if(m<60)return m+' min';const h=Math.floor(m/60);if(h<24)return h+'h';return Math.floor(h/24)+'d';}
+function vistCell(r){
+  const dt=r.vist_data||r.vist_ts;
+  if(!dt)return '<span class="pill mut">sem vistoria</span>';
+  const res=(r.vist_resultado||'').toUpperCase();
+  const d=new Date(r.vist_data?r.vist_data+'T00:00:00':r.vist_ts).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  const pill=res==='OK'?'<span class="pill ok">OK</span>':res==='NOK'?'<span class="pill nok">NOK</span>':'<span class="pill mut">'+esc(r.vist_status||'?')+'</span>';
+  return d+' '+pill;
+}
+async function loadOcor(){
+  const tb=document.querySelector('#ocorTbl tbody');
+  try{
+    let rows=await sbGet("v_ocorrencias_cruzadas?status=in.(aberta,em_andamento)&order=criado_em.desc&limit=100");
+    rows.sort((a,b)=>(URG[b.urgencia]||0)-(URG[a.urgencia]||0) || new Date(b.criado_em)-new Date(a.criado_em));
+    if(!rows.length){tb.innerHTML='<tr><td colspan="5"><div class="empty">Nenhuma ocorrência aberta agora. 👌</div></td></tr>';return;}
+    tb.innerHTML=rows.map(r=>{
+      const u=(r.urgencia||'media').toLowerCase();
+      const prob=esc(r.problema||r.categoria||'—');
+      const cat=r.categoria&&r.problema?'<div style="color:var(--muted);font-size:12px">'+esc(r.categoria.replace(/_/g,' '))+'</div>':'';
+      const car=r.tag?('<span class="car">'+esc(r.tag)+'</span>'):'<span class="pill mut">sem TAG</span>';
+      const reinc=(r.reincidencias&&r.reincidencias>0)?' <span class="pill mut">×'+(r.reincidencias+1)+'</span>':'';
+      return '<tr><td>'+car+reinc+'</td><td>'+prob+cat+'</td><td><span class="pill '+u+'">'+u+'</span></td><td>'+vistCell(r)+'</td><td>'+since(r.criado_em)+'</td></tr>';
+    }).join('');
+  }catch(e){
+    tb.innerHTML='<tr><td colspan="5"><div class="empty">Painel de ocorrências ainda conectando. Assim que a aba for publicada, a lista aparece aqui.</div></td></tr>';
+  }
+}
+
+/* ---------- card availability ---------- */
+async function headOk(url){try{const r=await fetch(url,{method:'HEAD'});return r.ok}catch(e){return false}}
+async function checkCards(){
+  if(await headOk('vistoria/index.html'))document.getElementById('soonVist').remove();
+  // ocorrências = aba dentro do index.html; some quando a view responder
+  try{await sbGet("v_ocorrencias_cruzadas?limit=1");document.getElementById('soonOcor').remove();}catch(e){}
+}
+
+function start(){loadTiles();loadOcor();checkCards();setInterval(()=>{loadTiles();loadOcor()},60000);}
+document.getElementById('reload').addEventListener('click',()=>{loadTiles();loadOcor()});
+</script>
+</body>
+</html>
