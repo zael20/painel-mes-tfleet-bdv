@@ -104,6 +104,89 @@ drop trigger if exists ocorrencias_ao_mudar on public.ocorrencias;
 create trigger ocorrencias_ao_mudar before update on public.ocorrencias
   for each row execute function public.ocorrencias_ao_mudar();
 
+-- ---------------------------------------------------------------- quem relatou (numero do WhatsApp -> nome / matricula)
+-- reporter_phone: so digitos com DDI, ex. 5591999998888. Vem do autor_jid (n8n) ou do nome na conversa exportada
+-- quando o contato nao estava salvo ("+55 91 99999-8888"). Id interno do WhatsApp (@lid) nao e telefone: fica vazio.
+-- Nome e matricula ficam em relatores (1 linha por numero): nomear o numero vale para todas as ocorrencias dele.
+-- LGPD: no app, prefira a matricula ao nome.
+create or replace function public.normaliza_fone(t text) returns text
+language sql immutable as $$
+  select case when t is null or t ~* '@(lid|g\.us)' then null
+              when length(regexp_replace(split_part(t, '@', 1), '\D', '', 'g')) between 10 and 13
+                   and split_part(t, '@', 1) !~ '[A-Za-zÀ-ÿ]'
+              then regexp_replace(split_part(t, '@', 1), '\D', '', 'g') end;
+$$;
+alter table public.ocorrencias add column if not exists reporter_phone text;
+create index if not exists ocorrencias_reporter on public.ocorrencias (reporter_phone);
+
+create table if not exists public.relatores (
+  phone          text primary key check (phone ~ '^\d{10,13}$'),
+  nome           text check (length(nome) <= 80),
+  matricula      text check (length(matricula) <= 30),
+  atualizado_em  timestamptz not null default now()
+);
+alter table public.relatores enable row level security;
+drop policy if exists "painel le relatores" on public.relatores;
+create policy "painel le relatores" on public.relatores for select to anon, authenticated using (true);
+drop policy if exists "painel cria relatores" on public.relatores;
+create policy "painel cria relatores" on public.relatores for insert to anon, authenticated with check (true);
+drop policy if exists "painel muda relatores" on public.relatores;
+create policy "painel muda relatores" on public.relatores for update to anon, authenticated using (true) with check (true);
+revoke all on public.relatores from anon;
+grant select, insert, update on public.relatores to anon, authenticated;
+
+-- ocorrencia criada sem numero (ex.: importador retroativo): tenta pelo nome exibido
+create or replace function public.ocorrencias_fone() returns trigger language plpgsql as $$
+begin
+  if new.reporter_phone is null then new.reporter_phone := public.normaliza_fone(new.relatado_por); end if;
+  return new;
+end $$;
+drop trigger if exists ocorrencias_fone on public.ocorrencias;
+create trigger ocorrencias_fone before insert on public.ocorrencias for each row execute function public.ocorrencias_fone();
+
+-- ocorrencias que ja existem: numero da primeira mensagem ligada a ela (ou do nome exibido)
+update public.ocorrencias o set reporter_phone = coalesce(
+    (select public.normaliza_fone(m.autor_jid) from public.whatsapp_msgs m
+      where m.ocorrencia_id = o.id and public.normaliza_fone(m.autor_jid) is not null order by m.ts limit 1),
+    public.normaliza_fone(o.relatado_por))
+ where o.reporter_phone is null;
+
+-- ---------------------------------------------------------------- horas uteis (tempo de atendimento)
+-- Expediente padrao 07:30-17:00, segunda a sexta, horario de Paragominas (America/Belem), sem feriados.
+-- Para mudar (ex.: contar sabado): update public.expediente set conta_sabado = true;  feriado: insert into public.feriados.
+create table if not exists public.expediente (
+  id             smallint primary key default 1 check (id = 1),
+  inicio         time not null default '07:30',
+  fim            time not null default '17:00',
+  conta_sabado   boolean not null default false,
+  conta_domingo  boolean not null default false,
+  conta_feriado  boolean not null default false
+);
+insert into public.expediente (id) values (1) on conflict (id) do nothing;
+create table if not exists public.feriados (dia date primary key, nome text check (length(nome) <= 80));
+alter table public.expediente enable row level security;
+alter table public.feriados   enable row level security;
+drop policy if exists "painel le expediente" on public.expediente;
+create policy "painel le expediente" on public.expediente for select to anon, authenticated using (true);
+drop policy if exists "painel le feriados" on public.feriados;
+create policy "painel le feriados" on public.feriados for select to anon, authenticated using (true);
+revoke all on public.expediente, public.feriados from anon;
+grant select on public.expediente, public.feriados to anon, authenticated;
+
+-- Horas de expediente entre dois instantes (ex.: aberta 07:30, resolvida 12:00 do mesmo dia = 4,5 h).
+create or replace function public.horas_uteis(p_ini timestamptz, p_fim timestamptz) returns numeric
+language sql stable security definer set search_path = public as $$
+  select case when p_ini is null or p_fim is null then null when p_fim <= p_ini then 0 else
+    round(coalesce(sum(greatest(0, extract(epoch from
+        least(p_fim, (d::date + e.fim) at time zone 'America/Belem') - greatest(p_ini, (d::date + e.inicio) at time zone 'America/Belem')))), 0) / 3600.0, 2) end
+  from public.expediente e
+  cross join generate_series((p_ini at time zone 'America/Belem')::date, (p_fim at time zone 'America/Belem')::date, interval '1 day') d
+  where e.id = 1
+    and (extract(isodow from d) <= 5 or (extract(isodow from d) = 6 and e.conta_sabado) or (extract(isodow from d) = 7 and e.conta_domingo))
+    and (e.conta_feriado or not exists (select 1 from public.feriados f where f.dia = d::date));
+$$;
+grant execute on function public.horas_uteis(timestamptz, timestamptz) to anon, authenticated;
+
 -- ---------------------------------------------------------------- funcao chamada pelo n8n (1 chamada por mensagem)
 -- Entrada (jsonb): msg_id, ts, grupo_jid, autor_nome, autor_jid, tipo, texto, transcricao, midia_path,
 --   ia: { acao: nova|atualiza|resolve|ignorar, tag, categoria, problema, urgencia, ocorrencia_id, solucao, confianca }
@@ -158,9 +241,9 @@ begin
                            when v_urg = 'media' or urgencia = 'media' then 'media' else 'baixa' end
      where id = v_id;
   else
-    insert into ocorrencias (tag, categoria, problema, urgencia, relatado_por, primeira_msg_em, ultima_msg_em, confianca)
+    insert into ocorrencias (tag, categoria, problema, urgencia, relatado_por, reporter_phone, primeira_msg_em, ultima_msg_em, confianca)
     values (v_tag, v_cat, left(coalesce(nullif(ia->>'problema',''), left(p->>'texto',300), 'sem descricao'),300),
-            v_urg, left(p->>'autor_nome',80), v_ts, v_ts, v_conf)
+            v_urg, left(p->>'autor_nome',80), public.normaliza_fone(p->>'autor_jid'), v_ts, v_ts, v_conf)
     returning id into v_id;
   end if;
   update whatsapp_msgs set ocorrencia_id = v_id where msg_id = p->>'msg_id';
@@ -339,8 +422,18 @@ begin
                 when o.categoria = 'suporte' then 'media'
                 when o.categoria = 'celular_defeito' then
                   case when o.problema ~* '(n[aã]o liga|desligad|apagad|sumi|morto|sem sinal de vida)' then 'alta' else 'media' end
-                else 'baixa' end as prioridade
+                else 'baixa' end as prioridade,
+           r.nome      as reporter_nome,        -- nome dado no app; vazio = use relatado_por (nome do WhatsApp)
+           r.matricula as reporter_matricula,
+           -- horas de expediente do relato ate a baixa (aberta: ate agora)
+           public.horas_uteis(coalesce(o.primeira_msg_em, o.criado_em),
+                              case when o.status in ('resolvida','descartada') then coalesce(o.resolvido_em, o.atualizado_em)
+                                   when o.status = 'historico' then null else now() end) as horas_uteis,
+           round(extract(epoch from (case when o.status in ('resolvida','descartada') then coalesce(o.resolvido_em, o.atualizado_em)
+                                          when o.status = 'historico' then null else now() end)
+                                    - coalesce(o.primeira_msg_em, o.criado_em)) / 86400.0, 1) as dias_corridos
     from public.ocorrencias o
+    left join public.relatores r on r.phone = o.reporter_phone
     left join lateral (
       select s.* from public.v_last_sample s
       where o.tag is not null and public.normaliza_tag(s.device_name) = o.tag
