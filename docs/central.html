@@ -76,6 +76,24 @@ a.card .go{margin-top:6px;color:var(--brand-ink);font-size:13px;font-weight:600}
 footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
 .linkish{color:var(--brand-ink);cursor:pointer;background:none;border:0;font:inherit;padding:0}
 
+/* tiles clicáveis + drill-down */
+.tile.clk{cursor:pointer;transition:transform .08s,border-color .12s}
+.tile.clk:hover{transform:translateY(-2px);border-color:var(--brand)}
+.tile .drill{margin-top:8px;font-size:12px;font-weight:600;color:var(--brand-ink)}
+#drill{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:flex-end;justify-content:center;z-index:60}
+@media(min-width:620px){#drill{align-items:center;padding:16px}}
+#drill .dbox{background:var(--card);border:1px solid var(--line);border-radius:16px 16px 0 0;box-shadow:var(--shadow);width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
+@media(min-width:620px){#drill .dbox{border-radius:16px}}
+#drill .dhead{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+#drill .dhead h3{margin:0;font-size:16px}
+#drill .dhead button{margin-left:auto;background:var(--card2);border:1px solid var(--line);color:var(--ink);border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer}
+#drill .dsub{padding:8px 16px 0;color:var(--muted);font-size:12px}
+#drill .dbody{padding:10px 16px 18px;overflow:auto}
+#drill .drow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+#drill .drow:last-child{border-bottom:0}
+#drill .drow .rt{margin-left:auto;text-align:right;white-space:nowrap}
+#drill .drow .meta{color:var(--muted);font-size:12px}
+
 /* gate */
 #gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
 #gate .box{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:24px;max-width:320px;width:100%;text-align:center}
@@ -108,10 +126,10 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
 
   <h2 class="sec">Visão geral do dia</h2>
   <div class="tiles" id="tiles">
-    <div class="tile"><div class="n" id="tOcor">—</div><div class="l">Ocorrências abertas</div><div class="foot" id="tOcorFoot">&nbsp;</div></div>
-    <div class="tile"><div class="n" id="tVist">—</div><div class="l">Vistorias hoje</div><div class="foot" id="tVistFoot">&nbsp;</div></div>
-    <div class="tile"><div class="n" id="tNok">—</div><div class="l">Vistorias com NOK hoje</div><div class="foot">itens reprovados</div></div>
-    <div class="tile"><div class="n" id="tAtivos">—</div><div class="l">Aparelhos ativos hoje</div><div class="foot">enviaram dados</div></div>
+    <div class="tile clk" id="tileOcor" role="button" tabindex="0"><div class="n" id="tOcor">—</div><div class="l">Ocorrências abertas</div><div class="foot" id="tOcorFoot">&nbsp;</div><div class="drill">ver lista →</div></div>
+    <div class="tile clk" id="tileVist" role="button" tabindex="0"><div class="n" id="tVist">—</div><div class="l">Vistorias hoje</div><div class="foot" id="tVistFoot">&nbsp;</div><div class="drill">ver lista →</div></div>
+    <div class="tile clk" id="tileNok" role="button" tabindex="0"><div class="n" id="tNok">—</div><div class="l">Vistorias com NOK hoje</div><div class="foot">itens reprovados</div><div class="drill">ver lista →</div></div>
+    <div class="tile clk" id="tileAtivos" role="button" tabindex="0"><div class="n" id="tAtivos">—</div><div class="l">Aparelhos ativos hoje</div><div class="foot">enviaram dados</div><div class="drill">ver lista →</div></div>
   </div>
 
   <h2 class="sec">Precisam de atenção <span style="font-weight:400;text-transform:none;letter-spacing:0">— ocorrências abertas cruzadas pela TAG</span></h2>
@@ -168,6 +186,14 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
     <div>Central TFleet · dados do Supabase em tempo real · código de acesso 8015</div>
     <div style="margin-top:6px"><button class="linkish" id="themeBtn">alternar tema claro/escuro</button></div>
   </footer>
+
+  <div id="drill" class="hidden" role="dialog" aria-modal="true">
+    <div class="dbox">
+      <div class="dhead"><h3 id="drillTitle"></h3><button id="drillClose" aria-label="fechar">✕</button></div>
+      <div class="dsub" id="drillSub"></div>
+      <div class="dbody" id="drillBody"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -279,6 +305,46 @@ async function checkCards(){
   var sv=document.getElementById('soonVist');
   if(sv && await headOk('vistoria/index.html'))sv.remove();
 }
+
+/* ---------- drill-down dos tiles ---------- */
+function hhmm(iso){try{return new Date(iso).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}catch(e){return ''}}
+function carTag(t){return t?('<span class="car">'+esc(t)+'</span>'):'<span class="pill mut">sem TAG</span>'}
+const NOKMAP={item_app:'App BDV',item_chip:'Chip',item_cabo:'Cabo/carregador',item_leitor:'Leitor',item_suporte:'Suporte',item_celular:'Celular'};
+const DRILL={
+  tileOcor:{title:'Ocorrências abertas',sub:'Fonte: view v_ocorrencias_cruzadas · status aberta ou em andamento',
+    load:async()=>{let rows=await sbGet("v_ocorrencias_cruzadas?status=in.(aberta,em_andamento)&order=criado_em.desc&limit=300");
+      rows.sort((a,b)=>(URG[b.urgencia]||0)-(URG[a.urgencia]||0)||new Date(b.criado_em)-new Date(a.criado_em));
+      return rows.map(r=>{const u=(r.urgencia||'media').toLowerCase();
+        return '<div class="drow">'+carTag(r.tag)+'<div><div>'+esc(r.problema||r.categoria||'—')+'</div><div class="meta">'+esc((r.categoria||'').replace(/_/g,' '))+'</div></div><div class="rt"><span class="pill '+u+'">'+u+'</span><div class="meta">há '+since(r.criado_em)+'</div></div></div>';}).join('');}},
+  tileVist:{title:'Vistorias de hoje',sub:'Fonte: tabela vistorias · data = hoje',
+    load:async()=>{let rows=await sbGet("vistorias?data_vistoria=eq."+ymd+"&select=tag,status,resultado,ts&order=ts.desc&limit=300");
+      return rows.map(r=>{const res=(r.resultado||'').toUpperCase();const pill=res==='OK'?'<span class="pill ok">OK</span>':res==='NOK'?'<span class="pill nok">NOK</span>':'<span class="pill mut">—</span>';
+        return '<div class="drow">'+carTag(r.tag)+'<div class="meta">'+esc(r.status||'')+'</div><div class="rt">'+pill+'<div class="meta">'+hhmm(r.ts)+'</div></div></div>';}).join('');}},
+  tileNok:{title:'Vistorias com NOK hoje',sub:'Fonte: tabela vistorias · data = hoje · resultado = NOK',
+    load:async()=>{let rows=await sbGet("vistorias?data_vistoria=eq."+ymd+"&resultado=eq.NOK&select=tag,ts,item_app,item_chip,item_cabo,item_leitor,item_suporte,item_celular&order=ts.desc&limit=300");
+      return rows.map(r=>{const nok=Object.keys(NOKMAP).filter(k=>(r[k]||'')==='NOK').map(k=>'<span class="pill nok">'+NOKMAP[k]+'</span>').join(' ')||'<span class="pill mut">—</span>';
+        return '<div class="drow">'+carTag(r.tag)+'<div>'+nok+'</div><div class="rt meta">'+hhmm(r.ts)+'</div></div>';}).join('');}},
+  tileAtivos:{title:'Aparelhos ativos hoje',sub:'Fonte: view v_last_sample · último envio a partir de 00:00 de hoje',
+    load:async()=>{let rows=await sbGet("v_last_sample?ts=gte."+startISO+"&order=ts.desc&limit=400");
+      return rows.map(r=>{const name=r.device_name||r.device||r.tag||'—';
+        return '<div class="drow">'+carTag(r.tag||null)+'<div class="meta">'+esc(String(name))+'</div><div class="rt meta">'+hhmm(r.ts)+'</div></div>';}).join('');}}
+};
+const drillEl=document.getElementById('drill');
+function closeDrill(){drillEl.classList.add('hidden');document.getElementById('drillBody').innerHTML='';}
+async function openDrill(kind){const d=DRILL[kind];if(!d)return;
+  document.getElementById('drillTitle').textContent=d.title;
+  document.getElementById('drillSub').textContent=d.sub;
+  const body=document.getElementById('drillBody');body.innerHTML='<div class="loading">Carregando…</div>';
+  drillEl.classList.remove('hidden');
+  try{const html=await d.load();body.innerHTML=(html&&html.trim())?html:'<div class="empty">Nada para mostrar.</div>';}
+  catch(e){body.innerHTML='<div class="empty">Não consegui carregar agora. Tenta de novo em instantes.</div>';}
+}
+document.getElementById('drillClose').addEventListener('click',closeDrill);
+drillEl.addEventListener('click',e=>{if(e.target===drillEl)closeDrill();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrill();});
+['tileOcor','tileVist','tileNok','tileAtivos'].forEach(id=>{const el=document.getElementById(id);if(!el)return;
+  el.addEventListener('click',()=>openDrill(id));
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDrill(id);}});});
 
 function start(){loadTiles();loadOcor();checkCards();setInterval(()=>{loadTiles();loadOcor()},60000);}
 document.getElementById('reload').addEventListener('click',()=>{loadTiles();loadOcor()});
