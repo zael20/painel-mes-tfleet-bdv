@@ -26,7 +26,8 @@ DC="docker compose -f $DIR/docker-compose.yml --project-directory $DIR"
 pergunta() { # $1 texto  $2 valor atual  $3 secreto(1/0)
   local atual="$2" mostra="$2"
   [ "${3:-0}" = 1 ] && [ -n "$atual" ] && mostra="...${atual: -6}"
-  local r; read -r -p "$1${mostra:+ [$mostra]}: " r </dev/tty
+  local r s=""; [ "${3:-0}" = 1 ] && s="-s"   # segredo: nao aparece na tela ao colar
+  read -r $s -p "$1${mostra:+ [$mostra]}: " r </dev/tty; [ -n "$s" ] && echo >/dev/tty
   echo "${r:-$atual}" | tr -d '[:space:]'
 }
 json() { python3 -c "import sys,json; d=json.load(sys.stdin); $1"; }
