@@ -218,6 +218,93 @@ $$;
 revoke all on function public.contexto_ia(text, text) from public, anon, authenticated;
 grant execute on function public.contexto_ia(text, text) to service_role;
 
+-- ---------------------------------------------------------------- baixa automatica pela VISTORIA
+-- Ocorrencia (aberta, em andamento ou historico do retroativo) e dada como resolvida quando uma vistoria FEITA DEPOIS
+-- do relato, no mesmo onibus, deixou o item correspondente OK, ou NOK mas resolvido na hora:
+--   - vistoria nova (coluna pendentes preenchida): o item NOK nao ficou em pendentes;
+--   - vistoria antiga (planilha): tem acao que nao e lembrete (TROCAR/PEDIR/TEM QUE/PRECISA/VERIFICAR).
+-- som_musica/outro nao tem item no checklist: vale a vistoria OPERANTE sem nenhum NOK.
+-- Roda sozinha quando entra/muda uma vistoria e quando entra uma ocorrencia (o retroativo importa casos antigos).
+alter table public.ocorrencias add column if not exists vistoria_id uuid;   -- vistoria que deu a baixa (resolvido_por = 'vistoria')
+
+create or replace function public.vistoria_item_da_categoria(p_cat text) returns text
+language sql immutable as $$
+  select case p_cat when 'carregamento' then 'cabo' when 'abrir_viagem' then 'app' when 'contagem_passageiros' then 'leitor'
+                    when 'internet_chip' then 'chip' when 'celular_defeito' then 'celular' when 'suporte' then 'suporte' end;
+$$;
+
+create or replace function public.resolver_ocorrencias_por_vistoria(p_tag text default null, p_id bigint default null)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if to_regclass('public.vistorias') is null then return 0; end if;
+  with alvo as (
+    select o.id, v.id as vid, v.ts as vts,
+           left('Vistoria de ' || to_char(v.data_vistoria, 'DD/MM') || ': ' ||
+                case when x.item = 'OK' or x.item is null then coalesce(nullif(x.rotulo,'') || ' OK', 'carro OPERANTE')
+                     else x.rotulo || ' NOK, resolvido na hora' end ||
+                coalesce(' (' || nullif(trim(v.acao),'') || ')', ''), 1000) as txt
+    from ocorrencias o
+    cross join lateral (
+      select vv.* from vistorias vv
+      cross join lateral (select case public.vistoria_item_da_categoria(o.categoria)
+               when 'cabo' then vv.item_cabo when 'app' then vv.item_app when 'leitor' then vv.item_leitor
+               when 'chip' then vv.item_chip when 'celular' then vv.item_celular when 'suporte' then vv.item_suporte end as item,
+             case public.vistoria_item_da_categoria(o.categoria)
+               when 'cabo' then 'NOK CABO / CARREGADOR' when 'app' then 'NOK APLICATIVO BDV' when 'leitor' then 'NOK LEITOR'
+               when 'chip' then 'NOK CHIP' when 'celular' then 'NOK CELULAR' when 'suporte' then 'NOK SUPORTE' end as nok) i
+      where vv.tag = o.tag
+        and vv.ts >= coalesce(o.primeira_msg_em, o.criado_em)
+        and vv.status <> 'NAO_VERIFICADO'
+        -- reaberta no painel depois de uma baixa: so uma vistoria posterior a reabertura fecha de novo
+        and vv.ts > coalesce((select max(l.em) from ocorrencia_status_log l where l.ocorrencia_id = o.id
+                               and l.de = 'resolvida' and l.para in ('aberta','em_andamento')), '-infinity')
+        and case
+              when i.nok is null then vv.status = 'OPERANTE' and vv.resultado = 'OK'
+              when i.item = 'OK' then true
+              when i.item = 'NOK' and vv.pendentes is not null then not (i.nok = any(vv.pendentes))
+              when i.item = 'NOK' then exists (select 1 from regexp_split_to_table(coalesce(vv.acao,''), '\s*,\s*') a
+                                              where a <> '' and upper(a) !~ '^(TROCAR|PEDIR|TEM QUE|PRECISA|VERIFICAR)')
+              else false end
+      order by vv.ts limit 1) v
+    cross join lateral (select case public.vistoria_item_da_categoria(o.categoria)
+               when 'cabo' then v.item_cabo when 'app' then v.item_app when 'leitor' then v.item_leitor
+               when 'chip' then v.item_chip when 'celular' then v.item_celular when 'suporte' then v.item_suporte end as item,
+             case public.vistoria_item_da_categoria(o.categoria)
+               when 'cabo' then 'cabo/carregador' when 'app' then 'aplicativo' when 'leitor' then 'leitor'
+               when 'chip' then 'chip' when 'celular' then 'celular' when 'suporte' then 'suporte' end as rotulo) x
+    where o.status in ('aberta','em_andamento','historico') and o.tag is not null
+      and (p_tag is null or o.tag = public.normaliza_tag(p_tag))
+      and (p_id is null or o.id = p_id))
+  update ocorrencias o set status = 'resolvida', resolvido_por = 'vistoria', resolvido_em = a.vts,
+         vistoria_id = a.vid, solucao = coalesce(nullif(o.solucao,''), a.txt)
+    from alvo a where o.id = a.id;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.resolver_ocorrencias_por_vistoria(text, bigint) from public, anon, authenticated;
+grant execute on function public.resolver_ocorrencias_por_vistoria(text, bigint) to service_role;
+
+create or replace function public.ocorrencias_vistoria_gatilho() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_table_name = 'vistorias' then perform public.resolver_ocorrencias_por_vistoria(new.tag, null);
+  else perform public.resolver_ocorrencias_por_vistoria(null, new.id); end if;
+  return null;
+end $$;
+drop trigger if exists ocorrencias_baixa_vistoria on public.ocorrencias;
+create trigger ocorrencias_baixa_vistoria after insert on public.ocorrencias
+  for each row when (new.status in ('aberta','em_andamento','historico') and new.tag is not null)
+  execute function public.ocorrencias_vistoria_gatilho();
+do $$ begin
+  if to_regclass('public.vistorias') is not null then
+    execute 'drop trigger if exists vistoria_baixa_ocorrencias on public.vistorias';
+    execute 'create trigger vistoria_baixa_ocorrencias after insert or update on public.vistorias
+               for each row execute function public.ocorrencias_vistoria_gatilho()';
+  end if;
+end $$;
+select public.resolver_ocorrencias_por_vistoria() as ocorrencias_baixadas_pela_vistoria;   -- passada unica no que ja existe
+
 -- ---------------------------------------------------------------- cruzamento: RELATO x MONITOR x VISTORIA
 -- Para cada ocorrencia: ultimo sinal do monitor daquele onibus e ultima vistoria (com o item ligado a categoria).
 -- O monitor identifica o onibus por device_name (numero digitado no admin); comparamos pela tag padronizada.
@@ -243,11 +330,37 @@ begin
     select o.*,
            %s
            %s
+           ,
+           b.bt_amostras, b.bt_min_ligado_tomada, b.bt_min_desligado, b.bt_min_sem_leitor, b.bt_causa,
+           case when o.categoria in ('carregamento','internet_chip') then 'alta'
+                when o.categoria = 'contagem_passageiros' then
+                  case when b.bt_causa = 'bluetooth_desligado' then 'baixa'
+                       when o.problema ~* '(lent|devagar|demor)' then 'media' else 'alta' end
+                when o.categoria = 'suporte' then 'media'
+                when o.categoria = 'celular_defeito' then
+                  case when o.problema ~* '(n[aã]o liga|desligad|apagad|sumi|morto|sem sinal de vida)' then 'alta' else 'media' end
+                else 'baixa' end as prioridade
     from public.ocorrencias o
     left join lateral (
       select s.* from public.v_last_sample s
       where o.tag is not null and public.normaliza_tag(s.device_name) = o.tag
       order by s.ts desc limit 1) m on true
+    -- "nao registrou passageiro": como o celular do onibus estava nas 18h antes do relato (1 amostra por minuto).
+    -- Na tomada = onibus ligado/rodando. Bluetooth desligado nesse periodo = causa provavel.
+    left join lateral (
+      select count(*)::int as bt_amostras,
+             count(*) filter (where s.plugged)::int as bt_min_ligado_tomada,
+             count(*) filter (where s.plugged and s.bt_on is false)::int as bt_min_desligado,
+             count(*) filter (where s.plugged and s.bt_on and coalesce(s.bt_connected,'') = '')::int as bt_min_sem_leitor,
+             case when count(*) = 0 then 'sem_dados'
+                  when count(*) filter (where s.plugged and s.bt_on is false) >= 10 then 'bluetooth_desligado'
+                  when count(*) filter (where s.plugged and s.bt_on and coalesce(s.bt_connected,'') = '') >= 10 then 'leitor_desconectado'
+                  when count(*) filter (where s.plugged) = 0 then 'nao_rodou'
+                  else 'bluetooth_ok' end as bt_causa
+      from public.samples s
+      where o.categoria = 'contagem_passageiros' and m.device_id is not null and s.device_id = m.device_id
+        and s.ts between coalesce(o.primeira_msg_em, o.criado_em) - interval '18 hours' and coalesce(o.primeira_msg_em, o.criado_em)
+      having o.categoria = 'contagem_passageiros' and m.device_id is not null) b on true
     %s
   $v$,
   v_mon,

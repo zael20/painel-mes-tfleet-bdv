@@ -141,10 +141,58 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 @media (prefers-reduced-motion: no-preference) { .card, .btn, .chip { transition: border-color .15s, background .15s; } }
 
 /* abas */
-.tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin: 4px 0 14px; }
-.tab { border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 9px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin: 4px 0 14px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: 0 0 auto; white-space: nowrap; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 9px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 .tab:hover { color: var(--ink); }
+
+/* aba ocorrências (relatos do WhatsApp) */
+.oc-tiles { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.oc-tiles .tile { flex: 1; min-width: 130px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 14px; text-align: left; cursor: pointer; }
+.oc-tiles .tile:hover, .oc-tiles .tile.sel { border-color: var(--accent); }
+.oc-tiles .tile .n { font: 600 28px/1 "IBM Plex Sans Condensed", sans-serif; }
+.oc-tiles .tile.crit .n { color: var(--crit); } .oc-tiles .tile.warn .n { color: var(--warn); } .oc-tiles .tile.good .n { color: var(--good); }
+.oc-tiles .tile .lbl { display: block; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+.oc-chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; cursor: pointer; }
+.oc-chip[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.toolbar select, .toolbar .oc-in { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 6px 9px; font: inherit; font-size: 13px; }
+.oc-list { display: grid; gap: 10px; }
+.occard { border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 14px; cursor: pointer; }
+.occard:hover { border-color: var(--accent); }
+.occard.u-alta { border-left-color: var(--crit); } .occard.u-media { border-left-color: var(--warn); } .occard.u-baixa { border-left-color: var(--muted); }
+.occard.st-resolvida, .occard.st-descartada { opacity: .72; border-left-color: var(--good); }
+.occard .oh { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.occard .car { font-family: var(--f-display); font-weight: 700; font-size: 17px; }
+.occard .prob { font-size: 14.5px; margin: 6px 0 4px; }
+.occard .sub { font-size: 12px; color: var(--muted); }
+.oc-cross { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.oc-cross span { font-size: 11.5px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; background: var(--bg); }
+.oc-cross span.bad { border-color: var(--crit); color: var(--crit); background: var(--crit-soft); }
+.oc-cross span.ok { border-color: var(--good); color: var(--good); background: var(--good-soft); }
+.oc-cross span.mid { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+.ocdetail { margin-bottom: 16px; border: 1px solid var(--accent); border-radius: 10px; background: var(--panel); padding: 16px; }
+.ocdetail .dhead { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.ocform { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin: 12px 0; }
+.ocform label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.ocform input, .ocform select, .ocform textarea { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 8px 10px; font: inherit; font-size: 13.5px; }
+.ocform .wide { grid-column: 1 / -1; }
+.ocform textarea { min-height: 60px; resize: vertical; }
+.ocmsgs { list-style: none; margin: 8px 0 0; padding: 0; border-left: 2px solid var(--line); }
+.ocmsgs li { margin: 0 0 10px; padding-left: 12px; font-size: 13.5px; }
+.ocmsgs .when { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); }
+.ocmsgs .tr { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.ocmsgs audio { display: block; margin-top: 4px; max-width: 100%; height: 34px; }
+.ochist { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+.ochist th, .ochist td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ochist th { color: var(--muted); font-weight: 600; }
+.ochist tr.cur td { background: var(--accent-soft); }
+.oc-sec { margin-top: 16px; }
+.oc-err { margin-top: 18px; font-size: 13px; }
+.oc-err summary { cursor: pointer; color: var(--muted); }
+.oc-resumo { font-size: 13.5px; margin: -4px 0 12px; color: var(--muted); }
+.oc-resumo b { color: var(--ink); }
+.oc-cross span.why { font-weight: 600; }
 
 /* aba eventos */
 .evgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
@@ -246,7 +294,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Monitor Frota <span class="buildtag">painel v0.6.4</span></h1>
+      <h1>Monitor Frota <span class="buildtag">painel v0.6.5</span></h1>
       <div class="meta" id="meta">Carregando…</div>
     </div>
     <div class="actions">
@@ -261,6 +309,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
     <button class="tab" type="button" data-view="aparelhos" aria-pressed="false">Aparelhos</button>
     <button class="tab" type="button" data-view="eventos" aria-pressed="false">Eventos</button>
     <button class="tab" type="button" data-view="diag" aria-pressed="false">Diagnóstico</button>
+    <button class="tab" type="button" data-view="ocorr" aria-pressed="false">Ocorrências</button>
     <button class="tab" type="button" data-view="config" aria-pressed="false">Configurações</button>
   </nav>
 
@@ -328,6 +377,29 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
       <span class="meta" id="diagMeta"></span>
     </div>
     <div id="diagBody"><div class="empty">Abra a aba para analisar.</div></div>
+  </section>
+
+  <section id="viewOcorr" hidden>
+    <div class="oc-tiles" id="ocTiles"></div>
+    <div class="oc-resumo" id="ocResumo"></div>
+    <div class="toolbar">
+      <button class="oc-chip" type="button" data-st="abertas" aria-pressed="true">Abertas</button>
+      <button class="oc-chip" type="button" data-st="historico" aria-pressed="false">Sem desfecho</button>
+      <button class="oc-chip" type="button" data-st="resolvidas" aria-pressed="false">Resolvidas</button>
+      <button class="oc-chip" type="button" data-st="todas" aria-pressed="false">Todas</button>
+      <select id="ocCat"><option value="">Todos os problemas</option></select>
+      <select id="ocCar"><option value="">Todos os carros</option></select>
+      <select id="ocPeriod" title="Pela data do relato">
+        <option value="7">7 dias</option>
+        <option value="30">30 dias</option>
+        <option value="90" selected>90 dias</option>
+        <option value="0">Tudo</option>
+      </select>
+      <span class="meta" id="ocMeta"></span>
+    </div>
+    <section class="ocdetail" id="ocDetail" hidden></section>
+    <div class="oc-list" id="ocList"><div class="empty">Abra a aba para carregar.</div></div>
+    <div id="ocErr"></div>
   </section>
 
   <section id="viewConfig" hidden>
@@ -461,6 +533,7 @@ async function init() {
   }
   $("#demoBanner").hidden = mode !== "demo";
   await refresh();
+  if (location.hash === "#ocorrencias" && curView !== "ocorr") switchView("ocorr");
 }
 
 async function refresh() {
@@ -483,6 +556,7 @@ async function refresh() {
     $("#meta").textContent = `${fleet.length} celulares · atualizado às ${fmtHour(new Date())} (horário de Paragominas)`;
     render();
     if (curView === "aparelhos") renderAparelhos();
+    if (curView === "ocorr" && !ocOpen) loadOcorr(true);
     if (selected) openDetail(selected, $("#dDay")?.value);
   } catch (e) {
     $("#meta").textContent = "Erro ao ler os dados: " + (e.message || e) + ". Confira a conexão e se o usuário tem acesso.";
@@ -1015,7 +1089,49 @@ const demo = (() => {
       return analyze(s.device_id, s.device_name, samples, D);
     });
   }
-  return { fleet, alerts, day, diag };
+
+  // ocorrências de exemplo (aba Ocorrências), cruzadas com a frota de demonstração
+  function ocorr() {
+    const h = x => new Date(now - x * 3600e3).toISOString();
+    const b = i => buses[i][0].replace(/\D/g, "").replace(/^0+(?=\d)/, "").padStart(2, "0");
+    const f = (i, over) => Object.assign({ tag: b(i), mon_device_id: buses[i][1], mon_ultimo_sinal: new Date(now - 2 * m).toISOString(),
+      mon_bateria: 78, mon_na_tomada: true, mon_corrente_ma: 1350, mon_bt_conectado: "SGBT_2021_10729", mon_dados_moveis: true,
+      reincidencias: 0, origem: "whatsapp", confianca: 0.9, solucao: null, resolvido_em: null }, over);
+    return [
+      f(1, { id: 41, categoria: "carregamento", problema: "Celular não carrega mesmo ligado no cabo", urgencia: "alta", prioridade: "alta", status: "aberta", relatado_por: "Carlos (motorista)",
+        primeira_msg_em: h(20), criado_em: h(20), ultima_msg_em: h(2), reincidencias: 2, mon_corrente_ma: 120, mon_bateria: 31,
+        vist_data: dayKey(h(30)), vist_ts: h(30), vist_item: "NOK", vist_acao: "TROCAR CABO", vist_resolveu: false }),
+      f(3, { id: 42, categoria: "contagem_passageiros", problema: "Leitor não está contando passageiro", urgencia: "alta", prioridade: "alta", status: "em_andamento", relatado_por: "Joana", bt_causa: "leitor_desconectado", bt_min_sem_leitor: 210,
+        primeira_msg_em: h(5), criado_em: h(5), ultima_msg_em: h(4), mon_bt_conectado: null, vist_data: dayKey(h(200)), vist_ts: h(200), vist_item: "OK" }),
+      f(0, { id: 43, categoria: "abrir_viagem", problema: "App BDV travado, não abre viagem", urgencia: "media", prioridade: "baixa", status: "aberta", relatado_por: "Pedro",
+        primeira_msg_em: h(9), criado_em: h(9), ultima_msg_em: h(9) }),
+      f(2, { id: 39, categoria: "internet_chip", problema: "Sem internet no celular", urgencia: "media", prioridade: "alta", status: "resolvida", relatado_por: "Ana",
+        primeira_msg_em: h(52), criado_em: h(52), ultima_msg_em: h(30), resolvido_em: h(30), solucao: "Chip trocado na garagem",
+        vist_data: dayKey(h(31)), vist_ts: h(31), vist_item: "NOK", vist_acao: "CHIP TROCADO", vist_resolveu: true }),
+      { id: 44, tag: null, categoria: "celular_defeito", problema: "Tela do celular trincada", urgencia: "baixa", prioridade: "media", status: "aberta", relatado_por: "Marcos",
+        primeira_msg_em: h(1), criado_em: h(1), ultima_msg_em: h(1), reincidencias: 0, origem: "whatsapp", confianca: 0.5 },
+      // casos importados do histórico do grupo
+      f(4, { id: 12, categoria: "contagem_passageiros", problema: "Não registrou passageiro na viagem da manhã", urgencia: "alta", prioridade: "baixa",
+        status: "aberta", relatado_por: "Rui", primeira_msg_em: h(3), criado_em: h(3), ultima_msg_em: h(3),
+        bt_causa: "bluetooth_desligado", bt_amostras: 600, bt_min_ligado_tomada: 410, bt_min_desligado: 380 }),
+      f(1, { id: 7, categoria: "carregamento", problema: "Cabo do carregador com mau contato", urgencia: "alta", prioridade: "alta", status: "resolvida",
+        origem: "retroativo", relatado_por: "Carlos (motorista)", primeira_msg_em: h(24 * 50), criado_em: h(2), ultima_msg_em: h(24 * 50),
+        resolvido_por: "vistoria", resolvido_em: h(24 * 47), solucao: "Vistoria de " + fmtDay(dayKey(h(24 * 47))) + ": cabo/carregador NOK, resolvido na hora (CABO TROCADO)" }),
+      f(5, { id: 8, categoria: "suporte", problema: "Suporte do celular quebrado", urgencia: "media", prioridade: "media", status: "historico",
+        origem: "retroativo", relatado_por: "Lia", primeira_msg_em: h(24 * 40), criado_em: h(2), ultima_msg_em: h(24 * 40) }),
+      f(2, { id: 9, categoria: "abrir_viagem", problema: "Aplicativo travou", urgencia: "baixa", prioridade: "baixa", status: "historico",
+        origem: "retroativo", relatado_por: "Ana", primeira_msg_em: h(24 * 55), criado_em: h(2), ultima_msg_em: h(24 * 55) })
+    ];
+  }
+  function ocorrDet(o) {
+    const t = x => new Date(new Date(o.primeira_msg_em).getTime() + x * 60000).toISOString();
+    const msgs = [{ ts: t(0), autor_nome: o.relatado_por, tipo: "texto", texto: `${o.tag ? "Carro " + o.tag + ": " : ""}${o.problema.toLowerCase()}` }];
+    if (o.reincidencias) msgs.push({ ts: t(240), autor_nome: o.relatado_por, tipo: "audio", texto: "", transcricao: "Continua sem carregar, já troquei de tomada e nada." });
+    if (o.status === "resolvida") msgs.push({ ts: o.resolvido_em, autor_nome: "Técnico", tipo: "texto", texto: o.solucao, acao_ia: "resolve" });
+    const log = o.status === "aberta" ? [] : [{ em: o.resolvido_em || t(60), de: "aberta", para: o.status, por: "painel" }];
+    return { msgs, log };
+  }
+  return { fleet, alerts, day, diag, ocorr, ocorrDet };
 })();
 
 // ------------------------------------------------------------------ abas
@@ -1027,11 +1143,13 @@ function switchView(v) {
   $("#viewAparelhos").hidden = v !== "aparelhos";
   $("#viewEventos").hidden = v !== "eventos";
   $("#viewDiag").hidden = v !== "diag";
+  $("#viewOcorr").hidden = v !== "ocorr";
   $("#viewConfig").hidden = v !== "config";
   if (v === "aparelhos") loadAparelhos();
   if (v === "eventos") loadEventos();
   if (v === "diag") loadDiag();
   if (v === "config") renderConfig();
+  if (v === "ocorr") loadOcorr();
 }
 
 // ------------------------------------------------------------------ aba aparelhos (roster: versão + última comunicação)
@@ -1363,6 +1481,229 @@ function diagCard(r, D) {
     <div class="daystrip">${strip}</div>
     ${detail}</div>`;
 }
+
+// ------------------------------------------------------------------ aba ocorrências (relatos do grupo de WhatsApp, lidos pela IA)
+// Cada ocorrência vem cruzada (view v_ocorrencias_cruzadas) com o último sinal do Monitor e a última vistoria do carro.
+const OC_CAT = {
+  carregamento: "Carregamento", abrir_viagem: "Abrir viagem", contagem_passageiros: "Contagem de passageiros",
+  internet_chip: "Internet / chip", celular_defeito: "Celular com defeito", suporte: "Suporte", som_musica: "Som / música", outro: "Outro"
+};
+const OC_ST = { aberta: ["crit", "aberta"], em_andamento: ["warn", "em andamento"], resolvida: ["good", "resolvida"], descartada: ["muted", "descartada"],
+  historico: ["muted", "sem desfecho"] };
+const OC_URG = { alta: ["crit", "urgência alta"], media: ["warn", "urgência média"], baixa: ["muted", "urgência baixa"] };
+// prioridade calculada no banco (regras do Mizael): alta = carregador, sem internet, não lê passageiro;
+// média = leitor lento, suporte; baixa = app travado, leitura perdida com Bluetooth desligado
+const OC_PRI = { alta: ["crit", "prioridade alta"], media: ["warn", "prioridade média"], baixa: ["muted", "prioridade baixa"] };
+const OC_BT = {
+  bluetooth_desligado: ["bad why", o => `causa provável: Bluetooth desligado (${o.bt_min_desligado} min na tomada com BT desligado nas 18h antes)`],
+  leitor_desconectado: ["bad why", o => `causa provável: leitor desconectado (${o.bt_min_sem_leitor} min com BT ligado e sem leitor nas 18h antes)`],
+  nao_rodou: ["mid", () => "Monitor: celular não ficou na tomada nas 18h antes do relato"],
+  bluetooth_ok: ["ok", () => "Monitor: Bluetooth e leitor ok nas 18h antes"],
+  sem_dados: ["", () => "Monitor sem dados das 18h antes do relato"]
+};
+let ocData = [], ocSt = "abertas", ocCat = "", ocCar = "", ocTile = "", ocOpen = null, ocErros = [];
+const ocAberta = o => o.status === "aberta" || o.status === "em_andamento";
+const ocPri = o => o.prioridade || o.urgencia || "media";
+const ocPelaVistoria = o => o.status === "resolvida" && o.resolvido_por === "vistoria";
+const ocQuando = o => o.primeira_msg_em || o.criado_em;
+const ocCarro = o => o.tag ? "Carro " + o.tag : "Carro não identificado";
+function ocDur(a, b) {
+  const m = (new Date(b || Date.now()) - new Date(a)) / 60000;
+  if (m < 60) return Math.max(1, Math.round(m)) + " min";
+  if (m < 2880) return Math.round(m / 60) + " h";
+  return Math.round(m / 1440) + " dias";
+}
+// o que o Monitor e a Vistoria dizem sobre este carro, já filtrado para o tipo de problema
+function ocCross(o) {
+  const out = [];
+  if (o.categoria === "contagem_passageiros" && OC_BT[o.bt_causa]) out.push([OC_BT[o.bt_causa][0], OC_BT[o.bt_causa][1](o)]);
+  if (ocPelaVistoria(o)) out.push(["ok", o.solucao || "resolvida pela vistoria"]);
+  const fechada = o.status === "resolvida" || o.status === "descartada";
+  if (o.mon_ultimo_sinal && !fechada) {
+    const m = minsAgo(o.mon_ultimo_sinal);
+    out.push([m <= LATE_MIN ? "ok" : "bad", `Monitor: sinal ${ago(o.mon_ultimo_sinal)}`]);
+    if (o.categoria === "carregamento" && o.mon_na_tomada != null) {
+      const L = glimits();
+      out.push(!o.mon_na_tomada ? ["mid", `fora da tomada · ${o.mon_bateria ?? "?"}%`]
+        : (o.mon_corrente_ma != null && o.mon_corrente_ma < L.minCur) ? ["bad", `carga fraca ${o.mon_corrente_ma} mA`]
+        : ["ok", `carregando ${o.mon_corrente_ma ?? "?"} mA`]);
+    }
+    if (o.categoria === "contagem_passageiros" && ocAberta(o)) out.push(o.mon_bt_conectado ? ["ok", `leitor agora: ${o.mon_bt_conectado}`] : ["bad", "leitor RFID desconectado agora"]);
+    if (o.categoria === "internet_chip" && o.mon_dados_moveis != null) out.push(o.mon_dados_moveis ? ["ok", "dados móveis ligados"] : ["bad", "dados móveis desligados"]);
+    if (o.categoria === "celular_defeito" && o.mon_bateria != null) out.push(["", `bateria ${o.mon_bateria}%`]);
+  } else if (o.tag && !fechada) out.push(["mid", "Monitor: carro sem app"]);
+  if (ocPelaVistoria(o)) return out;
+  if (o.vist_data) {
+    const depois = o.vist_ts && new Date(o.vist_ts) > new Date(o.primeira_msg_em || o.criado_em);
+    const item = o.vist_item ? ` · item ${o.vist_item}` : "";
+    out.push([o.vist_item === "NOK" ? (o.vist_resolveu ? "mid" : "bad") : o.vist_item === "OK" ? "ok" : "",
+      `Vistoria ${fmtDay(o.vist_data)}${item}${depois ? " (depois do relato)" : ""}`]);
+    if (o.vist_acao) out.push([o.vist_resolveu ? "ok" : "mid", `ação: ${String(o.vist_acao).slice(0, 60)}`]);
+  } else if (o.tag) out.push(["", "sem vistoria registrada"]);
+  return out;
+}
+async function loadOcorr(silent) {
+  const days = parseInt($("#ocPeriod").value, 10);
+  if (!silent) $("#ocMeta").textContent = "carregando…";
+  try {
+    if (mode === "live") {
+      // abertas sempre; o resto pelo período da data do relato (o histórico importado tem datas antigas). Lê em páginas de 1000.
+      const since = days ? new Date(Date.now() - days * 864e5).toISOString() : null;
+      ocData = [];
+      for (let p = 0; p < 10; p++) {
+        let q = sb.from("v_ocorrencias_cruzadas").select("*");
+        if (since) q = q.or(`status.in.(aberta,em_andamento),primeira_msg_em.gte.${since}`);
+        const { data, error } = await q.order("id", { ascending: false }).range(p * 1000, p * 1000 + 999);
+        if (error) throw error;
+        ocData.push(...data);
+        if (data.length < 1000) break;
+      }
+      const e7 = new Date(Date.now() - 7 * 864e5).toISOString();
+      const er = await sb.from("whatsapp_msgs").select("ts,autor_nome,tipo,texto,ia").eq("acao_ia", "erro").gte("ts", e7).order("ts", { ascending: false }).limit(50);
+      ocErros = er.error ? [] : er.data;
+    } else {
+      ocData = demo.ocorr(); ocErros = [];
+    }
+    $("#ocMeta").textContent = `atualizado às ${fmtHour(new Date())}`;
+    renderOcorr();
+  } catch (e) {
+    const falta = /v_ocorrencias_cruzadas|does not exist|PGRST205|42P01/.test(e.message || e.code || "");
+    $("#ocList").innerHTML = `<div class="empty">${falta ? "As tabelas de ocorrências ainda não existem no Supabase. Rode o arquivo <b>ocorrencias.sql</b> no SQL Editor."
+      : "Erro ao ler as ocorrências: " + esc(e.message || e)}</div>`;
+    $("#ocMeta").textContent = "";
+  }
+}
+function ocFiltered() {
+  return ocData.filter(o =>
+    (ocSt === "todas" || (ocSt === "abertas" ? ocAberta(o) : ocSt === "historico" ? o.status === "historico" : o.status === "resolvida" || o.status === "descartada")) &&
+    (!ocCat || o.categoria === ocCat) && (!ocCar || (o.tag || "?") === ocCar) &&
+    (!ocTile || (ocTile === "alta" ? ocAberta(o) && ocPri(o) === "alta" : ocTile === "reinc" ? ocAberta(o) && o.reincidencias > 0
+      : ocTile === "semcarro" ? !o.tag : ocTile === "andamento" ? o.status === "em_andamento"
+      : ocTile === "vistoria" ? ocPelaVistoria(o) : ocTile === "bt" ? o.bt_causa === "bluetooth_desligado" : true)));
+}
+function renderOcorr() {
+  const ab = ocData.filter(ocAberta);
+  const days = parseInt($("#ocPeriod").value, 10);
+  const doPeriodo = ocData.filter(o => !ocAberta(o) || !days || new Date(ocQuando(o)) >= Date.now() - days * 864e5);
+  const resolv = doPeriodo.filter(o => o.status === "resolvida");
+  const pelaVist = resolv.filter(ocPelaVistoria).length;
+  const semDesf = doPeriodo.filter(o => o.status === "historico").length;
+  const comTempo = resolv.filter(o => o.resolvido_em && !ocPelaVistoria(o));
+  const media = comTempo.length ? comTempo.reduce((t, o) => t + (new Date(o.resolvido_em) - new Date(ocQuando(o))), 0) / comTempo.length : 0;
+  const desde = doPeriodo.reduce((d, o) => Math.min(d, new Date(ocQuando(o)).getTime()), Date.now());
+  const tile = (k, cls, n, lbl) => `<button class="tile ${cls} ${ocTile === k ? "sel" : ""}" type="button" data-tile="${k}"><span class="n">${n}</span><span class="lbl">${lbl}</span></button>`;
+  $("#ocTiles").innerHTML = tile("", "crit", ab.length, "abertas agora")
+    + tile("alta", "crit", ab.filter(o => ocPri(o) === "alta").length, "abertas com prioridade alta")
+    + tile("andamento", "warn", ab.filter(o => o.status === "em_andamento").length, "em andamento")
+    + tile("reinc", "warn", ab.filter(o => o.reincidencias > 0).length, "relatadas mais de uma vez")
+    + tile("bt", "", ocData.filter(o => o.bt_causa === "bluetooth_desligado").length, "leitura perdida com Bluetooth desligado")
+    + tile("vistoria", "good", pelaVist, "resolvidas pela vistoria")
+    + `<div class="tile good" style="cursor:default"><span class="n">${resolv.length}</span><span class="lbl">resolvidas no período${media ? ` · média ${ocDur(0, media)} pelo grupo/painel` : ""}</span></div>`;
+  $("#ocResumo").innerHTML = doPeriodo.length ? `<b>${doPeriodo.length}</b> ocorrências relatadas desde ${fmtDay(dayKey(new Date(desde).toISOString()))}: `
+    + `<b>${resolv.length}</b> solucionadas (${pelaVist} pela vistoria), <b>${ab.length}</b> abertas e <b>${semDesf}</b> sem desfecho (do histórico do grupo, falta conferir).` : "";
+  const cats = [...new Set(ocData.map(o => o.categoria))].sort((a, b) => (OC_CAT[a] || a).localeCompare(OC_CAT[b] || b));
+  const cars = [...new Set(ocData.map(o => o.tag || "?"))].sort((a, b) => (parseInt(a, 10) || 1e9) - (parseInt(b, 10) || 1e9));
+  $("#ocCat").innerHTML = `<option value="">Todos os problemas</option>` + cats.map(c => `<option value="${esc(c)}" ${ocCat === c ? "selected" : ""}>${esc(OC_CAT[c] || c)}</option>`).join("");
+  $("#ocCar").innerHTML = `<option value="">Todos os carros</option>` + cars.map(c => `<option value="${esc(c)}" ${ocCar === c ? "selected" : ""}>${c === "?" ? "Não identificado" : "Carro " + esc(c)}</option>`).join("");
+  const priOrd = { alta: 0, media: 1, baixa: 2 }, stOrd = o => ocAberta(o) ? 0 : o.status === "historico" ? 1 : 2;
+  const list = ocFiltered().sort((a, b) => (stOrd(a) - stOrd(b)) || (priOrd[ocPri(a)] - priOrd[ocPri(b)]) || (new Date(b.ultima_msg_em || b.criado_em) - new Date(a.ultima_msg_em || a.criado_em)));
+  const MAX = 300;
+  $("#ocList").innerHTML = list.length ? list.slice(0, MAX).map(o => {
+    const st = OC_ST[o.status] || ["muted", o.status], pr = OC_PRI[ocPri(o)] || ["muted", ocPri(o)];
+    const quando = ocAberta(o) ? `aberta há ${ocDur(ocQuando(o))}`
+      : ocPelaVistoria(o) ? `resolvida pela vistoria de ${fmtDay(dayKey(o.resolvido_em))}`
+      : o.status === "resolvida" && o.resolvido_em ? `resolvida em ${ocDur(ocQuando(o), o.resolvido_em)}` : st[1];
+    return `<article class="occard u-${esc(ocPri(o))} st-${esc(o.status)}" data-id="${o.id}">
+      <div class="oh"><span class="car">${esc(ocCarro(o))}</span><span class="pill ${st[0]}">${st[1]}</span>
+        ${ocAberta(o) || o.status === "historico" ? `<span class="pill ${pr[0]}">${pr[1]}</span>` : ""}<span class="label">${esc(OC_CAT[o.categoria] || o.categoria)}</span>
+        ${o.reincidencias > 0 ? `<span class="pill warn">relatado ${o.reincidencias + 1}×</span>` : ""}
+        ${o.origem === "retroativo" ? `<span class="label">histórico do grupo</span>` : ""}</div>
+      <div class="prob">${esc(o.problema)}</div>
+      <div class="sub">#${o.id} · ${esc(o.relatado_por || "?")} · ${fmtTime(ocQuando(o))} · ${quando}</div>
+      <div class="oc-cross">${ocCross(o).map(([c, t]) => `<span class="${c}">${esc(t)}</span>`).join("")}</div>
+    </article>`;
+  }).join("") + (list.length > MAX ? `<div class="empty">Mostrando ${MAX} de ${list.length}. Use os filtros de carro ou problema para ver o resto.</div>` : "")
+    : `<div class="empty">${ocData.length ? "Nenhuma ocorrência com esses filtros." : "Nenhuma ocorrência ainda. Elas aparecem aqui quando alguém relatar um problema no grupo do WhatsApp."}</div>`;
+  $("#ocErr").innerHTML = ocErros.length ? `<details class="oc-err"><summary>${ocErros.length} mensagem(ns) dos últimos 7 dias que a IA não conseguiu ler (cota ou erro). Elas ficaram guardadas.</summary>
+    <table class="ochist"><thead><tr><th>Quando</th><th>Quem</th><th>Mensagem</th><th>Motivo</th></tr></thead><tbody>
+    ${ocErros.map(m => `<tr><td class="mono">${fmtTime(m.ts)}</td><td>${esc(m.autor_nome || "?")}</td><td>${esc(m.texto || "(" + m.tipo + ")")}</td><td>${esc((m.ia && m.ia.erro) || "")}</td></tr>`).join("")}
+    </tbody></table></details>` : "";
+}
+async function openOcorr(id) {
+  const o = ocData.find(x => String(x.id) === String(id));
+  if (!o) return;
+  ocOpen = o.id;
+  const box = $("#ocDetail");
+  box.hidden = false;
+  box.innerHTML = `<div class="empty">Carregando…</div>`;
+  box.scrollIntoView({ behavior: "smooth", block: "start" });
+  let msgs = [], log = [], hist = [];
+  if (mode === "live") {
+    const [m, l, h] = await Promise.all([
+      sb.from("whatsapp_msgs").select("ts,autor_nome,tipo,texto,transcricao,midia_path,midia_tipo,acao_ia").eq("ocorrencia_id", o.id).order("ts"),
+      sb.from("ocorrencia_status_log").select("em,de,para,por").eq("ocorrencia_id", o.id).order("em"),
+      o.tag ? sb.from("ocorrencias").select("id,criado_em,primeira_msg_em,categoria,problema,status,resolvido_em,resolvido_por,solucao").eq("tag", o.tag).order("primeira_msg_em", { ascending: false, nullsFirst: false }).limit(50) : Promise.resolve({ data: [] })
+    ]);
+    msgs = m.data || []; log = l.data || []; hist = h.data || [];
+  } else {
+    const d = demo.ocorrDet(o); msgs = d.msgs; log = d.log; hist = ocData.filter(x => x.tag && x.tag === o.tag);
+  }
+  const dis = mode !== "live" ? "disabled" : "";
+  const opt = (obj, cur) => Object.keys(obj).map(k => `<option value="${k}" ${k === cur ? "selected" : ""}>${esc(Array.isArray(obj[k]) ? obj[k][1] : obj[k])}</option>`).join("");
+  const midia = m => !m.midia_path ? "" : String(m.midia_tipo || "").startsWith("audio") ? `<audio controls preload="none" src="${esc(m.midia_path)}"></audio>`
+    : `<a href="${esc(m.midia_path)}" target="_blank" rel="noopener">abrir ${m.tipo === "video" ? "vídeo" : m.tipo}</a>`;
+  box.innerHTML = `<div class="dhead"><div><span class="label">Ocorrência #${o.id} · ${esc(OC_CAT[o.categoria] || o.categoria)}</span><h2>${esc(ocCarro(o))}: ${esc(o.problema)}</h2></div>
+      <button class="btn" type="button" id="ocClose">Fechar</button></div>
+    <div class="oc-cross">${ocCross(o).map(([c, t]) => `<span class="${c}">${esc(t)}</span>`).join("")}</div>
+    <div class="ocform">
+      <label>Status<select id="ocfSt" ${dis}>${opt(OC_ST, o.status)}</select></label>
+      <label>Carro (nº)<input id="ocfTag" value="${esc(o.tag || "")}" inputmode="numeric" maxlength="6" ${dis}></label>
+      <label>Problema<select id="ocfCat" ${dis}>${opt(OC_CAT, o.categoria)}</select></label>
+      <label>Urgência<select id="ocfUrg" ${dis}>${opt(OC_URG, o.urgencia)}</select></label>
+      <label class="wide">O que foi feito / solução<textarea id="ocfSol" maxlength="1000" placeholder="ex.: trocado o cabo do carregador" ${dis}>${esc(o.solucao || "")}</textarea></label>
+      <div class="wide"><button class="btn primary" type="button" id="ocfSave" ${dis}>Salvar</button> <span class="calib-note" id="ocfMsg">${mode === "live" ? "" : "Disponível ao conectar o Supabase."}</span></div>
+    </div>
+    <div class="oc-sec"><span class="label">Mensagens do grupo (${msgs.length})</span>
+      <ul class="ocmsgs">${msgs.map(m => `<li><span class="when">${fmtTime(m.ts)}</span> <b>${esc(m.autor_nome || "?")}</b>${m.acao_ia === "resolve" ? ' <span class="pill good">avisou resolução</span>' : ""}<br>
+        ${esc(m.texto || "")}${m.transcricao ? `<span class="tr">${m.tipo === "texto" ? "" : "🎙 "}${esc(m.transcricao)}</span>` : ""}${midia(m)}</li>`).join("") || "<li>Sem mensagens.</li>"}</ul></div>
+    ${log.length ? `<div class="oc-sec"><span class="label">Mudanças de status</span><ul class="ocmsgs">${log.map(l => `<li><span class="when">${fmtTime(l.em)}</span> ${esc((OC_ST[l.de] || [, l.de])[1])} → <b>${esc((OC_ST[l.para] || [, l.para])[1])}</b> · ${esc(l.por || "")}</li>`).join("")}</ul></div>` : ""}
+    ${o.tag ? `<div class="oc-sec"><span class="label">Histórico do carro ${esc(o.tag)} (${hist.length})</span>
+      <table class="ochist"><thead><tr><th>Quando</th><th>Problema</th><th>Status</th><th>Solução</th></tr></thead><tbody>
+      ${hist.map(h => `<tr class="${String(h.id) === String(o.id) ? "cur" : ""}"><td class="mono">${fmtTime(h.primeira_msg_em || h.criado_em)}</td><td>${esc(OC_CAT[h.categoria] || h.categoria)}: ${esc(h.problema)}</td>
+        <td><span class="pill ${(OC_ST[h.status] || ["muted"])[0]}">${esc((OC_ST[h.status] || [, h.status])[1])}</span></td><td>${esc(h.solucao || "")}</td></tr>`).join("")}</tbody></table></div>` : ""}`;
+}
+async function saveOcorr() {
+  const o = ocData.find(x => x.id === ocOpen);
+  if (!o) return;
+  const tag = $("#ocfTag").value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  const upd = { status: $("#ocfSt").value, categoria: $("#ocfCat").value, urgencia: $("#ocfUrg").value,
+    tag: tag ? tag.padStart(2, "0") : null, solucao: $("#ocfSol").value.trim() || null, resolvido_por: "painel" };
+  $("#ocfMsg").textContent = "Salvando…";
+  const { error } = await sb.from("ocorrencias").update(upd).eq("id", o.id);
+  if (error) {
+    $("#ocfMsg").textContent = /ocorrencias_uma_aberta|duplicate/.test(error.message) ? "Já existe outra ocorrência aberta desse carro com esse problema. Resolva ou descarte uma delas." : "Erro: " + error.message;
+    return;
+  }
+  $("#ocfMsg").textContent = "Salvo.";
+  await loadOcorr(true);
+  openOcorr(o.id);
+}
+$("#ocList").addEventListener("click", e => { const c = e.target.closest(".occard"); if (c) openOcorr(c.dataset.id); });
+$("#ocTiles").addEventListener("click", e => { const t = e.target.closest("[data-tile]"); if (!t) return; ocTile = ocTile === t.dataset.tile ? "" : t.dataset.tile;
+  if (ocTile) { ocSt = ["semcarro", "vistoria", "bt"].includes(ocTile) ? "todas" : "abertas"; document.querySelectorAll(".oc-chip").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.st === ocSt))); }
+  renderOcorr(); });
+$("#ocDetail").addEventListener("click", e => {
+  if (e.target.id === "ocClose") { ocOpen = null; $("#ocDetail").hidden = true; }
+  if (e.target.id === "ocfSave") saveOcorr();
+});
+document.querySelectorAll(".oc-chip").forEach(b => b.addEventListener("click", () => {
+  ocSt = b.dataset.st; ocTile = "";
+  document.querySelectorAll(".oc-chip").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  renderOcorr();
+}));
+$("#ocCat").addEventListener("change", e => { ocCat = e.target.value; renderOcorr(); });
+$("#ocCar").addEventListener("change", e => { ocCar = e.target.value; renderOcorr(); });
+$("#ocPeriod").addEventListener("change", () => loadOcorr());
 
 // ------------------------------------------------------------------ aba configurações (limites globais)
 function renderConfig() {
