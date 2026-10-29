@@ -1662,6 +1662,10 @@ $("installBtn").addEventListener("click", function () {
 });
 
 form = blankForm(); buildItems(); paintForm(); refreshAll().then(function () { paintForm(); }); syncNow();
+// link direto para uma aba: .../vistoria/#ocorrencias, #carros, #dashboard, #enviadas (usado pela Central)
+var HASH_VIEW = { "#ocorrencias": "oc", "#carros": "carros", "#dashboard": "dash", "#enviadas": "enviadas", "#vistoria": "nova" };
+function fromHash() { var v = HASH_VIEW[location.hash]; if (v && v !== view) switchView(v); }
+window.addEventListener("hashchange", fromHash); fromHash();
 </script>
 
 </body>
