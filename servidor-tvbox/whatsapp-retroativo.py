@@ -38,8 +38,10 @@ def erro(m): print(f"\033[31m[ERRO]\033[0m {m}", flush=True); sys.exit(1)
 
 
 # ---------------------------------------------------------------- leitura do .txt exportado (Android e iPhone)
-RE_ANDROID = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{2,4}),? (\d{1,2}):(\d{2})(?::(\d{2}))? [-–] (.*)$")
-RE_IPHONE = re.compile(r"^\[(\d{1,2})/(\d{1,2})/(\d{2,4}),? (\d{1,2}):(\d{2})(?::(\d{2}))?\] (.*)$")
+# Formatos aceitos (Android e iPhone, varios idiomas): "29/10/2026 14:32 - Nome: msg", "[29/10/26, 14:32:05] Nome: msg",
+# "10/29/26, 2:32 PM - Nome: msg", "2026-10-29 14:32 - Nome: msg", "29.10.26, 14:32 - ..."
+RE_LINHA = re.compile(r"^\[?(\d{1,4})[/.\-](\d{1,2})[/.\-](\d{2,4}),?\s+(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?"
+                      r"\s*([AaPp]\.?\s?[Mm]\.?)?\]?\s*(?:[-–]\s+)?(.*)$")
 # arquivo anexado: Android "PTT-2026...-WA0001.opus (arquivo anexado)"; iPhone "<anexado: 00000012-AUDIO-....opus>"
 ANEXO = re.compile(r"^(?:<(?:anexado|attached):\s*(?P<a>[^>]+)>|(?P<b>\S+\.\w{2,5}) \((?:arquivo anexado|file attached)\))\s*(?P<leg>.*)$",
                    re.S | re.I)
@@ -51,15 +53,24 @@ def ler_conversa(caminho, pasta_midia=None):
     msgs = []
     for linha in open(caminho, encoding="utf-8-sig", errors="replace"):
         linha = linha.replace("‎", "").replace(" ", " ").rstrip("\r\n")
-        m = RE_IPHONE.match(linha) or RE_ANDROID.match(linha)
+        m = RE_LINHA.match(linha)
         if not m:
             if msgs and linha.strip():
                 msgs[-1]["texto"] = (msgs[-1]["texto"] + "\n" + linha.strip()).strip()[:4000]  # continuacao da mensagem
             continue
-        d, mes, ano, hh, mi, ss, resto = m.groups()
-        ano = int(ano) + (2000 if len(ano) == 2 else 0)
+        a, b, c, hh, mi, ss, ampm, resto = m.groups()
+        if len(a) == 4:
+            ano, mes, d = int(a), int(b), int(c)          # 2026-10-29
+        else:
+            d, mes, ano = int(a), int(b), int(c)          # 29/10/2026
+            if mes > 12 and d <= 12:
+                d, mes = mes, d                           # 10/29/2026 (formato americano)
+        ano += 2000 if ano < 100 else 0
+        hh = int(hh)
+        if ampm:
+            hh = hh % 12 + (12 if ampm.lower().startswith("p") else 0)
         try:
-            local = datetime(ano, int(mes), int(d), int(hh), int(mi), int(ss or 0), tzinfo=BELEM)
+            local = datetime(ano, mes, d, hh, int(mi), int(ss or 0), tzinfo=BELEM)
         except ValueError:
             continue
         if ": " not in resto:
