@@ -57,7 +57,7 @@
       return out;
     }, function (ex) {
       if (!opts.silencioso) saida("ERRO: " + (ex.message || ex) + "\n" + (ex.problem === "access-denied"
-        ? "Ative o acesso administrativo (botão 'Acesso limitado' no topo)." : ""));
+        ? "Clique em 'Limited access' no canto superior direito e ative o acesso administrativo." : ""));
       throw ex;
     });
   }
@@ -193,6 +193,11 @@
   function montarBlocos(wf) {
     var corpo = limpar($("cf-corpo"));
     var leitores = fluxoAberto.leitores;
+    var nome = el("input", { type: "text", valor: wf.name || "" });
+    corpo.appendChild(el("div", { classe: "cf-bloco" }, [el("h3", { texto: "Nome do fluxo" }),
+      el("p", { classe: "dica", texto: "Como ele aparece na lista. Use um nome que diga o que ele faz (ex.: Lotação — Coleta)." }),
+      el("div", { classe: "cf-campos" }, [el("label", { texto: "Nome" }), nome])]));
+    leitores.push(function () { if (nome.value.trim()) wf.name = nome.value.trim(); });
     (wf.nodes || []).forEach(function (no) {
       var p = no.parameters || {};
       if (no.type === "n8n-nodes-base.scheduleTrigger") {
