@@ -112,13 +112,17 @@ def abrir_exportacao(arquivo):
     if not arquivo.lower().endswith(".zip"):
         return arquivo, None
     destino = os.path.join(DIR, "importar", "historico")
+    marca = os.path.join(destino, ".extraido")
     with zipfile.ZipFile(arquivo) as z:
         nomes = [n for n in z.namelist() if not n.endswith("/")]
         txts = [n for n in nomes if n.lower().endswith(".txt")]
         if not txts:
             erro("O .zip nao tem a conversa (.txt). Exporte de novo pelo WhatsApp.")
-        info(f"Extraindo {len(nomes)} arquivos do .zip...")
-        z.extractall(destino)
+        # so extrai de novo se o .zip mudou (um .zip de centenas de MB demora no cartao)
+        if not (os.path.exists(marca) and open(marca).read() == f"{os.path.getsize(arquivo)}:{os.path.getmtime(arquivo)}"):
+            info(f"Extraindo {len(nomes)} arquivos do .zip (pode levar alguns minutos)...")
+            z.extractall(destino)
+            open(marca, "w").write(f"{os.path.getsize(arquivo)}:{os.path.getmtime(arquivo)}")
     principal = max(txts, key=lambda n: z.getinfo(n).file_size)
     return os.path.join(destino, principal), os.path.dirname(os.path.join(destino, principal))
 
