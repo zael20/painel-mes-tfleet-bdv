@@ -273,6 +273,8 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 .aptable .old { color: var(--warn); font-weight: 600; }
 .aptable .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 .buildtag { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; vertical-align: middle; margin-left: 6px; }
+.aptype { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+.aptype-note { margin-top: 10px; font-size: 12px; color: var(--muted); }
 
 /* visualizador de rota (mapa) */
 .routeov { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: flex; flex-direction: column; }
@@ -487,6 +489,9 @@ function musicIsReaderOnly(msg) {
 }
 function isNoiseEvent(e) {
   if (NOISE_TYPES.has(e.type)) return true;
+  // Tablet ligado direto na alimentação do carro fica sempre cheio e "não carrega":
+  // os eventos de carregador são falso positivo, então escondemos.
+  if ((e.type === "carregador_fraco" || e.type === "nao_carrega") && isTablet(e.device_id)) return true;
   if (e.type === "musica_tocando" && musicIsReaderOnly(e.message)) return true;  // só o leitor = falso positivo
   // resumo_dados: mostra só o novo fechamento diário ("Consumo do dia ...");
   // esconde os resumos horários antigos (do app < 0.5.2) que não traziam os números.
@@ -547,9 +552,10 @@ async function refresh() {
       ]);
       if (f.error) throw f.error;
       if (a.error) throw a.error;
-      fleet = f.data; alerts = a.data.filter(e => !isNoiseEvent(e));
+      fleet = f.data;
       deviceConfig = {};
       if (!cfg.error) for (const r of cfg.data) deviceConfig[r.device_id] = r.config || {};
+      alerts = a.data.filter(e => !isNoiseEvent(e));   // precisa do deviceConfig já carregado (tablets)
     } else {
       fleet = demo.fleet(); alerts = demo.alerts();
     }
@@ -788,6 +794,7 @@ function glimits() {
 }
 function chargeWeak(s, L) {
   L = L || glimits();
+  if (isTablet(s.device_id)) return false;   // tablet na alimentação direta não "carrega"
   if (!s.plugged || s.battery_pct >= 95) return false;
   return (s.current_ma != null && s.current_ma < L.minCur)
     || (L.minPower > 0 && s.power_mw != null && s.power_mw < L.minPower)
@@ -810,7 +817,7 @@ function assess(s) {
 function render() {
   const rows = fleet.map(s => ({ s, a: assess(s) }));
   const n = k => rows.filter(k).length;
-  const weak24 = new Set(alerts.filter(e => e.type === "carregador_fraco" || e.type === "nao_carrega").map(e => e.device_id)).size;
+  const weak24 = new Set(alerts.filter(e => (e.type === "carregador_fraco" || e.type === "nao_carrega") && !isTablet(e.device_id)).map(e => e.device_id)).size;
   $("#summary").innerHTML = [
     ["Online", n(r => r.a.signal === "online"), "good"],
     ["Sem sinal (> 1 h)", n(r => r.a.signal === "semsinal"), n(r => r.a.signal === "semsinal") ? "crit" : ""],
@@ -914,6 +921,8 @@ async function openDetail(id, day) {
 // calibração e limites por celular (gravados em device_config; a central define, o celular lê)
 let deviceConfig = {};
 function cfgOf(id) { return Object.assign({}, deviceConfig["*"] || {}, deviceConfig[id] || {}); }
+// Aparelho marcado como tablet (ligado direto na alimentação do carro): não avaliamos carga.
+function isTablet(id) { return (cfgOf(id).device_type || "celular") === "tablet"; }
 
 function calibBox(s) {
   const c = cfgOf(s.device_id);
@@ -1180,16 +1189,36 @@ function renderAparelhos() {
     const old = latestName && ver !== "–" && ver !== latestName;
     return { s, sig, ver, old, m };
   }).sort((a, b) => ({ crit: 0, warn: 1, good: 2 }[a.sig[0]] - { crit: 0, warn: 1, good: 2 }[b.sig[0]]) || String(a.s.device_name).localeCompare(b.s.device_name));
-  const body = rows.map(({ s, sig, ver, old }) => `<tr>
+  const dis = mode !== "live" ? "disabled" : "";
+  const body = rows.map(({ s, sig, ver, old }) => {
+    const tipo = (cfgOf(s.device_id).device_type || "celular");
+    return `<tr>
       <td>${esc(s.device_name || s.device_id)}</td>
+      <td><select class="aptype" data-id="${esc(s.device_id)}" ${dis}>
+        <option value="celular" ${tipo === "tablet" ? "" : "selected"}>Celular</option>
+        <option value="tablet" ${tipo === "tablet" ? "selected" : ""}>Tablet</option>
+      </select></td>
       <td class="ver ${old ? "old" : ""}">${esc(ver)}${old ? " · desatualizado" : ""}</td>
       <td class="mono">${fmtTime(s.ts)}</td>
       <td class="mono">${ago(s.ts)}</td>
       <td><span class="pill ${sig[0]}">${sig[1]}</span></td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
   el.innerHTML = `<table class="aptable">
-      <thead><tr><th>Carro</th><th>Versão do app</th><th>Última comunicação</th><th>Há</th><th>Sinal</th></tr></thead>
-      <tbody>${body}</tbody></table>`;
+      <thead><tr><th>Carro</th><th>Tipo</th><th>Versão do app</th><th>Última comunicação</th><th>Há</th><th>Sinal</th></tr></thead>
+      <tbody>${body}</tbody></table>
+    <div class="aptype-note">Tablet ligado direto na alimentação do carro não "carrega" — marcando como Tablet ele sai dos alertas de carregador. ${mode === "live" ? "Salva sozinho ao trocar; o celular não precisa de nada." : "Conecte o Supabase para alterar."}</div>`;
+  el.querySelectorAll(".aptype").forEach(sel => sel.addEventListener("change", async () => {
+    const id = sel.dataset.id;
+    const prev = sel.value === "tablet" ? "celular" : "tablet";
+    sel.disabled = true;
+    const cfg = Object.assign({}, deviceConfig[id] || {}, { device_type: sel.value });
+    const { error } = await sb.from("device_config").upsert({ device_id: id, label: fleet.find(x => x.device_id === id)?.device_name, config: cfg, updated_at: new Date().toISOString() });
+    sel.disabled = false;
+    if (error) { alert("Erro ao salvar: " + error.message); sel.value = prev; return; }
+    deviceConfig[id] = cfg;
+    refresh();   // recarrega: tablet sai dos alertas de carregador (cartões, resumo e feed)
+  }));
 }
 
 // ------------------------------------------------------------------ aba eventos (contagem + drill-down)
@@ -1418,16 +1447,19 @@ async function loadDiag() {
   const D = dlimits();
   $("#diagMeta").textContent = "analisando…";
   try {
-    let results;
+    let results, tabletsFora = 0;
     if (mode === "live") {
-      results = await Promise.all(fleet.map(async s => {
+      const alvos = fleet.filter(s => !isTablet(s.device_id));   // tablets ficam fora do diagnóstico de carga
+      tabletsFora = fleet.length - alvos.length;
+      results = await Promise.all(alvos.map(async s => {
         const samples = await fetchPlugged(s.device_id, D);
         return analyze(s.device_id, s.device_name || s.device_id, samples, D);
       }));
     } else {
       results = demo.diag(D);
     }
-    $("#diagMeta").textContent = `${results.length} carro(s) · janela de ${D.windowDays} dias`;
+    $("#diagMeta").textContent = `${results.length} carro(s) · janela de ${D.windowDays} dias` +
+      (tabletsFora ? ` · ${tabletsFora} tablet(s) fora` : "");
     renderDiag(results, D);
   } catch (e) {
     $("#diagMeta").textContent = "Erro ao analisar: " + (e.message || e);
