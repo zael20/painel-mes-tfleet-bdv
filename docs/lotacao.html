@@ -102,7 +102,8 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
 .oc { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; font-size: 14px; }
 .oc.t-LOTA_FIM { border-left-color: var(--crit); } .oc.t-MOVER { border-left-color: var(--warn); } .oc.t-SOBREPOSTA { border-left-color: var(--accent); }
 .oc.on { outline: 2px solid var(--accent); }
-.oc .tt { font: 600 15px var(--f-display); } .oc .chip { background: var(--accent-soft) !important; color: var(--accent) !important; } .oc ul { margin: 4px 0 0; padding-left: 18px; }
+.oc .tt { font: 600 15px var(--f-display); } .oc .oq { margin: 4px 0; font-size: 15px; } .oc ol.passos { margin: 4px 0 0; padding-left: 20px; color: var(--ink); } .oc ol.passos li { margin: 2px 0; }
+.oc .pes table { font-size: 13px; } .oc .chip { background: var(--accent-soft) !important; color: var(--accent) !important; } .oc ul { margin: 4px 0 0; padding-left: 18px; }
 .leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
 .leg i { display: inline-block; width: 18px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
 .leg i.pt { width: 10px; height: 10px; border-radius: 50%; }
@@ -154,7 +155,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
     <div class="bar">
       <label>Ideal<input id="fCap" type="number" min="1" value="40" style="width:80px"></label>
       <label>Lugares<input id="fLug" type="number" min="1" value="45" style="width:80px"></label>
-      <label>Grupo<select id="fGrupo"><option value="">Todos</option><option value="ADM">ADM</option><option value="CT">CT (terceiros)</option><option value="TURNO">Turno</option><option value="OUTRO">Outros</option></select></label>
+      <label>Grupo<select id="fGrupo"><option value="">Todos</option><option value="ADM">ADM</option><option value="CT">CT (terceiros)</option><option value="TURNO|1">Turno 1</option><option value="TURNO|2">Turno 2</option><option value="OUTRO">Outros</option></select></label>
       <label>Mostrar<select id="fStatus"><option value="prob" selected>Só com alerta</option><option value="LOTACAO RECORRENTE">Só lotando</option><option value="LOTACAO FREQUENTE">Só atenção</option><option value="PREVISAO DE LOTACAO">Só previsão</option><option value="mon">Só monitoradas</option><option value="all">Todas</option></select></label>
       <label>Buscar linha<input id="fBusca" type="search" placeholder="ex.: CT6, JK, ônibus 39"></label>
     </div>
@@ -167,7 +168,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
   <section class="painel" data-p="otim" hidden>
     <div class="bar">
       <label>Sentido<select id="oSent"><option value="IDA" selected>Ida</option><option value="VOLTA">Volta</option><option value="">Ida e volta</option></select></label>
-      <label>Grupo<select id="oGrupo"><option value="">Todos</option><option value="ADM">ADM</option><option value="CT">CT (terceiros)</option><option value="TURNO">Turno</option></select></label>
+      <label>Grupo<select id="oGrupo"><option value="">Todos</option><option value="ADM">ADM</option><option value="CT">CT (terceiros)</option><option value="TURNO|1">Turno 1</option><option value="TURNO|2">Turno 2</option></select></label>
       <label>Raio<select id="oRaio"><option value="200">200 m</option><option value="300" selected>300 m</option><option value="400">400 m</option></select></label>
       <label>Buscar rota<input id="oBusca" type="search" placeholder="ex.: JK, Promissão"></label>
     </div>
@@ -278,7 +279,7 @@ function render() {
   const cap = +$("#fCap").value || 40;
   const q = $("#fBusca").value.trim().toLowerCase().replace(/^ônibus\s*|^onibus\s*/, "");
   const modo = $("#fStatus").value, grp = $("#fGrupo").value;
-  const base = rows.filter(r => !grp || r.grupo === grp);
+  const base = rows.filter(r => grupoOk(grp, r.grupo, Otim.turnoDe(r.tipolinha)));
   const passa = r => modo === "all" || (modo === "mon" ? monit.has(r.linha) : modo === "prob" ? !["OK", "POUCOS DADOS", "PICO EVENTUAL"].includes(r.status) : r.status === modo);
   const vis = base.filter(r => passa(r) &&
     (!q || [r.linha, r.tipolinha, r.frotas].join(" ").toLowerCase().includes(q)));
@@ -364,10 +365,16 @@ $("#list").addEventListener("click", async e => {
   } catch (err) { det.textContent = "Erro ao carregar: " + err.message; }
 });
 
+// grupo do filtro: "ADM", "CT", "TURNO|1" (turno 1), "TURNO|2"
+function grupoOk(f, grupo, turno) {
+  if (!f) return true;
+  const [g, t] = f.split("|");
+  return grupo === g && (!t || String(turno || "") === t);
+}
 // ---- otimizacao de rotas: traçado real (rotas_tracado) + pontos de embarque (rota_pontos) + ocupacao (rows).
 // Calculo em lotacao-rotas.js (Otim.analisar). Mapa: Leaflet local + satelite MapTiler.
 const MAPTILER_KEY = "G2MUHW7Q8hatR3VYbHUz";
-let tracado = null, rpontos = [], otimRes = null, otimErro = "", otimSel = -1, otimF = "", oMap = null, oLayer = null;
+let tracado = null, rpontos = [], garagensL = [], otimRes = null, otimErro = "", otimSel = -1, otimF = "", oMap = null, oLayer = null;
 const CORES = ["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#46f0f0", "#f032e6", "#bcf60c", "#fabebe", "#008080", "#e6beff", "#9a6324", "#fffac8", "#aaffc3"];
 let leafletP = null;
 function carregaLeaflet() {
@@ -396,14 +403,16 @@ async function otimLoad(dias, capacidade) {
   otimErro = "";
   try {
     if (!tracado) tracado = await api("rotas_tracado?select=codigo_linha,sentido,linha,tipolinha,grupo,pontos,paradas,km,cadastrados,atualizado_em");
-    rpontos = await api("rpc/rota_pontos", { dias, capacidade }).catch(e => { otimErro = "pontos: " + e.message; return []; });
+    [rpontos, garagensL] = await Promise.all([
+      api("rpc/rota_pontos", { dias, capacidade }).catch(e => { otimErro = "pontos: " + e.message; return []; }),
+      api("rpc/garagens", { dias: Math.max(30, dias) }).catch(() => [])]);
   } catch (e) { tracado = null; otimErro = e.message; }
   otimRes = null; otimSel = -1;
   if (!$('[data-p="otim"]').hidden) otimRender();
 }
 function otimCalc() {
   if (otimRes || !tracado || !window.Otim) return otimRes;
-  otimRes = Otim.analisar({ tracado, pontos: rpontos, rotas: rows, cap: +$("#fCap").value || 40, lug: +$("#fLug").value || 45, raio: +$("#oRaio").value || 300 });
+  otimRes = Otim.analisar({ tracado, pontos: rpontos, garagens: garagensL, rotas: rows, cap: +$("#fCap").value || 40, lug: +$("#fLug").value || 45, raio: +$("#oRaio").value || 300 });
   return otimRes;
 }
 const TIPO_TXT = { LOTA_FIM: "Lota no fim da rota", MOVER: "Remanejar passageiros", SOBREPOSTA: "Rota sobrando no trecho" };
@@ -415,9 +424,9 @@ async function otimRender() {
   }
   const res = otimCalc(); if (!res) return;
   const sen = $("#oSent").value, grp = $("#oGrupo").value, q = Otim.norm($("#oBusca").value);
-  const okR = rt => (!sen || rt.sentido === sen) && (!grp || rt.grupo === grp) && (!q || Otim.norm(rt.linha).includes(q));
+  const okR = rt => (!sen || rt.sentido === sen) && grupoOk(grp, rt.grupo, rt.turno) && (!q || Otim.norm(rt.linha).includes(q));
   const rts = res.rotas.filter(okR);
-  const sugs = res.sug.filter(sg => (!sen || sg.sentido === sen) && (!grp || sg.grupo === grp) && (!q || sg.rotas.some(id => Otim.norm(res.porId[id].linha).includes(q))));
+  const sugs = res.sug.filter(sg => (!sen || sg.sentido === sen) && grupoOk(grp, sg.grupo, sg.turno) && (!q || sg.rotas.some(id => Otim.norm(res.porId[id].linha).includes(q))));
   const vis = sugs.filter(sg => !otimF || sg.tipo === otimF);
   const n = t => sugs.filter(sg => sg.tipo === t).length;
   const kpi = (cls, val, tit, sub, f) => `<button type="button" class="kpi ${cls}${otimF === f ? " on" : ""}" data-f="${f}"><b>${val}</b><span><b style="font-size:14px;color:inherit;display:inline">${tit}</b><br>${sub}</span></button>`;
@@ -427,8 +436,7 @@ async function otimRender() {
     kpi("", rts.length, "Rotas com traçado", "no mapa de roteirização", "");
   const semOcc = rts.filter(r => !r.occ).length;
   $("#oBase").innerHTML = `Traçado de ${res.ultimaColeta ? res.ultimaColeta.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "–"} · ${rpontos.length} pontos de embarque no período${semOcc ? ` · ${semOcc} rota(s) do mapa sem viagem no BDV nesse período (aparecem cinza)` : ""}${otimErro ? ` · <span style="color:var(--crit)">${esc(otimErro)}</span>` : ""}. Mostrando ${vis.length} de ${sugs.length} sugestões.`;
-  $("#oLista").innerHTML = vis.length ? vis.map(sg => `<div class="oc t-${sg.tipo}${res.sug.indexOf(sg) === otimSel ? " on" : ""}" data-i="${res.sug.indexOf(sg)}">
-      <div class="tt">${esc(sg.titulo)} <span class="chip">${TIPO_TXT[sg.tipo]}</span></div><div>${sg.texto}</div></div>`).join("")
+  $("#oLista").innerHTML = vis.length ? vis.map(sg => cartao(sg, res.sug.indexOf(sg))).join("")
     : `<div class="msg">Nenhuma sugestão nesse filtro${rpontos.length ? "" : " (ainda não há pontos de embarque no período)"}.</div>`;
   $("#oMapa").hidden = false;
   await carregaLeaflet();
@@ -436,12 +444,42 @@ async function otimRender() {
   oMap.invalidateSize();
   otimDesenha(oMap, rts, otimSel >= 0 ? res.sug[otimSel] : null, true);
 }
+// cartão da sugestão: o que fazer (resumo) + passo a passo + botões "ver pessoas"
+function cartao(sg, i, fixo) {
+  return `<div class="oc t-${sg.tipo}${i === otimSel ? " on" : ""}" data-i="${i}"${fixo ? ' style="cursor:default"' : ""}>
+    <div class="tt">${esc(sg.titulo)} <span class="chip">${TIPO_TXT[sg.tipo]}</span></div>
+    <div class="oq"><b>O que fazer:</b> ${sg.resumo}</div>
+    <ol class="passos">${sg.passos.map(p => `<li>${p}</li>`).join("")}</ol>
+    <div class="bar" style="margin:6px 0 0">${(sg.pessoas || []).map((p, k) => `<button type="button" class="btn vp" data-i="${i}" data-k="${k}">👥 ${esc(p.rotulo)}</button>`).join("")}${fixo ? "" : '<span class="muted">Clique no cartão para ver no mapa.</span>'}</div>
+    <div class="pes"></div></div>`;
+}
+// quem são as pessoas (com a senha de gestores): embarques da rota perto dos pontos da sugestão
+async function verPessoas(btn) {
+  const sg = otimRes.sug[+btn.dataset.i], grupoP = sg.pessoas[+btn.dataset.k], rt = otimRes.porId[grupoP.rt];
+  const box = btn.closest(".oc").querySelector(".pes");
+  if (box.dataset.k === btn.dataset.k && box.innerHTML) { box.innerHTML = ""; box.dataset.k = ""; return; }
+  if (!gSenha) { gSenha = prompt("Senha de gestores para ver os nomes:") || ""; if (!gSenha) return; }
+  box.dataset.k = btn.dataset.k; box.innerHTML = '<p class="muted">Carregando…</p>';
+  try {
+    const l = await api("rpc/rota_pessoas", { senha: gSenha, dias: +$("#fDias").value, p_linha: rt.linhaBdv || rt.linha, p_sentido: rt.sentido, p_pontos: grupoP.pontos, raio_m: 150 });
+    box.innerHTML = l.length ? `<p class="muted" style="margin:8px 0 4px">${esc(grupoP.rotulo)} · ${l.length} pessoa(s) na ${esc(rt.linha)}, últimos ${$("#fDias").value} dias:</p>
+      <div class="gl-wrap"><table class="gl"><tr><th>Nome</th><th>Matrícula</th><th>Empresa</th><th>Dias</th><th>Hora</th><th>Onde ${rt.sentido === "VOLTA" ? "desce" : "embarca"}</th></tr>` +
+      l.map(x => `<tr><td data-l="Nome">${esc(x.nome)}${/ITINER/i.test(x.tipopassageiro || "") ? ' <span class="chip">ITINERANTE</span>' : ""}</td><td data-l="Matrícula">${esc(x.matricula || "–")}</td>
+        <td data-l="Empresa">${esc(x.empresa || "–")}</td><td data-l="Dias">${x.dias_embarque}</td><td data-l="Hora">${esc(x.hora || "")}</td>
+        <td data-l="Onde"><a href="https://www.google.com/maps?q=${x.lat},${x.lon}" target="_blank" rel="noopener">ver no mapa</a></td></tr>`).join("") + "</table></div>"
+      : '<p class="muted">Ninguém encontrado nesses pontos no período (pode ser embarque antigo ou sem GPS).</p>';
+  } catch (err) { if (/senha/i.test(err.message)) gSenha = ""; box.innerHTML = `<p style="color:var(--crit)">${/senha/i.test(err.message) ? "Senha de gestores incorreta." : "Erro: " + esc(err.message) + " (rodou o lotacao-v6-otim.sql?)"}</p>`; }
+}
+document.addEventListener("click", e => { const b = e.target.closest(".vp"); if (b) { e.stopPropagation(); verPessoas(b); } }, true);
+const PAPEL_COR = { cheia: "#e5484d", sai: "#e5484d", recebe: "#30a46c", recebe2: "#3e9bff" };
+const PAPEL_TXT = { cheia: "rota cheia", sai: "rota que pode sair do trecho", recebe: "rota que recebe", recebe2: "outra opção que recebe" };
 // desenha rotas (+ destaque de uma sugestão) num mapa
 function otimDesenha(m, rts, sg, ajusta) {
   if (m._camada) m.removeLayer(m._camada);
   const g = L.featureGroup().addTo(m); m._camada = g;
   const destaque = new Set(sg ? sg.rotas : []), cor = {}; let ci = 0;
-  for (const rt of rts) cor[rt.id] = destaque.size ? (destaque.has(rt.id) ? CORES[ci++ % CORES.length] : "#9aa5b1") : (rt.occ ? CORES[ci++ % CORES.length] : "#9aa5b1");
+  const papel = (sg && sg.papel) || {};
+  for (const rt of rts) cor[rt.id] = destaque.size ? (destaque.has(rt.id) ? (PAPEL_COR[papel[rt.id]] || "#f5d90a") : "#9aa5b1") : (rt.occ ? CORES[ci++ % CORES.length] : "#9aa5b1");
   const ordem = [...rts].sort((a, b) => destaque.has(a.id) - destaque.has(b.id));
   for (const rt of ordem) {
     const on = !destaque.size || destaque.has(rt.id);
@@ -457,12 +495,19 @@ function otimDesenha(m, rts, sg, ajusta) {
     }
   }
   if (sg && sg.trecho) L.polyline(sg.trecho, { color: "#ffffff", weight: 10, opacity: .55 }).addTo(g);
-  if (sg && sg.pontosIni) for (const p of sg.pontosIni) L.circleMarker(p, { radius: 9, color: "#4fb3d4", weight: 3, fill: false }).bindTooltip("começo da rota (outra pode pegar)").addTo(g);
-  const leg = [...(destaque.size ? rts.filter(r => destaque.has(r.id)) : rts.filter(r => r.occ).slice(0, 12))].map(r => `<span><i style="background:${cor[r.id]}"></i>${esc(r.linha)}</span>`);
+  const mover = sg ? (sg.tipo === "LOTA_FIM" ? [...(sg.pontosFim || []), ...(sg.pontosIni || [])] : (sg.pontos || [])) : [];
+  for (const p of mover) L.circleMarker(p, { radius: 11, color: "#ff9f1a", weight: 4, fill: false }).bindTooltip("pessoas da sugestão embarcam aqui").addTo(g);
+  for (const gg of (otimRes && otimRes.garagens) || []) L.marker([gg.lat, gg.lon], { icon: L.divIcon({ className: "", html: '<div style="width:16px;height:16px;background:#111;border:2px solid #fff;border-radius:3px"></div>', iconSize: [16, 16] }) })
+    .bindTooltip(`<b>${esc(gg.nome)}</b><br>embarque registrado aqui não conta (erro de GPS)`).addTo(g);
+  const leg = [...(destaque.size ? rts.filter(r => destaque.has(r.id)) : rts.filter(r => r.occ).slice(0, 12))].map(r => `<span><i style="background:${cor[r.id]}"></i>${esc(r.linha)}${papel[r.id] ? " · <b>" + PAPEL_TXT[papel[r.id]] + "</b>" : ""}</span>`);
   const legEl = m.getContainer().nextElementSibling;
-  if (legEl && legEl.classList.contains("leg")) legEl.innerHTML = leg.join("") + `<span><i class="pt" style="background:#f07b72;border:2px solid #b3261e"></i>embarca depois do ideal</span><span><i class="pt" style="background:#fff;border:1px solid #17212b"></i>parada cadastrada</span>`;
+  if (legEl && legEl.classList.contains("leg")) legEl.innerHTML = leg.join("") + (mover.length ? `<span><i class="pt" style="background:transparent;border:3px solid #ff9f1a"></i>onde embarcam as pessoas da sugestão</span>` : "") + `<span><i class="pt" style="background:#111;border:2px solid #fff;border-radius:2px"></i>garagem (não conta)</span><span><i class="pt" style="background:#f07b72;border:2px solid #b3261e"></i>embarca depois do ideal</span><span><i class="pt" style="background:#fff;border:1px solid #17212b"></i>parada cadastrada</span>`;
   if (ajusta) {
-    const alvo = sg && (sg.trecho || sg.pontosFim || sg.pontos);
+    let alvo = sg && (sg.trecho || (sg.pontosFim ? [...sg.pontosFim, ...(sg.pontosIni || [])] : sg.pontos));
+    if (alvo && alvo.length > 2) {   // foco no bairro: tira ponto solto longe do resto (ex.: na mina)
+      const md = k => alvo.map(x => x[k]).sort((a, b) => a - b)[Math.floor(alvo.length / 2)], c = [md(0), md(1)];
+      const perto = alvo.filter(x => Otim.dist(x, c) < 8000); if (perto.length) alvo = perto;
+    }
     if (alvo && alvo.length) m.fitBounds(L.latLngBounds(alvo).pad(sg.tipo === "SOBREPOSTA" ? .6 : .3), { maxZoom: 16 });
     else if (g.getLayers().length) m.fitBounds(g.getBounds().pad(.05));
   }
@@ -479,7 +524,7 @@ function otimDetalhe(r) {
   const rt = otimRotaDe(r);
   if (!rt) return `<p class="muted">Sem traçado desta rota no mapa de roteirização da TFleet (rotas CT entram quando forem cadastradas lá).</p>`;
   const sg = otimRes.sug.filter(x => x.rotas.includes(rt.id)).sort((a, b) => (b.principal === rt.id) - (a.principal === rt.id));
-  return `<div class="mapa"></div><div class="leg"></div>` + (sg.length ? `<p class="muted" style="margin:8px 0 4px">Sugestões de otimização que envolvem esta rota (mais na aba <b>Otimização de rotas</b>):</p>` : "") + sg.slice(0, 4).map(x => `<div class="oc t-${x.tipo}" style="cursor:default"><div class="tt">${esc(x.titulo)} <span class="chip">${TIPO_TXT[x.tipo]}</span></div><div>${x.texto}</div></div>`).join("");
+  return `<div class="mapa"></div><div class="leg"></div>` + (sg.length ? `<p class="muted" style="margin:8px 0 4px">Sugestões de otimização que envolvem esta rota (mais na aba <b>Otimização de rotas</b>):</p>` : "") + sg.slice(0, 4).map(x => cartao(x, otimRes.sug.indexOf(x), true)).join("");
 }
 async function otimMapaRota(el, r) {
   if (!el) return;
@@ -493,7 +538,7 @@ async function otimMapaRota(el, r) {
 }
 $("#oKpis").addEventListener("click", e => { const b = e.target.closest(".kpi"); if (!b) return; otimF = otimF === b.dataset.f ? "" : b.dataset.f; otimSel = -1; otimRender(); });
 $("#oLista").addEventListener("click", e => {
-  const c = e.target.closest(".oc"); if (!c) return;
+  const c = e.target.closest(".oc"); if (!c || e.target.closest(".pes, a")) return;
   otimSel = otimSel === +c.dataset.i ? -1 : +c.dataset.i; otimRender();
   $("#oMapa").scrollIntoView({ behavior: "smooth", block: "start" });
 });
@@ -850,7 +895,7 @@ document.querySelector(".tabs").addEventListener("click", e => {
   const b = e.target.closest("button[data-tab]"); if (!b) return;
   document.querySelectorAll(".tabs button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-selected", x === b); });
   document.querySelectorAll(".painel").forEach(p => p.hidden = p.dataset.p !== b.dataset.tab);
-  $("#senhaBar").hidden = b.dataset.tab === "ocup" || b.dataset.tab === "otim";
+  $("#senhaBar").hidden = b.dataset.tab === "ocup";
   if (b.dataset.tab === "otim") otimRender();
   store.set("lot_tab", b.dataset.tab);
   if (b.dataset.tab === "fora") foraRender();
