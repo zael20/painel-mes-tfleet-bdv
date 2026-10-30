@@ -39,7 +39,7 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { background: var(--bg); color: var(--fg); font: 16px/1.4 var(--font-body); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 var(--font-body); }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--accent); }
 button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -271,6 +271,11 @@ button.kpi:hover, .open button:hover, .legend button:hover { border-color: var(-
 .open button.late { border: 2px solid var(--nok); }
 .col .slowp { background: var(--warn); }
 .col .oldp { background: var(--idle); }
+/* botao "← Central" (central-voltar.js, fixo no topo e reserva espaco com padding-top no body):
+   o cabecalho gruda logo abaixo dele e uma faixa na cor do cabecalho fica atras do botao. */
+body.tf-cv .bar { top: var(--cvh); }
+body.tf-cv .sheet { top: var(--cvh); }
+body.tf-cv::before { content: ""; position: fixed; z-index: 4; left: 0; right: 0; top: 0; height: var(--cvh); background: var(--accent); }
 .badge.orig-whatsapp { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
 .badge.orig-retroativo { background: var(--idle-bg); color: var(--idle); }
 .badge.orig-manual { background: color-mix(in srgb, var(--bar) 16%, transparent); color: var(--bar); }
@@ -1700,6 +1705,13 @@ form = blankForm(); buildItems(); paintForm(); refreshAll().then(function () { p
 var HASH_VIEW = { "#ocorrencias": "oc", "#carros": "carros", "#dashboard": "dash", "#enviadas": "enviadas", "#vistoria": "nova" };
 function fromHash() { var v = HASH_VIEW[location.hash]; if (v && v !== view) switchView(v); }
 window.addEventListener("hashchange", fromHash); fromHash();
+// acomoda o botao da Central, que entra depois deste script
+function fitCentral() {
+  var a = document.getElementById("tf-voltar-central"); if (!a) return false;
+  var h = parseFloat(getComputedStyle(document.body).paddingTop) || Math.ceil(a.getBoundingClientRect().bottom) + 8;
+  document.body.style.setProperty("--cvh", h + "px"); document.body.classList.add("tf-cv"); return true;
+}
+window.addEventListener("load", function () { if (!fitCentral()) setTimeout(fitCentral, 500); });
 </script>
 
 </body>
