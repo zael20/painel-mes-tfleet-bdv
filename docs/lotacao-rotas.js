@@ -117,11 +117,24 @@
       return [...best].map(([id, d]) => ({ rt: porId[id], d: Math.round(d) })).sort((x, y) => x.d - y.d);
     }
     // posição ao longo da rota (metros) do ponto mais próximo do traçado
-    function posicao(rt, lat, lon) {
+    function proj(rt, lat, lon) {
       let bd = 1e9, bs = null;
       for (const q of rt.dens) { const d = Math.abs(q.p[0] - lat) + Math.abs(q.p[1] - lon); if (d < bd) { bd = d; bs = q; } }
-      return bs && dist(bs.p, [lat, lon]) < 600 ? bs.s : null;
+      return bs ? { s: bs.s, p: bs.p, d: dist(bs.p, [lat, lon]) } : null;
     }
+    function posicao(rt, lat, lon) { const q = proj(rt, lat, lon); return q && q.d < 600 ? q.s : null; }
+    // trechos do traçado de "rt" a até "r" metros de algum dos pontos -> lista de polilinhas
+    function segPerto(rt, pts, r = 200) {
+      const out = []; let cur = null;
+      for (const q of rt.dens) {
+        const ok = pts.some(x => Math.abs(x[0] - q.p[0]) < 0.004 && Math.abs(x[1] - q.p[1]) < 0.004 && dist(x, q.p) <= r);
+        if (ok) { (cur || (cur = [])).push(q.p); } else if (cur) { if (cur.length > 1) out.push(cur); cur = null; }
+      }
+      if (cur && cur.length > 1) out.push(cur);
+      return out;
+    }
+    // seta: do ponto onde a pessoa embarca até o ponto mais perto da rota que recebe
+    const seta = (x, o) => { const q = proj(o, x[0], x[1]); return q ? { de: [x[0], x[1]], para: q.p } : null; };
     const paradaPerto = (rt, lat, lon) => {
       let b = null, bd = 1e9;
       for (const s of rt.paradas) { const d = dist([s.lat, s.lon], [lat, lon]); if (d < bd) { bd = d; b = s; } }
@@ -131,9 +144,21 @@
       (a.grupo !== "TURNO" || !a.turno || !b.turno || a.turno === b.turno);
     // zona de coleta: do 1o ao último ponto de embarque/parada (tira o trecho de estrada até a mina)
     for (const rt of rotas) {
-      const ss = [...rt.emb.filter(e => e.dia >= 0.2), ...rt.paradas].map(e => posicao(rt, e.lat, e.lon)).filter(s => s != null);
+      // embarque longe do bairro da rota (ex.: na entrada da mina) não é coleta: fica fora
+      if (rt.emb.length > 2) {
+        const md = k => rt.emb.map(e => e[k]).sort((x, y) => x - y)[Math.floor(rt.emb.length / 2)], c = [md("lat"), md("lon")];
+        rt.emb = rt.emb.filter(e => dist([e.lat, e.lon], c) < 8000);
+      }
+      const base = rt.emb.filter(e => e.dia >= 0.2);
+      const ss = (base.length ? base : rt.paradas).map(e => posicao(rt, e.lat, e.lon)).filter(s => s != null);
       rt.zona = ss.length ? [Math.min(...ss) - 150, Math.max(...ss) + 150] : null;
-      for (const e of rt.emb) e.s = posicao(rt, e.lat, e.lon);
+      // embarque a mais de 300 m do traçado da própria rota = GPS do celular fora do lugar: sai da análise
+      rt.foraGps = 0;
+      rt.emb = rt.emb.filter(e => {
+        const q = proj(rt, e.lat, e.lon);
+        if (!q || q.d > 300) { rt.foraGps += e.dia; return false; }
+        e.s = q.s; e.snap = q.p; return true;
+      });
     }
 
     const sug = [];
@@ -207,7 +232,9 @@
           `A <b>${esc(saida.r.linha)}</b> é a que menos pega ali (~${fmt(saida.d)}/dia).`,
           `${lista(ficam.map(r => `<b>${esc(r.linha)}</b> (${vagasTxt(r)})`))} já passa${ficam.length > 1 ? "m" : ""} na mesma rua e cabe${ficam.length > 1 ? "m" : ""} essas pessoas.`,
           `Resultado: ${coletam - 1} rota${coletam - 1 > 1 ? "s" : ""} nesse trecho em vez de ${coletam}, e a ${esc(saida.r.linha)} encurta o caminho.`],
-        pessoas: [{ rotulo: `Quem a ${saida.r.linha} pega nesse trecho`, rt: saida.r.id, pontos: noTrecho[saida.i].map(e => [e.lat, e.lon]) }] });
+        pessoas: [{ rotulo: `Quem a ${saida.r.linha} pega nesse trecho`, rt: saida.r.id, pontos: noTrecho[saida.i].map(e => [e.lat, e.lon]) }],
+        destaques: [...segPerto(saida.r, t.pts, 60).map(pts => ({ pts, papel: "sai" })), ...ficam.flatMap(r => segPerto(r, t.pts, 60).map(pts => ({ pts, papel: "recebe" })))],
+        setas: noTrecho[saida.i].map(e => { const alvoR = ficam.slice().sort((x, y) => (proj(x, e.lat, e.lon) || { d: 1e9 }).d - (proj(y, e.lat, e.lon) || { d: 1e9 }).d)[0]; return alvoR && seta(e.snap || [e.lat, e.lon], alvoR); }).filter(x => x && dist(x.de, x.para) > 15) });
     }
 
     // ---- 2) LOTA_FIM e 3) MOVER (rota cheia)
@@ -250,7 +277,12 @@
             titulo: `${rt.linha} lota no fim do caminho`,
             resumo: a ? `Passar as ~${nPes(Math.min(excesso, a.o.vagas))} do fim para a <b>${esc(a.o.linha)}</b>${b ? `, ou passar o começo para a <b>${esc(b.o.linha)}</b>` : ""}.`
                   : b ? `Passar o começo da rota para a <b>${esc(b.o.linha)}</b> para sobrar lugar no fim.` : `Sem rota com vaga por perto: ônibus extra ou dividir a rota.`,
-            passos, pessoas });
+            passos, pessoas,
+            destaques: [{ pts: rt.dens.filter(q => q.s >= fim[0].s - 50 && q.s <= fim[fim.length - 1].s + 50).map(q => q.p), papel: "cheia" },
+              ...(comeco.length ? [{ pts: rt.dens.filter(q => q.s >= comeco[0].s - 50 && q.s <= comeco[comeco.length - 1].s + 50).map(q => q.p), papel: "cheia" }] : []),
+              ...(a ? segPerto(a.o, fim.map(e => [e.lat, e.lon]), raio).map(pts => ({ pts, papel: "recebe" })) : []),
+              ...(b ? segPerto(b.o, comeco.map(e => [e.lat, e.lon]), raio).map(pts => ({ pts, papel: papel[b.o.id] })) : [])],
+            setas: [...(a ? fim.map(e => seta(e.snap, a.o)) : []), ...(b ? comeco.map(e => seta(e.snap, b.o)) : [])].filter(x => x && dist(x.de, x.para) > 15) });
         }
       }
       // mover: pontos da rota cheia perto do caminho de outra com vaga
@@ -274,7 +306,10 @@
         resumo: `Mover ~${nPes(leva)} da <b>${esc(rt.linha)}</b> para a <b>${esc(m0.o.linha)}</b>, que passa na mesma rua delas. A ${esc(rt.linha)} cai de ~${Math.round(rt.carga)} para ~${Math.round(rt.carga - leva)} por viagem.`,
         passos: [`A <b>${esc(rt.linha)}</b> leva em média <b>${fmt(rt.carga)}</b> por viagem (ideal ${cap}, ${lug} lugares): sobram ~${nPes(sobra)}.`,
           ...ops.map((m, i) => `<b>Opção ${i + 1} · ${esc(m.o.linha)}</b> (${vagasTxt(m.o)}): ~${nPes(m.n)} da ${esc(rt.linha)} embarcam a no máximo ${m.dmax} m do caminho dela${parM(m) ? ", perto de " + esc(parM(m)) : ""}. Cabem ${Math.min(Math.round(m.n), m.o.vagas)}.`)],
-        pessoas: ops.map((m, i) => ({ rotulo: `Opção ${i + 1}: quem pode ir para a ${m.o.linha}`, rt: rt.id, pontos: m.pts.map(p => [p[0], p[1]]) })) });
+        pessoas: ops.map((m, i) => ({ rotulo: `Opção ${i + 1}: quem pode ir para a ${m.o.linha}`, rt: rt.id, pontos: m.pts.map(p => [p[0], p[1]]) })),
+        // opção 1 desenhada por último (fica por cima); setas só da opção 1 para não poluir
+        destaques: ops.map((m, i) => [m, i]).reverse().flatMap(([m, i]) => [...segPerto(rt, m.pts, 120).map(pts => ({ pts, papel: "cheia" })), ...segPerto(m.o, m.pts, raio).map(pts => ({ pts, papel: i ? "recebe2" : "recebe" }))]),
+        setas: ops.slice(0, 1).flatMap(m => m.pts.map(p => { const e = rt.emb.find(x => x.lat === p[0] && x.lon === p[1]); return seta(e && e.snap || p, m.o); })).filter(x => x && dist(x.de, x.para) > 15) });
     }
     sug.sort((a, b) => b.peso - a.peso);
     return { rotas, porId, sug, garagens, ultimaColeta: ult ? new Date(ult) : null };

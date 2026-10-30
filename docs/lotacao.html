@@ -480,38 +480,51 @@ function otimDesenha(m, rts, sg, ajusta) {
   const destaque = new Set(sg ? sg.rotas : []), cor = {}; let ci = 0;
   const papel = (sg && sg.papel) || {};
   for (const rt of rts) cor[rt.id] = destaque.size ? (destaque.has(rt.id) ? (PAPEL_COR[papel[rt.id]] || "#f5d90a") : "#9aa5b1") : (rt.occ ? CORES[ci++ % CORES.length] : "#9aa5b1");
-  const ordem = [...rts].sort((a, b) => destaque.has(a.id) - destaque.has(b.id));
+  // com sugestão aberta: só as rotas dela, finas; o trecho da mudança vai grosso por cima
+  const ordem = destaque.size ? rts.filter(r => destaque.has(r.id)) : rts;
   for (const rt of ordem) {
-    const on = !destaque.size || destaque.has(rt.id);
+    const on = true;
     const tip = `<b>${esc(rt.linha)}</b> · ${rt.sentido}${rt.tipolinha ? " · " + esc(rt.tipolinha) : ""}<br>${rt.km ? rt.km.toLocaleString("pt-BR") + " km · " : ""}${rt.cadastrados} cadastrados<br>` +
       (rt.occ ? `média ${fmt(rt.carga)} por viagem · <b>${rt.vagas > 0 ? rt.vagas + " vaga(s) até " + (+$("#fCap").value || 40) : "sem vaga"}</b>` : "sem viagem no BDV no período");
-    L.polyline(rt.pontos, { color: cor[rt.id], weight: on ? (sg && sg.principal === rt.id ? 6 : 4) : 2, opacity: on ? .9 : .35 }).bindTooltip(tip, { sticky: true }).addTo(g);
-    if (on && (destaque.size || rts.length <= 3)) {
+    L.polyline(rt.pontos, { color: cor[rt.id], weight: destaque.size ? 3 : 4, opacity: destaque.size ? .6 : .9 }).bindTooltip(tip, { sticky: true }).addTo(g);
+    if (destaque.size ? rt.id === sg.principal : rts.length <= 3) {   // com sugestão: só os pontos da rota principal
       for (const p of rt.paradas) L.circleMarker([p.lat, p.lon], { radius: 4, color: "#17212b", weight: 1, fillColor: "#fff", fillOpacity: 1 })
         .bindTooltip(`Parada ${esc(rt.linha)}${p.horario ? " · " + p.horario : ""}<br>${esc(p.endereco || "")}`).addTo(g);
-      for (const e of rt.emb) L.circleMarker([e.lat, e.lon], { radius: Math.min(4 + Math.sqrt(e.dia) * 3, 16), color: e.depois > 0 ? "#b3261e" : cor[rt.id], weight: 2,
+      for (const e of rt.emb) L.circleMarker(e.snap || [e.lat, e.lon], { radius: Math.min(4 + Math.sqrt(e.dia) * 3, 16), color: e.depois > 0 ? "#b3261e" : cor[rt.id], weight: 2,
         fillColor: e.depois > 0 ? "#f07b72" : cor[rt.id], fillOpacity: .55 })
         .bindTooltip(`${esc(rt.linha)}: ~${fmt(e.dia)} ${rt.sentido === "VOLTA" ? "descem" : "embarcam"}/dia${e.hora ? " (~" + e.hora + ")" : ""}${e.depois > 0 ? `<br><b>~${fmt(e.depois)}/dia depois do ${+$("#fCap").value || 40}º</b>` : ""}`).addTo(g);
     }
   }
-  if (sg && sg.trecho) L.polyline(sg.trecho, { color: "#ffffff", weight: 10, opacity: .55 }).addTo(g);
+  for (const d of (sg && sg.destaques) || []) {
+    L.polyline(d.pts, { color: "#ffffff", weight: 12, opacity: .9 }).addTo(g);
+    L.polyline(d.pts, { color: PAPEL_COR[d.papel] || "#f5d90a", weight: 8, opacity: 1 }).bindTooltip(`Trecho da mudança · ${PAPEL_TXT[d.papel] || ""}`).addTo(g);
+  }
+  for (const a of (sg && sg.setas) || []) {   // de onde a pessoa embarca hoje -> rota que recebe
+    L.polyline([a.de, a.para], { color: "#ff9f1a", weight: 3, dashArray: "6 5" }).addTo(g);
+    const ang = Math.atan2(a.para[1] - a.de[1], a.para[0] - a.de[0]) * 180 / Math.PI;
+    L.marker(a.para, { interactive: false, icon: L.divIcon({ className: "", iconSize: [14, 14], iconAnchor: [7, 7],
+      html: `<div style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #ff9f1a;transform:rotate(${ang}deg)"></div>` }) }).addTo(g);
+  }
   const mover = sg ? (sg.tipo === "LOTA_FIM" ? [...(sg.pontosFim || []), ...(sg.pontosIni || [])] : (sg.pontos || [])) : [];
-  for (const p of mover) L.circleMarker(p, { radius: 11, color: "#ff9f1a", weight: 4, fill: false }).bindTooltip("pessoas da sugestão embarcam aqui").addTo(g);
+  const snapDe = p => { for (const rt of rts) { const e = rt.emb.find(x => x.lat === p[0] && x.lon === p[1]); if (e && e.snap) return e.snap; } return p; };
+  for (const p of mover) L.circleMarker(snapDe(p), { radius: 11, color: "#ff9f1a", weight: 4, fill: false }).bindTooltip("pessoas da sugestão embarcam aqui").addTo(g);
   for (const gg of (otimRes && otimRes.garagens) || []) if (Array.isArray(gg.poligono) && gg.poligono.length > 2)
     L.polygon(gg.poligono, { color: "#111", weight: 2, fillColor: "#111", fillOpacity: .35, dashArray: "4 3" }).bindTooltip(`<b>${esc(gg.nome)}</b><br>embarque registrado aqui não conta (erro de GPS)`).addTo(g);
   else L.marker([gg.lat, gg.lon], { icon: L.divIcon({ className: "", html: '<div style="width:16px;height:16px;background:#111;border:2px solid #fff;border-radius:3px"></div>', iconSize: [16, 16] }) })
     .bindTooltip(`<b>${esc(gg.nome)}</b><br>embarque registrado aqui não conta (erro de GPS)`).addTo(g);
   const leg = [...(destaque.size ? rts.filter(r => destaque.has(r.id)) : rts.filter(r => r.occ).slice(0, 12))].map(r => `<span><i style="background:${cor[r.id]}"></i>${esc(r.linha)}${papel[r.id] ? " · <b>" + PAPEL_TXT[papel[r.id]] + "</b>" : ""}</span>`);
   const legEl = m.getContainer().nextElementSibling;
-  if (legEl && legEl.classList.contains("leg")) legEl.innerHTML = leg.join("") + (mover.length ? `<span><i class="pt" style="background:transparent;border:3px solid #ff9f1a"></i>onde embarcam as pessoas da sugestão</span>` : "") + `<span><i class="pt" style="background:#111;border:2px solid #fff;border-radius:2px"></i>área da garagem (embarque ali não conta)</span><span><i class="pt" style="background:#f07b72;border:2px solid #b3261e"></i>embarca depois do ideal</span><span><i class="pt" style="background:#fff;border:1px solid #17212b"></i>parada cadastrada</span>`;
+  if (legEl && legEl.classList.contains("leg")) legEl.innerHTML = leg.join("") + (mover.length ? `<span><i class="pt" style="background:transparent;border:3px solid #ff9f1a"></i>onde embarcam as pessoas da sugestão</span><span><i style="background:repeating-linear-gradient(90deg,#ff9f1a 0 5px,transparent 5px 9px)"></i>para onde elas vão</span><span><i style="height:8px;background:#e5484d"></i><i style="height:8px;background:#30a46c"></i>trecho da mudança</span>` : "") + `<span><i class="pt" style="background:#111;border:2px solid #fff;border-radius:2px"></i>área da garagem (embarque ali não conta)</span><span><i class="pt" style="background:#f07b72;border:2px solid #b3261e"></i>embarca depois do ideal</span><span><i class="pt" style="background:#fff;border:1px solid #17212b"></i>parada cadastrada</span>`;
   if (ajusta) {
-    let alvo = sg && (sg.trecho || (sg.pontosFim ? [...sg.pontosFim, ...(sg.pontosIni || [])] : sg.pontos));
+    let alvo = sg && [...(sg.destaques || []).flatMap(d => d.pts), ...(sg.setas || []).flatMap(a => [a.de, a.para])];
+    if (sg && !alvo.length) alvo = sg.trecho || (sg.pontosFim ? [...sg.pontosFim, ...(sg.pontosIni || [])] : sg.pontos);
     if (alvo && alvo.length > 2) {   // foco no bairro: tira ponto solto longe do resto (ex.: na mina)
       const md = k => alvo.map(x => x[k]).sort((a, b) => a - b)[Math.floor(alvo.length / 2)], c = [md(0), md(1)];
-      const perto = alvo.filter(x => Otim.dist(x, c) < 8000); if (perto.length) alvo = perto;
+      const perto = alvo.filter(x => Otim.dist(x, c) < 5000); if (perto.length) alvo = perto;
     }
-    if (alvo && alvo.length) m.fitBounds(L.latLngBounds(alvo).pad(sg.tipo === "SOBREPOSTA" ? .6 : .3), { maxZoom: 16 });
-    else if (g.getLayers().length) m.fitBounds(g.getBounds().pad(.05));
+    m.stop();   // sem isso, a animação do enquadramento anterior termina por cima deste
+    if (alvo && alvo.length) m.fitBounds(L.latLngBounds(alvo).pad(.25), { maxZoom: 17, animate: false });
+    else if (g.getLayers().length) m.fitBounds(g.getBounds().pad(.05), { animate: false });
   }
 }
 // detalhe da rota (aba Ocupação): mapa da propria rota + sugestões dela
