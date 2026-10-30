@@ -869,5 +869,6 @@ $("#gateForm").addEventListener("submit", async e => {
 });
 if (store.get("lot_ok") === "1") { $("#gate").remove(); load(); const t = store.get("lot_tab"); if (t && t !== "ocup") document.querySelector(`.tabs [data-tab="${t}"]`)?.click(); }
 </script>
+<script src="central-voltar.js"></script>
 </body>
 </html>
