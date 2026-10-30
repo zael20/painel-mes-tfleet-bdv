@@ -102,14 +102,63 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
 #gate button{margin-top:12px;width:100%;padding:12px;border:0;border-radius:10px;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
 #gate .err{color:var(--bad);font-size:13px;min-height:18px;margin-top:8px}
 .hidden{display:none!important}
+
+/* usuário + gestão de acessos */
+.who{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.who b{color:var(--ink)}
+.btn{background:var(--card2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 12px;font:600 13px system-ui,sans-serif;cursor:pointer}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.6;cursor:default}
+.lvl{font-size:11px;font-weight:600;border-radius:999px;padding:1px 8px;border:1px solid var(--line);color:var(--muted)}
+#gest{position:fixed;inset:0;background:var(--bg);z-index:70;overflow:auto}
+#gest .gw{max-width:1040px;margin:0 auto;padding:16px 16px 60px}
+#gest .gtop{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+#gest .gtop h2{margin:0;font-size:19px}
+#gest .gtop .btn:last-child{margin-left:auto}
+.gtabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px}
+.gtabs button{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:7px 14px;font:600 13px system-ui,sans-serif;cursor:pointer}
+.gtabs button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.gcard{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:16px;margin-bottom:12px}
+.gcard h3{margin:0 0 8px;font-size:15px}
+.gmsg{color:var(--muted);font-size:13px;margin:6px 0}
+.gmsg.err{color:var(--bad)} .gmsg.ok{color:var(--ok)}
+.fld{display:flex;flex-direction:column;gap:4px;margin:10px 0;font-size:13px;color:var(--muted)}
+.fld input,.fld select,.gfilt select,.gfilt input{padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card2);color:var(--ink);font-size:15px}
+.row2{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+.row2 .fld{flex:1;min-width:180px}
+table.perm{min-width:0}
+table.perm td,table.perm th{padding:9px 10px}
+table.perm td.c,table.perm th.c{text-align:center;width:80px}
+table.perm input{width:20px;height:20px}
+.ph-hint{color:var(--muted);font-size:12px}
+.chk{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:14px}
+.chk input{width:20px;height:20px}
+.plist .pi{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.plist .pi:last-child{border-bottom:0}
+.plist .pi .nm{font-weight:700}
+.plist .pi .rt{margin-left:auto;text-align:right;font-size:12px;color:var(--muted);white-space:nowrap}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.senha-nova{font:800 28px ui-monospace,Consolas,monospace;letter-spacing:4px;background:var(--card2);border:1px dashed var(--brand);border-radius:10px;padding:10px 14px;display:inline-block;margin:6px 0}
+.gfilt{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.gfilt select,.gfilt input{font-size:14px;padding:8px}
+table.log{min-width:720px;font-size:13px}
+table.log td{vertical-align:top}
+.dif{font-size:12px;color:var(--muted);margin-top:3px}
+.dif b{color:var(--ink);font-weight:600}
+.ev{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.ev.entrou,.ev.abriu,.ev.codigo_geral{background:color-mix(in srgb,var(--info) 16%,transparent);color:var(--info)}
+.ev.editou{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.ev.negado,.ev.senha_errada{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.ev.cadastro,.ev.saiu{background:var(--card2);color:var(--muted)}
 </style>
 </head>
 <body>
 <div id="gate">
   <form class="box" id="gateForm">
     <h1>Central TFleet</h1>
-    <p>Digite o código de acesso</p>
-    <input id="gateInput" inputmode="numeric" autocomplete="off" placeholder="••••" aria-label="código">
+    <p>Digite sua senha de acesso</p>
+    <input id="gateInput" type="password" autocomplete="off" placeholder="••••" aria-label="senha">
     <button type="submit">Entrar</button>
     <div class="err" id="gateErr"></div>
   </form>
@@ -122,9 +171,10 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
       <p class="sub">Tudo da operação num lugar só — Paragominas / Hydro</p>
     </div>
     <div class="badge"><span class="dot" id="statusDot"></span><span id="statusTxt">conectando…</span></div>
+    <div class="who" id="who"></div>
   </header>
 
-  <h2 class="sec">Visão geral do dia</h2>
+  <h2 class="sec" id="secVisao">Visão geral do dia</h2>
   <div class="tiles" id="tiles">
     <div class="tile clk" id="tileOcor" role="button" tabindex="0"><div class="n" id="tOcor">—</div><div class="l">Ocorrências abertas</div><div class="foot" id="tOcorFoot">&nbsp;</div><div class="drill">ver lista →</div></div>
     <div class="tile clk" id="tileVist" role="button" tabindex="0"><div class="n" id="tVist">—</div><div class="l">Vistorias hoje</div><div class="foot" id="tVistFoot">&nbsp;</div><div class="drill">ver lista →</div></div>
@@ -132,8 +182,8 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
     <div class="tile clk" id="tileAtivos" role="button" tabindex="0"><div class="n" id="tAtivos">—</div><div class="l">Aparelhos ativos hoje</div><div class="foot">enviaram dados</div><div class="drill">ver lista →</div></div>
   </div>
 
-  <h2 class="sec">Precisam de atenção <span style="font-weight:400;text-transform:none;letter-spacing:0">— ocorrências abertas cruzadas pela TAG</span></h2>
-  <div class="panel">
+  <h2 class="sec" id="secAtencao">Precisam de atenção <span style="font-weight:400;text-transform:none;letter-spacing:0">— ocorrências abertas cruzadas pela TAG</span></h2>
+  <div class="panel" id="panelOcor">
     <div class="ph">
       <h3>Ocorrências abertas</h3>
       <span class="hint">atualiza a cada 60s · <button class="linkish" id="reload">recarregar</button></span>
@@ -150,46 +200,52 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
 
   <h2 class="sec">Painéis</h2>
   <div class="cards" id="cards">
-    <a class="card" href="index.html">
+    <a class="card" href="index.html" data-p="monitor">
       <div class="ic">🚍</div>
       <div class="t">Monitor Frota</div>
       <div class="d">Celulares dos ônibus: carga, bateria, eventos e mapa ao vivo.</div>
       <div class="go">Abrir →</div>
     </a>
-    <a class="card" href="vistoria/#ocorrencias">
+    <a class="card" href="vistoria/#ocorrencias" data-p="ocorrencias">
       <div class="ic">💬</div>
       <div class="t">Ocorrências WhatsApp</div>
       <div class="d">Chamados do grupo, tratados dentro do CHECK BDV: quem relatou, tempo de resolução e prioridade.</div>
       <div class="go">Abrir →</div>
     </a>
-    <a class="card" href="vistoria/index.html">
+    <a class="card" href="vistoria/index.html" data-p="vistoria">
       <div class="ic">✅</div>
       <div class="t">Vistorias BDV <span class="soon" id="soonVist">entra em breve</span></div>
       <div class="d">Checklist dos ônibus. No celular funciona offline, com foto e observação.</div>
       <div class="go">Abrir →</div>
     </a>
-    <a class="card" href="lotacao.html">
+    <a class="card" href="lotacao.html" data-p="lotacao">
       <div class="ic">📊</div>
       <div class="t">Lotação das rotas</div>
       <div class="d">Ocupação por rota e horário, com relatório para os gestores.</div>
       <div class="go">Abrir →</div>
     </a>
-    <a class="card" href="lotacao.html#otim">
+    <a class="card" href="lotacao.html#otim" data-p="otimizacao">
       <div class="ic">🗺️</div>
       <div class="t">Otimização de rotas</div>
       <div class="d">Traçado real das rotas no mapa de satélite: rota que lota no fim, quem remanejar e rota sobrando na mesma rua.</div>
       <div class="go">Abrir →</div>
     </a>
-    <a class="card" href="roteador-tratativa.html">
+    <a class="card" href="roteador.html" data-p="roteador">
       <div class="ic">📶</div>
-      <div class="t">Roteador — tratativas</div>
-      <div class="d">Tratar alertas de uso de roteador (hotspot) nos ônibus.</div>
+      <div class="t">Roteador</div>
+      <div class="d">Histórico dos e-mails de uso de roteador (hotspot) nos ônibus e as tratativas de cada uso.</div>
+      <div class="go">Abrir →</div>
+    </a>
+    <a class="card hidden" href="#gestao" id="cardGestao">
+      <div class="ic">🔐</div>
+      <div class="t">Gestão de acessos</div>
+      <div class="d">Criar a senha de cada pessoa, escolher o que ela vê e edita em cada painel e ver o histórico de acessos e edições.</div>
       <div class="go">Abrir →</div>
     </a>
   </div>
 
   <footer>
-    <div>Central TFleet · dados do Supabase em tempo real · código de acesso 8015</div>
+    <div>Central TFleet · dados do Supabase em tempo real</div>
     <div style="margin-top:6px"><button class="linkish" id="themeBtn">alternar tema claro/escuro</button></div>
   </footer>
 
@@ -202,6 +258,78 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
   </div>
 </div>
 
+<div id="gest" class="hidden" role="dialog" aria-modal="true" aria-label="Gestão de acessos">
+  <div class="gw">
+    <div class="gtop"><h2>🔐 Gestão de acessos</h2><button class="btn" id="gFechar" type="button">← Voltar à Central</button></div>
+    <div class="gcard hidden" id="gAuth">
+      <h3>Confirme que é você</h3>
+      <p class="gmsg">Enquanto ainda não existe um administrador com senha pessoal, a gestão abre com a <b>senha de gestores</b> (a mesma da Lotação). Crie o seu acesso marcando <b>Administrador</b> e, depois, entre na Central com a sua senha.</p>
+      <div class="row2"><label class="fld">Senha de gestores<input id="gAuthSenha" type="password" autocomplete="off"></label>
+        <button class="btn pri" id="gAuthOk" type="button" style="margin-bottom:10px">Abrir</button></div>
+      <div class="gmsg err" id="gAuthMsg"></div>
+    </div>
+    <div id="gMain" class="hidden">
+      <div class="gtabs" role="tablist">
+        <button type="button" data-g="pessoas" class="on">Pessoas</button>
+        <button type="button" data-g="log">Histórico de acessos e edições</button>
+        <button type="button" data-g="ajustes">Ajustes</button>
+      </div>
+      <section data-gs="pessoas">
+        <div class="gcard">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h3 style="margin:0">Pessoas com acesso</h3>
+            <button class="btn pri" id="gNovo" type="button" style="margin-left:auto">+ Novo acesso</button></div>
+          <div class="plist" id="gLista"><div class="loading">Carregando…</div></div>
+        </div>
+        <div class="gcard hidden" id="gEd">
+          <h3 id="gEdTit">Novo acesso</h3>
+          <label class="fld">Nome completo<input id="gNome" maxlength="120" autocomplete="off" placeholder="Ex.: Maria Aparecida da Silva"></label>
+          <div class="row2">
+            <label class="fld"><span id="gSenhaLbl">Senha (a pessoa digita só ela para entrar)</span><input id="gSenha" maxlength="40" autocomplete="off" placeholder="mín. 4 caracteres"></label>
+            <button class="btn" id="gGerar" type="button" style="margin-bottom:10px">Gerar senha</button>
+          </div>
+          <table class="perm">
+            <thead><tr><th>Painel</th><th class="c">Ver</th><th class="c">Editar</th></tr></thead>
+            <tbody id="gPerm"></tbody>
+          </table>
+          <label class="chk"><input type="checkbox" id="gAdmin"> Administrador (vê e edita tudo e abre esta Gestão de acessos)</label>
+          <label class="chk"><input type="checkbox" id="gAtivo" checked> Acesso ativo (desmarque para bloquear sem apagar o histórico)</label>
+          <div class="row2" style="margin-top:8px">
+            <button class="btn pri" id="gSalvar" type="button">Salvar</button>
+            <button class="btn" id="gCancelar" type="button">Cancelar</button>
+            <button class="btn danger hidden" id="gExcluir" type="button" style="margin-left:auto">Excluir acesso</button>
+          </div>
+          <div class="gmsg" id="gEdMsg"></div>
+        </div>
+      </section>
+      <section data-gs="log" class="hidden">
+        <div class="gcard">
+          <div class="gfilt">
+            <select id="lDias" aria-label="Período"><option value="1">Hoje e ontem</option><option value="7" selected>7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option></select>
+            <select id="lPessoa" aria-label="Pessoa"><option value="">Todas as pessoas</option></select>
+            <select id="lTipo" aria-label="Tipo"><option value="">Tudo</option><option value="acesso">Só acessos</option><option value="editou">Só edições</option><option value="alerta">Negados e senha errada</option><option value="cadastro">Mudanças nos acessos</option></select>
+            <input id="lBusca" placeholder="Buscar (carro, painel, texto)" aria-label="Buscar">
+            <button class="btn" id="lCsv" type="button">Baixar planilha (CSV)</button>
+          </div>
+          <div class="gmsg" id="lInfo"></div>
+          <div class="tbl-scroll"><table class="log"><thead><tr><th>Quando</th><th>Quem</th><th>O quê</th><th>Painel</th><th>Detalhe</th><th>Onde</th></tr></thead>
+            <tbody id="lBody"><tr><td colspan="6"><div class="loading">Carregando…</div></td></tr></tbody></table></div>
+        </div>
+      </section>
+      <section data-gs="ajustes" class="hidden">
+        <div class="gcard">
+          <h3>Exigir senha pessoal</h3>
+          <p class="gmsg">Desligado: o código geral <b>8015</b> continua abrindo a Central e os painéis (fica registrado como "Código geral" no histórico, sem nome). <br>
+            Ligado: o 8015 para de funcionar. Cada pessoa só entra com a própria senha, e vistoria, ocorrência e configuração do Monitor só gravam com senha pessoal. Ligue depois de criar a senha de todo mundo que usa os painéis (inclusive quem faz vistoria no celular).</p>
+          <label class="chk"><input type="checkbox" id="aExigir"> Exigir senha pessoal em todos os painéis</label>
+          <button class="btn pri" id="aSalvar" type="button">Salvar</button>
+          <div class="gmsg" id="aMsg"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="central-guard.js"></script>
 <script>
 const SB_URL = "https://orhuxmsrdnugpogvtnbg.supabase.co";
 const SB_KEY = "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL";
@@ -210,15 +338,73 @@ const ADMIN_PIN_SHA256 = "0eadf1d576bd3ec3f0e6d305a44136b198701bf1f369a001a848c4
 /* ---------- gate ---------- */
 const gate=document.getElementById('gate'), app=document.getElementById('app');
 async function sha256hex(s){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){return null}}
-function openApp(){gate.classList.add('hidden');app.classList.remove('hidden');start()}
-try{if(sessionStorage.getItem('tf_central_ok')==='1') openApp();}catch(e){}
+/* Entrada: senha pessoal (central-acessos.sql) ou, enquanto a Gestão não exigir senha pessoal,
+   o código geral 8015. SESS = pessoa logada; MODO = 'pessoal' | 'geral'. */
+const TFA=window.TFAcesso;
+let SESS=null, MODO=null, iniciado=false;
+function openApp(){gate.classList.add('hidden');app.classList.remove('hidden');aplicarPerms();if(!iniciado){iniciado=true;start();}}
+function gateErr(t){document.getElementById('gateErr').textContent=t;}
+async function ehGeral(v){const h=await sha256hex(v);return (h&&h===ADMIN_PIN_SHA256)||v==='8015';}
+function entrarGeral(){try{sessionStorage.setItem('tf_central_ok','1')}catch(e){}MODO='geral';SESS=null;openApp();}
+(async()=>{
+  const s=TFA&&TFA.ler();
+  if(s&&s.token){
+    try{const r=await TFA.rpc('acesso_painel',{p_token:s.token,p_painel:'central',p_pagina:'central.html'});
+      if(r&&!r.erro){s.nome=r.nome;s.perms=r.perms||{};s.admin=!!r.admin;TFA.gravar(s);SESS=s;MODO='pessoal';openApp();return;}
+      TFA.limpar();
+    }catch(e){SESS=s;MODO='pessoal';openApp();return;}   // sem internet: usa o que está guardado
+  }
+  let geral=false;try{geral=sessionStorage.getItem('tf_central_ok')==='1'}catch(e){}
+  if(geral){
+    try{const c=await TFA.rpc('acesso_config',{});if(c&&c.exigir){try{sessionStorage.removeItem('tf_central_ok')}catch(e){}return;}}catch(e){}
+    entrarGeral();
+  }
+})();
 document.getElementById('gateForm').addEventListener('submit',async ev=>{
   ev.preventDefault();
   const v=document.getElementById('gateInput').value.trim();
-  const h=await sha256hex(v);
-  if((h&&h===ADMIN_PIN_SHA256)||v==='8015'){try{sessionStorage.setItem('tf_central_ok','1')}catch(e){}openApp();}
-  else{document.getElementById('gateErr').textContent='Código incorreto.';}
+  if(!v)return;
+  gateErr('');
+  if(await ehGeral(v)){
+    try{const c=await TFA.rpc('acesso_codigo_geral',{p_painel:'central'});
+      if(c&&c.permitido===false){gateErr('O código geral foi desativado. Entre com a sua senha pessoal.');return;}}
+    catch(e){}                                   // SQL ainda não rodado: vale como antes
+    entrarGeral();return;
+  }
+  try{const r=await TFA.rpc('acesso_entrar',{p_senha:v});
+    if(r&&r.token){SESS={token:r.token,nome:r.nome,perms:r.perms||{},admin:!!r.admin};TFA.gravar(SESS);MODO='pessoal';document.getElementById('gateInput').value='';openApp();return;}
+    gateErr((r&&r.erro)||'Senha incorreta.');
+  }catch(e){gateErr(e.status===404?'Senha incorreta.':'Não consegui conferir a senha agora. Verifique a internet.');}
 });
+function pode(p,n){return MODO==='geral'||TFA.pode(SESS,p,n||'ver');}
+function nivelTxt(p){if(MODO!=='pessoal'||SESS.admin)return '';const l=(SESS.perms&&SESS.perms[p])||[];
+  return l.includes('ver')&&l.includes('editar')?'ver e editar':l.includes('editar')?'só editar':'só ver';}
+function aplicarPerms(){
+  const who=document.getElementById('who');
+  if(MODO==='pessoal'){who.innerHTML='👤 <b>'+esc(SESS.nome)+'</b>'+(SESS.admin?' <span class="lvl">admin</span>':'')+' <button class="btn" id="btnSair" type="button">Sair</button>';}
+  else{who.innerHTML='<span class="lvl">código geral</span> <button class="btn" id="btnSair" type="button">Sair</button>';}
+  document.getElementById('btnSair').onclick=sair;
+  document.querySelectorAll('#cards a.card[data-p]').forEach(a=>{
+    const p=a.dataset.p;a.classList.toggle('hidden',!pode(p));
+    let l=a.querySelector('.lvl');const t=nivelTxt(p);
+    if(t){if(!l){l=document.createElement('span');l.className='lvl';a.querySelector('.t').appendChild(l);}l.textContent=t;}else if(l)l.remove();
+  });
+  const vOc=pode('ocorrencias'),vVi=pode('vistoria'),vMo=pode('monitor');
+  document.getElementById('tileOcor').classList.toggle('hidden',!vOc);
+  document.getElementById('tileVist').classList.toggle('hidden',!vVi);
+  document.getElementById('tileNok').classList.toggle('hidden',!vVi);
+  document.getElementById('tileAtivos').classList.toggle('hidden',!vMo);
+  document.getElementById('secVisao').classList.toggle('hidden',!(vOc||vVi||vMo));
+  document.getElementById('tiles').classList.toggle('hidden',!(vOc||vVi||vMo));
+  document.getElementById('secAtencao').classList.toggle('hidden',!vOc);
+  document.getElementById('panelOcor').classList.toggle('hidden',!vOc);
+  document.getElementById('cardGestao').classList.toggle('hidden',!(MODO==='geral'||(SESS&&SESS.admin)));
+}
+async function sair(){
+  if(MODO==='pessoal'&&SESS){try{await TFA.rpc('acesso_sair',{p_token:SESS.token})}catch(e){}}
+  TFA.limpar();try{sessionStorage.removeItem('tf_central_ok');sessionStorage.removeItem('lot_ok')}catch(e){}
+  location.reload();
+}
 
 /* ---------- theme ---------- */
 document.getElementById('themeBtn').addEventListener('click',()=>{
@@ -363,6 +549,151 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrill();});
 ['tileOcor','tileVist','tileNok','tileAtivos'].forEach(id=>{const el=document.getElementById(id);if(!el)return;
   el.addEventListener('click',()=>openDrill(id));
   el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDrill(id);}});});
+
+/* ---------- gestão de acessos ---------- */
+const PAINEIS=[
+  ['monitor','Monitor Frota','ver: indicadores e carros · editar: salvar configurações dos celulares'],
+  ['vistoria','Vistorias','ver: vistorias feitas, carros e dashboard · editar: fazer vistoria'],
+  ['ocorrencias','Ocorrências','ver: lista e indicadores · editar: resolver, descartar, reabrir'],
+  ['lotacao','Lotação','ver: só indicadores (sem nomes) · editar: nomes, gestores, cadastro e respostas'],
+  ['otimizacao','Otimização de rotas','ver: sugestões no mapa · editar: ver pessoas e marcar rotas'],
+  ['roteador','Roteador','ver: histórico dos e-mails enviados · editar: registrar tratativa']];
+const NOME_P=Object.fromEntries(PAINEIS.map(p=>[p[0],p[1]]).concat([['central','Central']]));
+let GAUTH=null, gPessoas=[], gEdId=null, gLog=[];
+const $g=id=>document.getElementById(id);
+function gMsg(id,t,cls){const e=$g(id);e.textContent=t||'';e.className='gmsg'+(cls?' '+cls:'');}
+function abrirGestao(){
+  $g('gest').classList.remove('hidden');document.documentElement.style.overflow='hidden';
+  if(SESS&&SESS.admin){GAUTH=SESS.token;gCarregar();}
+  else if(GAUTH){gCarregar();}
+  else{$g('gAuth').classList.remove('hidden');$g('gMain').classList.add('hidden');setTimeout(()=>$g('gAuthSenha').focus(),50);}
+}
+function fecharGestao(){$g('gest').classList.add('hidden');document.documentElement.style.overflow='';if(location.hash==='#gestao')history.replaceState(null,'',location.pathname);}
+$g('cardGestao').addEventListener('click',e=>{e.preventDefault();abrirGestao();});
+$g('gFechar').addEventListener('click',fecharGestao);
+async function gAuthTentar(){
+  const v=$g('gAuthSenha').value;if(!v)return;gMsg('gAuthMsg','Conferindo…');
+  try{await TFA.rpc('acessos_lista',{p_auth:v});GAUTH=v;gMsg('gAuthMsg','');gCarregar();}
+  catch(e){gMsg('gAuthMsg',/senha/i.test(e.message)?'Senha de gestores incorreta.':(e.status===404?'O SQL central-acessos.sql ainda não foi rodado no Supabase.':'Erro: '+e.message),'err');}
+}
+$g('gAuthOk').addEventListener('click',gAuthTentar);
+$g('gAuthSenha').addEventListener('keydown',e=>{if(e.key==='Enter')gAuthTentar();});
+document.querySelector('#gest .gtabs').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-g]');if(!b)return;
+  document.querySelectorAll('#gest .gtabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('#gest section[data-gs]').forEach(s=>s.classList.toggle('hidden',s.dataset.gs!==b.dataset.g));
+  if(b.dataset.g==='log')lCarregar();
+  if(b.dataset.g==='ajustes')aCarregar();
+});
+async function gCarregar(){
+  $g('gAuth').classList.add('hidden');$g('gMain').classList.remove('hidden');
+  $g('gLista').innerHTML='<div class="loading">Carregando…</div>';
+  try{gPessoas=await TFA.rpc('acessos_lista',{p_auth:GAUTH})||[];}
+  catch(e){$g('gLista').innerHTML='<div class="empty">Não consegui carregar: '+esc(e.message)+'</div>';return;}
+  const sel=$g('lPessoa'),cur=sel.value;
+  sel.innerHTML='<option value="">Todas as pessoas</option>'+gPessoas.map(p=>'<option value="'+p.id+'">'+esc(p.nome)+'</option>').join('');sel.value=cur;
+  if(!gPessoas.length){$g('gLista').innerHTML='<div class="empty">Nenhum acesso criado ainda. Toque em <b>+ Novo acesso</b>. Comece pelo seu, marcando Administrador.</div>';return;}
+  $g('gLista').innerHTML=gPessoas.map(p=>{
+    const chips=p.admin?'<span class="pill alta">administrador</span>':PAINEIS.filter(x=>(p.perms[x[0]]||[]).length).map(x=>{
+      const l=p.perms[x[0]];return '<span class="pill mut">'+x[1]+': '+(l.includes('ver')&&l.includes('editar')?'ver e editar':l.includes('editar')?'editar':'ver')+'</span>';}).join('')||'<span class="pill mut">nenhum painel</span>';
+    return '<div class="pi" data-id="'+p.id+'"><div><div class="nm">'+esc(p.nome)+(p.ativo?'':' <span class="pill nok">bloqueado</span>')+'</div><div class="chips">'+chips+'</div></div>'+
+      '<div class="rt">'+(p.ultimo_acesso?'último acesso<br>'+fmtDH(p.ultimo_acesso):'nunca entrou')+'</div></div>';}).join('');
+}
+$g('gLista').addEventListener('click',e=>{const r=e.target.closest('.pi');if(r)gEditar(+r.dataset.id);});
+function fmtDH(iso){try{return new Date(iso).toLocaleString('pt-BR',{timeZone:'America/Belem',day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return iso}}
+function gEditar(id){
+  const p=id?gPessoas.find(x=>x.id===id):null;gEdId=p?p.id:null;
+  $g('gEd').classList.remove('hidden');$g('gEdTit').textContent=p?'Editar: '+p.nome:'Novo acesso';
+  $g('gNome').value=p?p.nome:'';$g('gSenha').value='';
+  $g('gSenhaLbl').textContent=p?'Nova senha (deixe vazio para manter a atual)':'Senha (a pessoa digita só ela para entrar)';
+  $g('gAdmin').checked=!!(p&&p.admin);$g('gAtivo').checked=p?!!p.ativo:true;
+  $g('gExcluir').classList.toggle('hidden',!p);
+  $g('gPerm').innerHTML=PAINEIS.map(x=>{const l=(p&&p.perms[x[0]])||[];
+    return '<tr><td><b>'+x[1]+'</b><div class="ph-hint">'+x[2]+'</div></td><td class="c"><input type="checkbox" data-p="'+x[0]+'" data-n="ver" '+(l.includes('ver')?'checked':'')+' aria-label="'+x[1]+' ver"></td>'+
+      '<td class="c"><input type="checkbox" data-p="'+x[0]+'" data-n="editar" '+(l.includes('editar')?'checked':'')+' aria-label="'+x[1]+' editar"></td></tr>';}).join('');
+  gMsg('gEdMsg','');$g('gEd').scrollIntoView({behavior:'smooth',block:'start'});$g('gNome').focus({preventScroll:true});
+}
+$g('gNovo').addEventListener('click',()=>gEditar(null));
+$g('gCancelar').addEventListener('click',()=>{$g('gEd').classList.add('hidden');});
+$g('gGerar').addEventListener('click',()=>{const a=new Uint32Array(1);crypto.getRandomValues(a);$g('gSenha').value=String(100000+a[0]%900000);});
+$g('gSalvar').addEventListener('click',async()=>{
+  const perms={};document.querySelectorAll('#gPerm input:checked').forEach(i=>{(perms[i.dataset.p]=perms[i.dataset.p]||[]).push(i.dataset.n);});
+  const nome=$g('gNome').value.trim(),senha=$g('gSenha').value.trim();
+  if(nome.length<3){gMsg('gEdMsg','Informe o nome completo.','err');return;}
+  if(!gEdId&&!senha){gMsg('gEdMsg','Defina a senha (ou toque em Gerar senha).','err');return;}
+  if(!$g('gAdmin').checked&&!Object.keys(perms).length&&!confirm('Nenhum painel marcado: a pessoa entra na Central mas não vê nada. Salvar assim?'))return;
+  $g('gSalvar').disabled=true;gMsg('gEdMsg','Salvando…');
+  try{await TFA.rpc('acesso_salvar',{p_auth:GAUTH,p_id:gEdId,p_nome:nome,p_senha:senha||null,p_perms:perms,p_admin:$g('gAdmin').checked,p_ativo:$g('gAtivo').checked});
+    $g('gEd').classList.add('hidden');await gCarregar();
+    if(senha){$g('gLista').insertAdjacentHTML('beforebegin','<div class="gmsg ok" id="gSenhaAviso">Salvo. Passe esta senha para <b>'+esc(nome)+'</b> (ela não aparece de novo depois):<br><span class="senha-nova">'+esc(senha)+'</span></div>');
+      const old=document.querySelectorAll('#gSenhaAviso');if(old.length>1)old[0].remove();}
+  }catch(e){gMsg('gEdMsg',e.message,'err');}
+  finally{$g('gSalvar').disabled=false;}
+});
+$g('gExcluir').addEventListener('click',async()=>{
+  if(!gEdId)return;const p=gPessoas.find(x=>x.id===gEdId);
+  if(!confirm('Excluir o acesso de '+(p?p.nome:'')+'? O histórico continua guardado com o nome. (Para só bloquear, desmarque "Acesso ativo".)'))return;
+  try{await TFA.rpc('acesso_remover',{p_auth:GAUTH,p_id:gEdId});$g('gEd').classList.add('hidden');gCarregar();}catch(e){gMsg('gEdMsg',e.message,'err');}
+});
+/* histórico */
+const EVTXT={entrou:'Entrou',abriu:'Abriu painel',negado:'Sem permissão',editou:'Editou',saiu:'Saiu',senha_errada:'Senha errada',cadastro:'Acessos',codigo_geral:'Código geral'};
+function aparelho(ua){if(!ua)return '';const so=/Android/i.test(ua)?'Android':/iPhone|iPad/i.test(ua)?'iPhone':/Windows/i.test(ua)?'Windows':/Mac OS/i.test(ua)?'Mac':/Linux/i.test(ua)?'Linux':'';
+  const nv=/SamsungBrowser/i.test(ua)?'Samsung':/Edg\//i.test(ua)?'Edge':/Chrome\//i.test(ua)?'Chrome':/Firefox/i.test(ua)?'Firefox':/Safari/i.test(ua)?'Safari':'';
+  return [so,nv].filter(Boolean).join(' · ')||ua.slice(0,40);}
+function permTxt(o){const ks=Object.keys(o||{}).filter(k=>(o[k]||[]).length);if(!ks.length)return 'nenhum painel';
+  return ks.map(k=>(NOME_P[k]||k)+': '+(o[k].includes('ver')&&o[k].includes('editar')?'ver e editar':o[k].includes('editar')?'editar':'ver')).join(' · ');}
+function vtxt(v,k){if(v==null)return '—';if(k==='perms'&&typeof v==='object')return permTxt(v);if(v===true)return 'sim';if(v===false)return 'não';
+  if(typeof v==='object')return JSON.stringify(v);return String(v);}
+function difHtml(r){
+  const d=r.dados;if(!d||typeof d!=='object')return '';
+  const ks=Object.keys(d).slice(0,12);
+  return '<div class="dif">'+ks.map(k=>{const v=d[k];
+    if(r.evento==='editou'&&Array.isArray(v)&&v.length===2&&r.resumo&&/^Alterou/.test(r.resumo))return '<b>'+esc(k)+'</b>: '+esc(vtxt(v[0],k))+' → '+esc(vtxt(v[1],k));
+    if(r.evento==='cadastro'&&Array.isArray(v)&&v.length===2)return '<b>'+esc(k)+'</b>: '+esc(vtxt(v[0],k))+' → '+esc(vtxt(v[1],k));
+    return '<b>'+esc(k)+'</b>: '+esc(vtxt(v,k));}).join('<br>')+(Object.keys(d).length>12?'<br>…':'')+'</div>';
+}
+async function lCarregar(){
+  $g('lBody').innerHTML='<tr><td colspan="6"><div class="loading">Carregando…</div></td></tr>';
+  try{gLog=await TFA.rpc('acessos_log',{p_auth:GAUTH,p_dias:+$g('lDias').value,p_acesso:$g('lPessoa').value?+$g('lPessoa').value:null})||[];}
+  catch(e){$g('lBody').innerHTML='<tr><td colspan="6"><div class="empty">Não consegui carregar: '+esc(e.message)+'</div></td></tr>';return;}
+  lRender();
+}
+function lFiltrados(){
+  const t=$g('lTipo').value,q=$g('lBusca').value.trim().toLowerCase();
+  return gLog.filter(r=>{
+    if(t==='acesso'&&!['entrou','abriu','saiu','codigo_geral'].includes(r.evento))return false;
+    if(t==='editou'&&r.evento!=='editou')return false;
+    if(t==='alerta'&&!['negado','senha_errada'].includes(r.evento))return false;
+    if(t==='cadastro'&&r.evento!=='cadastro')return false;
+    if(q&&!JSON.stringify(r).toLowerCase().includes(q))return false;return true;});
+}
+function lRender(){
+  const rows=lFiltrados();
+  $g('lInfo').textContent=rows.length+' registro'+(rows.length===1?'':'s')+(gLog.length>=3000?' (mostrando os 3000 mais recentes do período)':'');
+  if(!rows.length){$g('lBody').innerHTML='<tr><td colspan="6"><div class="empty">Nada registrado nesse filtro.</div></td></tr>';return;}
+  $g('lBody').innerHTML=rows.slice(0,800).map(r=>'<tr><td style="white-space:nowrap">'+fmtDH(r.ts)+'</td><td>'+esc(r.nome||'—')+'</td>'+
+    '<td><span class="ev '+esc(r.evento)+'">'+esc(EVTXT[r.evento]||r.evento)+'</span></td><td>'+esc(NOME_P[r.painel]||r.painel||'')+'</td>'+
+    '<td>'+esc(r.resumo||'')+(r.registro&&r.evento==='editou'?' <span class="pill mut">'+esc(r.tabela||'')+' #'+esc(r.registro)+'</span>':'')+difHtml(r)+'</td>'+
+    '<td style="font-size:12px;color:var(--muted)">'+esc(aparelho(r.aparelho))+(r.ip?'<br>'+esc(r.ip):'')+'</td></tr>').join('')+
+    (rows.length>800?'<tr><td colspan="6"><div class="empty">Mostrando 800 de '+rows.length+'. Use os filtros ou baixe a planilha.</div></td></tr>':'');
+}
+['lDias','lPessoa'].forEach(id=>$g(id).addEventListener('change',lCarregar));
+['lTipo','lBusca'].forEach(id=>$g(id).addEventListener('input',lRender));
+$g('lCsv').addEventListener('click',()=>{
+  const rows=lFiltrados(),c=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const csv=['Quando;Quem;Evento;Painel;Detalhe;Tabela;Registro;Mudanças;Aparelho;IP'].concat(rows.map(r=>[fmtDH(r.ts),r.nome,EVTXT[r.evento]||r.evento,NOME_P[r.painel]||r.painel,r.resumo,r.tabela,r.registro,r.dados?JSON.stringify(r.dados):'',aparelho(r.aparelho),r.ip].map(c).join(';'))).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download='historico-acessos-'+ymd+'.csv';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
+});
+/* ajustes */
+async function aCarregar(){try{const c=await TFA.rpc('acesso_config',{});$g('aExigir').checked=!!(c&&c.exigir);gMsg('aMsg','');}catch(e){gMsg('aMsg','Erro: '+e.message,'err');}}
+$g('aSalvar').addEventListener('click',async()=>{
+  const on=$g('aExigir').checked;
+  if(on&&!gPessoas.some(p=>p.admin&&p.ativo)){gMsg('aMsg','Crie primeiro o seu acesso com Administrador marcado. Senão o 8015 deixa de funcionar e você fica sem como entrar na gestão (só com a senha de gestores).','err');return;}
+  if(on&&!confirm('Ligar agora? O código 8015 para de funcionar em todos os painéis.'))return;
+  try{await TFA.rpc('acesso_config_salvar',{p_auth:GAUTH,p_exigir:on});gMsg('aMsg','Salvo.','ok');}catch(e){gMsg('aMsg','Erro: '+e.message,'err');}
+});
+if(location.hash==='#gestao')window.addEventListener('load',()=>{if(!app.classList.contains('hidden')&&!$g('cardGestao').classList.contains('hidden'))abrirGestao();});
 
 function start(){loadTiles();loadOcor();checkCards();setInterval(()=>{loadTiles();loadOcor()},60000);}
 document.getElementById('reload').addEventListener('click',()=>{loadTiles();loadOcor()});

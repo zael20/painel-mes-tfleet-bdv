@@ -68,4 +68,7 @@
 
   if (document.body) add();
   else document.addEventListener('DOMContentLoaded', add);
+
+  // Controle de acessos (senha pessoal, ver/editar por painel): fica todo no central-guard.js.
+  var g = document.createElement('script'); g.src = prefix + 'central-guard.js'; document.head.appendChild(g);
 })();

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Roteador · histórico</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#17212b">
+<style>
+/* Histórico dos e-mails de uso de roteador (resumo diário 18h + alertas antigos por uso) e a tratativa de cada uso.
+   Dados: função roteador_historico (servidor-tvbox/codigos/central-acessos.sql). Quem tem "editar" no Roteador
+   recebe o botão para registrar a tratativa (abre roteador-tratativa.html do mesmo jeito que o e-mail). */
+:root { --bg: #eef1f4; --panel: #fff; --ink: #17212b; --muted: #5b6875; --line: #d5dce3; --accent: #0d6c8c; --accent-soft: #e0eff4; --good: #2e7d32; --good-soft: #e8f5e9; --warn: #b26a00; --warn-soft: #fff4e0; --crit: #c62828; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742; --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f; --warn: #e7a443; --warn-soft: #36280f; --crit: #f07b72; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742; --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f; --warn: #e7a443; --warn-soft: #36280f; --crit: #f07b72; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+header { background: #17212b; color: #fff; padding: 16px; }
+header small { color: #93a1ae; letter-spacing: .06em; font-size: 12px; }
+header h1 { margin: 2px 0 0; font-size: 20px; }
+main { max-width: 860px; margin: 0 auto; padding: 16px; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+select, input { font: inherit; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.btn { font: 600 14px inherit; font-family: inherit; padding: 9px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; text-decoration: none; display: inline-block; white-space: nowrap; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.kpi b { display: block; font-size: 26px; line-height: 1.1; }
+.kpi span { color: var(--muted); font-size: 13px; }
+.mail { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+.mail summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.mail summary::-webkit-details-marker { display: none; }
+.mail summary .t { font-weight: 700; }
+.mail summary .r { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 9px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.tag.ok { background: var(--good-soft); color: var(--good); }
+.tag.pend { background: var(--warn-soft); color: var(--warn); }
+.uso { display: flex; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--line); flex-wrap: wrap; align-items: flex-start; }
+.uso .car { font-weight: 700; min-width: 70px; }
+.uso .info { flex: 1; min-width: 200px; }
+.muted { color: var(--muted); font-size: 13px; }
+.msg { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; color: var(--muted); }
+.err { color: var(--crit); }
+</style>
+</head>
+<body>
+<header><small>MONITOR FROTA · ROTEADOR</small><h1>Histórico dos e-mails de roteador</h1></header>
+<main>
+  <div class="bar">
+    <select id="fDias" aria-label="Período"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option><option value="365">1 ano</option></select>
+    <select id="fSit" aria-label="Situação"><option value="">Todos os usos</option><option value="pend">Sem tratativa</option><option value="ok">Tratados</option></select>
+    <input id="fCarro" placeholder="Carro (ex.: 65)" inputmode="numeric" maxlength="6" aria-label="Carro" style="width:150px">
+  </div>
+  <div id="auth" class="msg" hidden>
+    Entre pela Central com a sua senha pessoal, ou digite a senha de gestores:
+    <div class="bar" style="margin:10px 0 0"><input id="aSenha" type="password" autocomplete="off" placeholder="Senha de gestores"><button class="btn" id="aOk" type="button">Abrir</button></div>
+    <div id="aErr" class="err"></div>
+  </div>
+  <div id="kpis" class="kpis"></div>
+  <div id="lista"><div class="msg">Carregando…</div></div>
+</main>
+<script>
+const SB = "https://orhuxmsrdnugpogvtnbg.supabase.co", KEY = "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL";
+const OPC = { MOTORISTA_ORIENTADO: "Motorista orientado", USO_AUTORIZADO: "Uso autorizado", PASSAGEIRO: "Usado por passageiro",
+  FALHA: "Falha do aparelho", NAO_IDENTIFICADO: "Não identificado", OUTRO: "Outro" };
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const TZ = "America/Belem";
+const dia = d => new Date(d).toLocaleDateString("pt-BR", { timeZone: TZ, weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
+const diaKey = d => new Date(d).toLocaleDateString("sv-SE", { timeZone: TZ });
+const hora = d => d ? new Date(d).toLocaleString("pt-BR", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
+const hm = d => new Date(d).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+const dur = (a, b) => { const m = Math.round((new Date(b) - new Date(a)) / 60000); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}min` : `${m}min`; };
+
+async function rpc(fn, body) {
+  const r = await fetch(SB + "/rest/v1/rpc/" + fn, { method: "POST",
+    headers: { apikey: KEY, Authorization: "Bearer " + KEY, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const t = await r.text();
+  if (!r.ok) { let m = t; try { m = JSON.parse(t).message || t; } catch (e) {} const e = new Error(m); e.status = r.status; throw e; }
+  return t ? JSON.parse(t) : null;
+}
+function sessao() { try { return JSON.parse(localStorage.getItem("tf_sessao") || "null"); } catch (e) { return null; } }
+
+let AUTH = (sessao() || {}).token || "", rows = [];
+async function load() {
+  if (!AUTH) { $("#auth").hidden = false; $("#lista").innerHTML = ""; return; }
+  $("#lista").innerHTML = '<div class="msg">Carregando…</div>';
+  try {
+    rows = await rpc("roteador_historico", { p_auth: AUTH, p_dias: +$("#fDias").value }) || [];
+    $("#auth").hidden = true; render();
+  } catch (e) {
+    if (/permiss|senha/i.test(e.message)) {
+      $("#lista").innerHTML = ""; $("#auth").hidden = false;
+      $("#aErr").textContent = sessao() && AUTH === sessao().token ? "Sua senha pessoal não libera o Roteador." : "Senha incorreta.";
+      AUTH = "";
+    } else $("#lista").innerHTML = `<div class="msg err">Não consegui carregar: ${esc(e.message)}${e.status === 404 ? " (o SQL central-acessos.sql ainda não foi rodado)" : ""}</div>`;
+  }
+}
+function render() {
+  const sit = $("#fSit").value, car = $("#fCarro").value.trim();
+  const fil = rows.filter(r => (!sit || (sit === "ok" ? !!r.tratado_em : !r.tratado_em && r.tipo === "resumo diário"))
+    && (!car || String(r.carro || "").includes(car)));
+  const resumo = rows.filter(r => r.tipo === "resumo diário");
+  const trat = resumo.filter(r => r.tratado_em).length;
+  const mb = rows.reduce((s, r) => s + (Number(r.mb) || 0), 0);
+  const dias = new Set(rows.map(r => diaKey(r.enviado_em) + r.tipo));
+  $("#kpis").innerHTML = `<div class="kpi"><b>${dias.size}</b><span>e-mails no período</span></div>
+    <div class="kpi"><b>${rows.length}</b><span>usos avisados</span></div>
+    <div class="kpi"><b>${trat}/${resumo.length}</b><span>usos com tratativa</span></div>
+    <div class="kpi"><b>${mb.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} MB</b><span>consumo pelo roteador</span></div>`;
+  if (!fil.length) { $("#lista").innerHTML = '<div class="msg">Nenhum uso de roteador nesse filtro. Dia sem uso também gera e-mail ("nenhum uso"), mas não aparece aqui.</div>'; return; }
+  const grupos = new Map();
+  fil.sort((a, b) => new Date(b.enviado_em) - new Date(a.enviado_em)).forEach(r => {
+    const k = diaKey(r.enviado_em) + "|" + r.tipo;
+    if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r);
+  });
+  let i = 0;
+  $("#lista").innerHTML = [...grupos.values()].map(g => {
+    const r0 = g[0], res = r0.tipo === "resumo diário", ok = g.filter(r => r.tratado_em).length;
+    const tit = res ? `Resumo diário de ${dia(r0.enviado_em)} · ${hm(g[g.length - 1].enviado_em)}` : `Alertas por uso de ${dia(r0.enviado_em)}`;
+    const tags = `<span class="tag">${g.length} uso${g.length === 1 ? "" : "s"}</span>` +
+      (res ? (ok === g.length ? '<span class="tag ok">todos tratados</span>' : `<span class="tag pend">${g.length - ok} sem tratativa</span>`) : "");
+    return `<details class="mail" ${i++ < 3 ? "open" : ""}><summary><span class="t">📧 ${tit}</span><span class="r">${tags}</span></summary>` +
+      g.map(r => `<div class="uso"><div class="car">${/^\d/.test(r.carro || "") ? "Carro " : ""}${esc(r.carro)}</div><div class="info">
+          <div>${r.ligado ? hora(r.ligado) + " → " + hm(r.desligado) + ` <span class="muted">(${dur(r.ligado, r.desligado)})</span>` : "desligou " + hora(r.desligado)}
+            · <b>${r.mb != null ? Number(r.mb).toLocaleString("pt-BR") + " MB" : "— MB"}</b></div>
+          ${r.tratado_em ? `<div class="muted">✅ ${esc(OPC[r.tratativa] || r.tratativa)} — ${esc(r.tratado_por)} em ${hora(r.tratado_em)}${r.observacao ? "<br>" + esc(r.observacao) : ""}</div>`
+            : res ? '<div class="muted">⏳ sem tratativa</div>' : '<div class="muted">alerta antigo (antes do resumo diário, sem tratativa)</div>'}
+        </div>${r.token ? `<a class="btn" href="roteador-tratativa.html?t=${esc(r.token)}">${r.tratado_em ? "Corrigir tratativa" : "Registrar tratativa"}</a>` : ""}</div>`).join("") +
+      "</details>";
+  }).join("");
+}
+$("#aOk").addEventListener("click", () => { AUTH = $("#aSenha").value; $("#aErr").textContent = ""; load(); });
+$("#aSenha").addEventListener("keydown", e => { if (e.key === "Enter") $("#aOk").click(); });
+$("#fDias").addEventListener("change", load);
+["#fSit", "#fCarro"].forEach(s => $(s).addEventListener("input", render));
+load();
+</script>
+<script src="central-voltar.js"></script>
+</body>
+</html>
