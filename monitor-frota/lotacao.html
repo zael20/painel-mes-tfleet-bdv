@@ -864,10 +864,12 @@ $("#fDias").addEventListener("change", async () => { await load(); if (gestCarre
 ["#fStatus", "#fBusca", "#fGrupo"].forEach(s => $(s).addEventListener("input", render));
 $("#gateForm").addEventListener("submit", async e => {
   e.preventDefault();
-  if (await codeOk($("#gateCode").value.trim())) { store.set("lot_ok", "1"); $("#gate").remove(); load(); }
+  if (await codeOk($("#gateCode").value.trim())) { store.set("lot_ok", "1"); $("#gate").remove(); load(); abaIni(); }
   else $("#gateErr").textContent = "Código incorreto";
 });
-if (store.get("lot_ok") === "1") { $("#gate").remove(); load(); const t = store.get("lot_tab"); if (t && t !== "ocup") document.querySelector(`.tabs [data-tab="${t}"]`)?.click(); }
+// aba inicial: link com #otim / #fora / #cad / #resp (ex.: card da Central) ou a ultima aberta
+const abaIni = () => { const t = location.hash.slice(1) || store.get("lot_tab"); if (t && t !== "ocup") document.querySelector(`.tabs [data-tab="${t}"]`)?.click(); };
+if (store.get("lot_ok") === "1") { $("#gate").remove(); load(); abaIni(); }
 </script>
 <script src="central-voltar.js"></script>
 </body>
