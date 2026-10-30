@@ -18,12 +18,12 @@
     a.setAttribute('aria-label', 'Voltar à Central');
     a.style.cssText =
       'position:fixed;z-index:2147483000;display:inline-flex;align-items:center;' +
-      'gap:6px;background:#2563eb;color:#fff;text-decoration:none;' +
-      'font:700 15px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;' +
-      'padding:10px 16px;border-radius:999px;line-height:1;' +
-      'box-shadow:0 3px 12px rgba(0,0,0,.30);cursor:pointer;' +
+      'gap:8px;background:#2563eb;color:#fff;text-decoration:none;' +
+      'font:800 17px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;' +
+      'padding:13px 22px;border-radius:999px;line-height:1;border:2px solid #fff;' +
+      'box-shadow:0 4px 16px rgba(0,0,0,.35);cursor:pointer;' +
       'top:calc(10px + env(safe-area-inset-top,0px));' +
-      'right:calc(12px + env(safe-area-inset-right,0px));';
+      'left:calc(12px + env(safe-area-inset-left,0px));';
     a.onmouseenter = function () { a.style.background = '#1d4ed8'; };
     a.onmouseleave = function () { a.style.background = '#2563eb'; };
     document.body.appendChild(a);
