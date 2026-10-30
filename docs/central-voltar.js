@@ -27,6 +27,18 @@
     a.onmouseenter = function () { a.style.background = '#1d4ed8'; };
     a.onmouseleave = function () { a.style.background = '#2563eb'; };
     document.body.appendChild(a);
+    reserveSpace(a);
+  }
+
+  // O botão é fixo (fica sempre visível). Pra ele NUNCA tampar o conteúdo
+  // (ainda mais quando a janela está estreita), reservamos um espaço no topo
+  // da página do tamanho do botão — assim ele fica "num lugar só dele".
+  function reserveSpace(a) {
+    try {
+      var need = Math.ceil(a.getBoundingClientRect().bottom) + 8;
+      var cur = parseFloat(getComputedStyle(document.body).paddingTop) || 0;
+      if (cur < need) document.body.style.paddingTop = need + 'px';
+    } catch (e) { /* layout exótico: no mínimo o botão continua visível */ }
   }
 
   if (document.body) add();
