@@ -497,11 +497,13 @@ function otimDesenha(m, rts, sg, ajusta) {
   if (sg && sg.trecho) L.polyline(sg.trecho, { color: "#ffffff", weight: 10, opacity: .55 }).addTo(g);
   const mover = sg ? (sg.tipo === "LOTA_FIM" ? [...(sg.pontosFim || []), ...(sg.pontosIni || [])] : (sg.pontos || [])) : [];
   for (const p of mover) L.circleMarker(p, { radius: 11, color: "#ff9f1a", weight: 4, fill: false }).bindTooltip("pessoas da sugestão embarcam aqui").addTo(g);
-  for (const gg of (otimRes && otimRes.garagens) || []) L.marker([gg.lat, gg.lon], { icon: L.divIcon({ className: "", html: '<div style="width:16px;height:16px;background:#111;border:2px solid #fff;border-radius:3px"></div>', iconSize: [16, 16] }) })
+  for (const gg of (otimRes && otimRes.garagens) || []) if (Array.isArray(gg.poligono) && gg.poligono.length > 2)
+    L.polygon(gg.poligono, { color: "#111", weight: 2, fillColor: "#111", fillOpacity: .35, dashArray: "4 3" }).bindTooltip(`<b>${esc(gg.nome)}</b><br>embarque registrado aqui não conta (erro de GPS)`).addTo(g);
+  else L.marker([gg.lat, gg.lon], { icon: L.divIcon({ className: "", html: '<div style="width:16px;height:16px;background:#111;border:2px solid #fff;border-radius:3px"></div>', iconSize: [16, 16] }) })
     .bindTooltip(`<b>${esc(gg.nome)}</b><br>embarque registrado aqui não conta (erro de GPS)`).addTo(g);
   const leg = [...(destaque.size ? rts.filter(r => destaque.has(r.id)) : rts.filter(r => r.occ).slice(0, 12))].map(r => `<span><i style="background:${cor[r.id]}"></i>${esc(r.linha)}${papel[r.id] ? " · <b>" + PAPEL_TXT[papel[r.id]] + "</b>" : ""}</span>`);
   const legEl = m.getContainer().nextElementSibling;
-  if (legEl && legEl.classList.contains("leg")) legEl.innerHTML = leg.join("") + (mover.length ? `<span><i class="pt" style="background:transparent;border:3px solid #ff9f1a"></i>onde embarcam as pessoas da sugestão</span>` : "") + `<span><i class="pt" style="background:#111;border:2px solid #fff;border-radius:2px"></i>garagem (não conta)</span><span><i class="pt" style="background:#f07b72;border:2px solid #b3261e"></i>embarca depois do ideal</span><span><i class="pt" style="background:#fff;border:1px solid #17212b"></i>parada cadastrada</span>`;
+  if (legEl && legEl.classList.contains("leg")) legEl.innerHTML = leg.join("") + (mover.length ? `<span><i class="pt" style="background:transparent;border:3px solid #ff9f1a"></i>onde embarcam as pessoas da sugestão</span>` : "") + `<span><i class="pt" style="background:#111;border:2px solid #fff;border-radius:2px"></i>área da garagem (embarque ali não conta)</span><span><i class="pt" style="background:#f07b72;border:2px solid #b3261e"></i>embarca depois do ideal</span><span><i class="pt" style="background:#fff;border:1px solid #17212b"></i>parada cadastrada</span>`;
   if (ajusta) {
     let alvo = sg && (sg.trecho || (sg.pontosFim ? [...sg.pontosFim, ...(sg.pontosIni || [])] : sg.pontos));
     if (alvo && alvo.length > 2) {   // foco no bairro: tira ponto solto longe do resto (ex.: na mina)

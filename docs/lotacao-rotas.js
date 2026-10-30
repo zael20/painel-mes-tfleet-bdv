@@ -36,6 +36,17 @@
     return out;
   }
 
+  // dentro da área da garagem (polígono [[lat,lon],...]) ou, sem área, no raio
+  function naGaragem(g, lat, lon) {
+    const P = Array.isArray(g.poligono) ? g.poligono : null;
+    if (!P || P.length < 3) return dist([g.lat, g.lon], [lat, lon]) <= (g.raio_m || 300);
+    let dentro = false;
+    for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+      const [yi, xi] = P[i], [yj, xj] = P[j];
+      if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) dentro = !dentro;
+    }
+    return dentro;
+  }
   function analisar(entrada) {
     const cap = entrada.cap || 40, lug = entrada.lug || 45, raio = entrada.raio || 300;
     const garagens = (entrada.garagens || []).filter(g => g.lat != null && g.lon != null);
@@ -80,7 +91,7 @@
       const cands = porChave[solta(p.linha) + "|" + p.sentido]; if (!cands) continue;
       const tn = turnoDe(p.tipolinha);
       const rt = cands.find(c => tn && c.turno === tn) || cands[0];
-      if (garagens.some(g => dist([g.lat, g.lon], [+p.lat, +p.lon]) <= (g.raio_m || 300))) continue;   // embarque "na garagem" = erro de GPS
+      if (garagens.some(g => naGaragem(g, +p.lat, +p.lon))) continue;   // embarque "na garagem" = erro de GPS
       rt.linhaBdv = p.linha;
       rt.emb.push({ lat: +p.lat, lon: +p.lon, dia: +p.por_dia || 0, depois: +p.depois_cap_dia || 0, hora: p.hora });
     }
@@ -270,6 +281,6 @@
   }
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const fmt = n => (+n).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
-  const api = { analisar, norm, solta, densifica, dist, turnoDe };
+  const api = { analisar, norm, solta, densifica, dist, turnoDe, naGaragem };
   if (typeof module !== "undefined") module.exports = api; else root.Otim = api;
 })(typeof window !== "undefined" ? window : globalThis);
