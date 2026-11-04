@@ -8,7 +8,8 @@
 <meta name="theme-color" content="#17212b">
 <style>
 /* Pagina aberta pelo link do aviso "ocorrencia resolvida" no WhatsApp. O motorista da a nota (5 opcoes);
-   nota 3 ou menos pede o motivo e o que poderia ter sido melhor. So grava ao tocar em Enviar. */
+   Primeiro confere se e quem relatou (numero do WhatsApp ou matricula); depois a nota, uma vez so.
+   Nota 3 ou menos pede o motivo e o que poderia ter sido melhor. */
 :root { --bg: #eef1f4; --panel: #fff; --ink: #17212b; --muted: #5b6875; --line: #d5dce3; --accent: #0d6c8c; --accent-soft: #e0eff4; --good: #2e7d32; --good-soft: #e8f5e9; --crit: #c62828; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742; --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f; --crit: #f07b72; color-scheme: dark; } }
 :root[data-theme="dark"] { --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742; --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f; --crit: #f07b72; color-scheme: dark; }
@@ -35,6 +36,7 @@ legend { font-weight: 700; margin-bottom: 8px; font-size: 18px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 99px; padding: 8px 12px; font-size: 14px; cursor: pointer; }
 .chip:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .chip input { accent-color: var(--accent); margin: 0; }
+.campo { width: 100%; font: inherit; font-size: 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 10px; }
 textarea { width: 100%; min-height: 90px; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 10px; }
 button { width: 100%; margin-top: 14px; font-family: inherit; font-weight: 600; font-size: 16px; padding: 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
 button:disabled { opacity: .6; }
@@ -54,7 +56,6 @@ const MOTIVOS = [["demorou", "Demorou para resolver"], ["voltou", "O problema vo
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const dt = d => d ? new Date(d).toLocaleString("pt-BR", { timeZone: "America/Belem", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às") : "";
-const dia = d => d ? new Date(d).toLocaleDateString("pt-BR", { timeZone: "America/Belem", day: "2-digit", month: "2-digit" }) : "";
 
 async function rpc(fn, body) {
   const r = await fetch(CONFIG.url + "/rest/v1/rpc/" + fn, { method: "POST",
@@ -65,47 +66,71 @@ async function rpc(fn, body) {
 }
 
 (async () => {
-  const token = new URLSearchParams(location.search).get("t") || "";
-  if (!/^[0-9a-f]{12}$/i.test(token)) { $("#app").textContent = "Link inválido. Abra pelo link da mensagem do WhatsApp."; return; }
+  const token = (new URLSearchParams(location.search).get("t") || "").toLowerCase();
+  if (!/^[0-9a-f]{12}$/.test(token)) { $("#app").textContent = "Link inválido. Abra pelo link da mensagem do WhatsApp."; return; }
   let c;
-  try { c = await rpc("avaliacao_ver", { p_token: token.toLowerCase() }); } catch (e) { $("#app").textContent = "Não consegui carregar: " + e.message; return; }
+  try { c = await rpc("avaliacao_ver", { p_token: token }); } catch (e) { $("#app").textContent = "Não consegui carregar: " + e.message; return; }
   if (!c) { $("#app").textContent = "Ocorrência não encontrada."; return; }
-  const notaAnt = c.nota, mot = c.motivos || [];
-  if (notaAnt && !c.pode_mudar) {
-    $("#app").innerHTML = `<div class="ok">Você já avaliou esse atendimento: ${esc(NOTAS.find(n => n[0] === notaAnt)[2])}. Obrigado!</div>`; return;
-  }
-  $("#app").innerHTML = `
-    <div>${c.nome ? esc(c.nome) + ", conte" : "Conte"} pra gente como foi a solução do seu relato.</div>
-    <div class="caso"><b>Carro ${esc(c.tag || "?")} · ${esc(c.categoria)}</b>
+  if (c.ja_avaliada) { $("#app").innerHTML = `<div class="ok">Essa ocorrência já foi avaliada. Obrigado!</div>`; return; }
+  if (c.bloqueado) { $("#app").textContent = "Link bloqueado por tentativas erradas. Fale com a equipe do transporte."; return; }
+  const caso = `<div class="caso"><b>Carro ${esc(c.tag || "?")} · ${esc(c.categoria)}</b>
       <span class="muted">${esc(c.problema || "")}${c.resolvido_em ? " · resolvida em " + dt(c.resolvido_em) : ""}</span>
-      ${c.solucao ? `<div class="muted">Solução: ${esc(c.solucao)}</div>` : ""}</div>
-    ${notaAnt ? `<div class="ok" style="margin-top:10px">Você já avaliou em ${dia(c.avaliado_em)}. Pode mudar abaixo.</div>` : ""}
+      ${c.solucao ? `<div class="muted">Solução: ${esc(c.solucao)}</div>` : ""}</div>`;
+  // 1) quem esta avaliando: so quem relatou essa ocorrencia no grupo
+  $("#app").innerHTML = `${caso}
+    <form id="fi">
+      <fieldset><legend>Quem está avaliando?</legend>
+        <div class="muted">Só quem relatou essa ocorrência no grupo pode avaliar. Digite o seu número de WhatsApp com DDD (ou a sua matrícula).</div>
+        <input id="ident" class="campo" type="text" inputmode="numeric" autocomplete="tel" maxlength="20" placeholder="Ex.: 91 99999-8888">
+      </fieldset>
+      <button id="bi">Continuar</button>
+      <div id="ei" class="err"></div>
+    </form>`;
+  $("#fi").addEventListener("submit", async e => {
+    e.preventDefault();
+    const ident = $("#ident").value.trim();
+    if (ident.replace(/\D/g, "").length < 4) { $("#ei").textContent = "Digite seu número com DDD ou sua matrícula."; return; }
+    $("#bi").disabled = true; $("#ei").textContent = "";
+    try {
+      const r = await rpc("avaliacao_identificar", { p_token: token, p_ident: ident });
+      if (!r.ok) { $("#bi").disabled = false; $("#ei").textContent = r.erro; return; }
+      form(ident, r.nome);
+    } catch (err) { $("#bi").disabled = false; $("#ei").textContent = "Não consegui conferir: " + err.message; }
+  });
+  // 2) a nota
+  function form(ident, nome) {
+    $("#app").innerHTML = `
+    <div>${nome ? esc(nome) + ", conte" : "Conte"} pra gente como foi a solução do seu relato.</div>
+    ${caso}
     <form id="f">
       <fieldset><legend>Como você avalia a solução?</legend>
-        ${NOTAS.map(([v, e, t]) => `<label class="opt"><input type="radio" name="n" value="${v}" ${v === notaAnt ? "checked" : ""}><span class="cara" aria-hidden="true">${e}</span>${t}</label>`).join("")}
+        ${NOTAS.map(([v, e, t]) => `<label class="opt"><input type="radio" name="n" value="${v}"><span class="cara" aria-hidden="true">${e}</span>${t}</label>`).join("")}
       </fieldset>
-      <div class="melhor" id="melhor" ${notaAnt && notaAnt <= 3 ? "" : "hidden"}>
+      <div class="melhor" id="melhor" hidden>
         <p>O que poderia ter sido feito melhor?</p>
-        <div class="chips">${MOTIVOS.map(([k, t]) => `<label class="chip"><input type="checkbox" name="m" value="${k}" ${mot.includes(k) ? "checked" : ""}>${t}</label>`).join("")}</div>
-        <textarea id="obs" maxlength="1000" placeholder="Ex.: o suporte continuou solto, podia ter trocado">${esc(c.observacao || "")}</textarea>
+        <div class="chips">${MOTIVOS.map(([k, t]) => `<label class="chip"><input type="checkbox" name="m" value="${k}">${t}</label>`).join("")}</div>
+        <textarea id="obs" maxlength="1000" placeholder="Ex.: o suporte continuou solto, podia ter trocado"></textarea>
       </div>
+      <div class="muted" style="margin-top:12px">A avaliação é uma só e não pode ser mudada depois.</div>
       <button id="b">Enviar avaliação</button>
       <div id="e" class="err"></div>
     </form>`;
-  const nota = () => +($('input[name="n"]:checked')?.value || 0);
-  $("#f").addEventListener("change", e => { if (e.target.name === "n") { $("#melhor").hidden = nota() > 3; $("#e").textContent = ""; } });
-  $("#f").addEventListener("submit", async e => {
-    e.preventDefault();
-    const n = nota(), obs = $("#obs").value.trim(), ms = n <= 3 ? [...document.querySelectorAll('input[name="m"]:checked')].map(x => x.value) : [];
-    if (!n) { $("#e").textContent = "Escolha uma das opções."; return; }
-    if (n <= 3 && !ms.length && !obs) { $("#e").textContent = "Marque um motivo ou escreva o que poderia ter sido melhor."; $("#obs").focus(); return; }
-    $("#b").disabled = true; $("#b").textContent = "Enviando…"; $("#e").textContent = "";
-    try {
-      await rpc("avaliacao_responder", { p_token: token.toLowerCase(), p_nota: n, p_motivos: ms, p_observacao: n <= 3 ? obs || null : null });
-      $("#app").innerHTML = `<div class="ok">Avaliação registrada. Obrigado!</div>
-        <p class="muted">${esc(NOTAS.find(x => x[0] === n)[2])}${n <= 3 ? ". Sua resposta ajuda a melhorar a vistoria dos celulares." : "."}</p>`;
-    } catch (err) { $("#b").disabled = false; $("#b").textContent = "Enviar avaliação"; $("#e").textContent = "Não enviou: " + err.message; }
-  });
+    const nota = () => +($('input[name="n"]:checked')?.value || 0);
+    $("#f").addEventListener("change", e => { if (e.target.name === "n") $("#melhor").hidden = nota() > 3; $("#e").textContent = ""; });
+    $("#f").addEventListener("submit", async e => {
+      e.preventDefault();
+      const n = nota(), obs = $("#obs").value.trim(), ms = n <= 3 ? [...document.querySelectorAll('input[name="m"]:checked')].map(x => x.value) : [];
+      if (!n) { $("#e").textContent = "Escolha uma das opções."; return; }
+      if (n <= 3 && !ms.length && !obs) { $("#e").textContent = "Marque um motivo ou escreva o que poderia ter sido melhor."; $("#obs").focus(); return; }
+      $("#b").disabled = true; $("#b").textContent = "Enviando…"; $("#e").textContent = "";
+      try {
+        const r = await rpc("avaliacao_responder", { p_token: token, p_ident: ident, p_nota: n, p_motivos: ms, p_observacao: n <= 3 ? obs || null : null });
+        if (!r.ok) throw new Error(r.erro);
+        $("#app").innerHTML = `<div class="ok">Avaliação registrada. Obrigado!</div>
+          <p class="muted">${esc(NOTAS.find(x => x[0] === n)[2])}${n <= 3 ? ". Sua resposta ajuda a melhorar a vistoria dos celulares." : "."}</p>`;
+      } catch (err) { $("#b").disabled = false; $("#b").textContent = "Enviar avaliação"; $("#e").textContent = "Não enviou: " + err.message; }
+    });
+  }
 })();
 </script>
 </body>

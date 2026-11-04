@@ -858,7 +858,7 @@ begin
            ' ocorrência do carro ' || coalesce(o.tag, '?') || ' (' || public.categoria_texto(o.categoria) || ') foi resolvida em ' ||
            to_char(o.resolvido_em at time zone 'America/Belem', 'DD/MM "às" HH24:MI') || '.' ||
            coalesce(E'\nSolução: ' || nullif(trim(o.solucao), ''), '') ||
-           coalesce(E'\n\n_Como foi o atendimento? Avalie aqui:_ ' || nullif(c.avaliacao_url, '') || '?t=' || public.avaliacao_token_de(o.id), '') as texto
+           coalesce(E'\n\n_Como foi o atendimento? Quem relatou pode avaliar aqui:_ ' || nullif(c.avaliacao_url, '') || '?t=' || public.avaliacao_token_de(o.id), '') as texto
     from ocorrencias o
     cross join lateral (select w.* from whatsapp_msgs w where w.ocorrencia_id = o.id and w.grupo_jid like '%@g.us'
                          order by w.ts limit 1) m
@@ -886,6 +886,7 @@ grant execute on function public.aviso_marcar(bigint, boolean, text) to service_
 -- O aviso de resolvida leva o link avaliacao.html?t=CODIGO (secao "LINK DE AVALIACAO" acima).
 -- Nota: 5 muito satisfeito, 4 satisfeito, 3 parcialmente, 2 pouco satisfeito, 1 insatisfeito.
 -- Nota 3 ou menos pede o motivo (botoes) e/ou o que poderia ser melhor (texto).
+-- So quem relatou avalia (numero do WhatsApp ou matricula), uma vez por ocorrencia.
 -- O fluxo n8n "Agrupar avaliacoes" manda os textos ao Gemini, que junta os que dizem a mesma coisa num TEMA
 -- (ex.: "suporte continuou quebrado" + "podia ter trocado o suporte" -> "Suporte nao foi resolvido de vez").
 create table if not exists public.avaliacao_temas (
@@ -928,48 +929,125 @@ language sql immutable as $$
                 when 'atendimento' then 'Atendimento / forma de tratar' when 'outro' then 'Outro motivo' else p end;
 $$;
 
+-- QUEM PODE AVALIAR: so quem relatou aquele problema no grupo (quem abriu a ocorrencia ou quem relatou de novo
+-- a mesma ocorrencia depois). A pessoa se identifica com o numero do WhatsApp (ou a matricula, se cadastrada no CHECK BDV).
+-- Cada ocorrencia aceita UMA avaliacao; depois o link trava. 5 tentativas erradas bloqueiam o link.
+alter table public.avaliacao_links
+  add column if not exists tentativas       integer not null default 0,
+  add column if not exists ultima_tentativa text,          -- so o final do numero digitado, para conferencia
+  add column if not exists ultima_tentativa_em timestamptz;
+alter table public.avaliacoes
+  add column if not exists avaliador_phone text,
+  add column if not exists avaliador_por   text;            -- 'telefone' | 'matricula'
+
+-- telefones de quem relatou a ocorrencia (so digitos, com DDI)
+create or replace function public.avaliacao_relatores(p_oc bigint) returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(distinct f) filter (where f is not null), '{}') from (
+    select reporter_phone as f from ocorrencias where id = p_oc
+    union all
+    select public.normaliza_fone(w.autor_jid) from whatsapp_msgs w
+     where w.ocorrencia_id = p_oc and w.acao_ia in ('nova', 'atualiza')) x;
+$$;
+revoke all on function public.avaliacao_relatores(bigint) from public, anon, authenticated;
+
+-- mesmo numero? compara DDD + ultimos 8 digitos (o WhatsApp as vezes guarda o celular sem o 9)
+create or replace function public.fone_bate(a text, b text) returns boolean
+language sql immutable as $$
+  with x as (select regexp_replace(regexp_replace(coalesce(a, ''), '\D', '', 'g'), '^55(?=\d{10,11}$)', '') as a,
+                    regexp_replace(regexp_replace(coalesce(b, ''), '\D', '', 'g'), '^55(?=\d{10,11}$)', '') as b)
+  select length(a) between 10 and 11 and length(b) between 10 and 11 and left(a, 2) = left(b, 2) and right(a, 8) = right(b, 8) from x;
+$$;
+
+-- confere a identificacao; conta tentativa errada. Devolve o telefone de quem relatou ou null.
+create or replace function public.avaliacao_conferir(p_token text, p_ident text, out ok boolean, out erro text, out fone text, out por text)
+language plpgsql security definer set search_path = public as $$
+declare l avaliacao_links; rel text[]; dig text := regexp_replace(coalesce(p_ident, ''), '\D', '', 'g');
+begin
+  ok := false;
+  select * into l from avaliacao_links where token = p_token;
+  if not found then erro := 'Link de avaliação inválido.'; return; end if;
+  if exists (select 1 from avaliacoes where ocorrencia_id = l.ocorrencia_id) then erro := 'Essa ocorrência já foi avaliada. Obrigado!'; return; end if;
+  if l.tentativas >= 5 then erro := 'Link bloqueado por tentativas erradas. Fale com a equipe do transporte.'; return; end if;
+  if length(dig) < 4 then erro := 'Digite seu número de WhatsApp com DDD ou sua matrícula.'; return; end if;
+  rel := public.avaliacao_relatores(l.ocorrencia_id);
+  select r into fone from unnest(rel) r where public.fone_bate(r, dig) limit 1;
+  if fone is not null then por := 'telefone';
+  else
+    select r.phone into fone from relatores r
+     where r.phone = any (rel) and nullif(regexp_replace(coalesce(r.matricula, ''), '\D', '', 'g'), '') = dig limit 1;
+    if fone is not null then por := 'matricula'; end if;
+  end if;
+  if fone is null then
+    update avaliacao_links set tentativas = tentativas + 1, ultima_tentativa = '…' || right(dig, 4), ultima_tentativa_em = now()
+     where ocorrencia_id = l.ocorrencia_id;
+    erro := case when cardinality(rel) = 0 then 'Não achamos o número de quem relatou essa ocorrência, então ela não pode ser avaliada pelo link.'
+                 else 'Esse número não é de quem relatou essa ocorrência no grupo. Só quem relatou pode avaliar.' end;
+    return;
+  end if;
+  ok := true;
+end $$;
+revoke all on function public.avaliacao_conferir(text, text) from public, anon, authenticated;
+
 -- a pagina de avaliacao (publica) so ve a ocorrencia do proprio codigo, sem telefone
 create or replace function public.avaliacao_ver(p_token text) returns jsonb
 language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'tag', o.tag, 'categoria', public.categoria_texto(o.categoria), 'problema', o.problema, 'status', o.status,
     'resolvido_em', o.resolvido_em, 'solucao', o.solucao,
-    'nome', nullif(initcap(lower(split_part(public.nome_chave(coalesce(nullif(trim(r.nome),''),
-                   case when public.nome_valido(o.relatado_por) then o.relatado_por end)), ' ', 1))), ''),
-    'nota', a.nota, 'motivos', a.motivos, 'observacao', a.observacao, 'avaliado_em', a.criado_em,
-    'pode_mudar', a.id is null or a.criado_em > now() - interval '7 days')
+    'ja_avaliada', exists (select 1 from avaliacoes a where a.ocorrencia_id = o.id),
+    'bloqueado', l.tentativas >= 5)
   from avaliacao_links l
   join ocorrencias o on o.id = l.ocorrencia_id
-  left join relatores r on r.phone = o.reporter_phone
-  left join avaliacoes a on a.ocorrencia_id = o.id
   where l.token = p_token and o.status <> 'descartada';
 $$;
 revoke all on function public.avaliacao_ver(text) from public;
 grant execute on function public.avaliacao_ver(text) to anon, authenticated, service_role;
 
--- grava (ou muda, ate 7 dias depois) a avaliacao do codigo
-create or replace function public.avaliacao_responder(p_token text, p_nota integer, p_motivos text[] default '{}', p_observacao text default null)
-returns void language plpgsql security definer set search_path = public as $$
-declare oc bigint; ant avaliacoes; mot text[]; obs text := nullif(left(trim(coalesce(p_observacao, '')), 1000), '');
+-- 1o passo da pagina: confere quem esta avaliando antes de mostrar as notas
+create or replace function public.avaliacao_identificar(p_token text, p_ident text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare c record; nome text;
 begin
-  select ocorrencia_id into oc from avaliacao_links where token = p_token;
-  if oc is null then raise exception 'Link de avaliação inválido.'; end if;
-  if p_nota is null or p_nota not between 1 and 5 then raise exception 'Escolha uma das 5 opções.'; end if;
+  select * into c from public.avaliacao_conferir(p_token, p_ident);
+  if not c.ok then return jsonb_build_object('ok', false, 'erro', c.erro); end if;
+  select coalesce(nullif(trim(r.nome), ''),
+           (select w.autor_nome from whatsapp_msgs w join avaliacao_links l on l.ocorrencia_id = w.ocorrencia_id
+             where l.token = p_token and public.normaliza_fone(w.autor_jid) = c.fone and public.nome_valido(w.autor_nome) limit 1))
+    into nome from (select 1) z left join relatores r on r.phone = c.fone;
+  nome := nullif(initcap(lower(split_part(public.nome_chave(nome), ' ', 1))), '');
+  return jsonb_build_object('ok', true, 'nome', nome);
+end $$;
+revoke all on function public.avaliacao_identificar(text, text) from public;
+grant execute on function public.avaliacao_identificar(text, text) to anon, authenticated, service_role;
+
+-- grava a avaliacao (uma so por ocorrencia, de quem relatou)
+drop function if exists public.avaliacao_responder(text, integer, text[], text);
+create or replace function public.avaliacao_responder(p_token text, p_ident text, p_nota integer, p_motivos text[] default '{}', p_observacao text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare c record; oc bigint; mot text[]; obs text := nullif(left(trim(coalesce(p_observacao, '')), 1000), '');
+begin
+  if p_nota is null or p_nota not between 1 and 5 then return jsonb_build_object('ok', false, 'erro', 'Escolha uma das 5 opções.'); end if;
   select coalesce(array_agg(distinct m), '{}') into mot from unnest(coalesce(p_motivos, '{}')) m
    where m in ('demorou','voltou','provisorio','sem_retorno','atendimento','outro');
-  if p_nota >= 4 then mot := '{}'; end if;   -- nota boa: observacao e opcional, sem motivos
-  if p_nota <= 3 and cardinality(mot) = 0 and obs is null then raise exception 'Conte o que poderia ter sido melhor.'; end if;
-  select * into ant from avaliacoes where ocorrencia_id = oc;
-  if found and ant.criado_em < now() - interval '7 days' then raise exception 'Essa avaliação já foi registrada e não pode mais ser mudada.'; end if;
-  insert into avaliacoes (ocorrencia_id, nota, motivos, observacao)
-  values (oc, p_nota, mot, obs)
-  on conflict (ocorrencia_id) do update set nota = excluded.nota, motivos = excluded.motivos, observacao = excluded.observacao,
-    atualizado_em = now(),
-    tema_id     = case when avaliacoes.observacao is not distinct from excluded.observacao then avaliacoes.tema_id end,
-    tema_status = case when avaliacoes.observacao is not distinct from excluded.observacao then avaliacoes.tema_status end;
+  if p_nota >= 4 then mot := '{}'; obs := null; end if;   -- nota boa: sem motivos
+  if p_nota <= 3 and cardinality(mot) = 0 and obs is null then return jsonb_build_object('ok', false, 'erro', 'Conte o que poderia ter sido melhor.'); end if;
+  select * into c from public.avaliacao_conferir(p_token, p_ident);
+  if not c.ok then return jsonb_build_object('ok', false, 'erro', c.erro); end if;
+  select ocorrencia_id into oc from avaliacao_links where token = p_token;
+  insert into avaliacoes (ocorrencia_id, nota, motivos, observacao, avaliador_phone, avaliador_por)
+  values (oc, p_nota, mot, obs, c.fone, c.por)
+  on conflict (ocorrencia_id) do nothing;
+  if not found then return jsonb_build_object('ok', false, 'erro', 'Essa ocorrência já foi avaliada. Obrigado!'); end if;
+  return jsonb_build_object('ok', true);
 end $$;
-revoke all on function public.avaliacao_responder(text, integer, text[], text) from public;
-grant execute on function public.avaliacao_responder(text, integer, text[], text) to anon, authenticated, service_role;
+revoke all on function public.avaliacao_responder(text, text, integer, text[], text) from public;
+grant execute on function public.avaliacao_responder(text, text, integer, text[], text) to anon, authenticated, service_role;
+
+-- para o CHECK BDV ver tentativas de outro numero (sem o codigo do link)
+create or replace view public.v_avaliacao_tentativas as
+  select ocorrencia_id, tentativas, ultima_tentativa, ultima_tentativa_em from public.avaliacao_links where tentativas > 0;
+grant select on public.v_avaliacao_tentativas to anon, authenticated;
 
 -- n8n: textos que ainda nao tem tema + temas que ja existem (com quantas avaliacoes cada um tem)
 create or replace function public.avaliacoes_para_agrupar(p_limite integer default 25) returns jsonb
@@ -1019,11 +1097,14 @@ grant execute on function public.avaliacoes_aplicar_temas(jsonb) to service_role
 --   update public.avaliacoes set tema_id = null, tema_status = null; delete from public.avaliacao_temas;
 
 -- o que o CHECK BDV le: uma linha por avaliacao, com o carro, a ocorrencia e o tema
-create or replace view public.v_avaliacoes with (security_invoker = on) as
+drop view if exists public.v_avaliacoes;
+create view public.v_avaliacoes with (security_invoker = on) as
   select a.id, a.ocorrencia_id, a.nota, a.motivos, a.observacao, a.tema_id, a.tema_status, a.criado_em, a.atualizado_em,
          t.titulo as tema_titulo, t.melhoria as tema_melhoria,
-         o.tag, o.categoria, o.problema, o.solucao, o.resolvido_em, o.resolvido_por, o.reporter_phone, o.relatado_por
+         o.tag, o.categoria, o.problema, o.solucao, o.resolvido_em, o.resolvido_por, o.reporter_phone, o.relatado_por,
+         a.avaliador_phone, a.avaliador_por, ra.nome as avaliador_nome, ra.matricula as avaliador_matricula
     from avaliacoes a
     join ocorrencias o on o.id = a.ocorrencia_id
-    left join avaliacao_temas t on t.id = a.tema_id;
+    left join avaliacao_temas t on t.id = a.tema_id
+    left join relatores ra on ra.phone = a.avaliador_phone;
 grant select on public.v_avaliacoes to anon, authenticated;
