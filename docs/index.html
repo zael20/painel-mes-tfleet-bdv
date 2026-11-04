@@ -141,8 +141,8 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 @media (prefers-reduced-motion: no-preference) { .card, .btn, .chip { transition: border-color .15s, background .15s; } }
 
 /* abas */
-.tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin: 4px 0 14px; }
-.tab { border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 9px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); margin: 4px 0 14px; }
+.tab { border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 9px 10px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 .tab:hover { color: var(--ink); }
 
@@ -190,6 +190,15 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 .cfggrid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .cfggrid input, .cfggrid select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 8px 10px; font: inherit; }
 .cfg-hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.rtwrap { overflow-x: auto; }
+.rttab { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.rttab th, .rttab td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.rttab th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.rtrow { cursor: pointer; } .rtrow:hover td { background: var(--accent-soft); }
+.rtdet td { background: var(--bg); font-size: 13px; line-height: 1.6; }
+.rtchip { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); white-space: nowrap; }
+.rtchip.ok { color: var(--good); background: var(--good-soft); } .rtchip.warn { color: var(--warn); }
+#viewRoteador .cfgcard { max-width: none; }
 
 /* aba diagnóstico */
 .diag-head { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
@@ -252,7 +261,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Monitor Frota <span class="buildtag">painel v0.6.6</span></h1>
+      <h1>Monitor Frota <span class="buildtag">painel v0.6.7</span></h1>
       <div class="meta" id="meta">Carregando…</div>
     </div>
     <div class="actions">
@@ -267,6 +276,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
     <button class="tab" type="button" data-view="aparelhos" aria-pressed="false">Aparelhos</button>
     <button class="tab" type="button" data-view="eventos" aria-pressed="false">Eventos</button>
     <button class="tab" type="button" data-view="diag" aria-pressed="false">Diagnóstico</button>
+    <button class="tab" type="button" data-view="roteador" aria-pressed="false">Uso no roteador</button>
     <button class="tab" type="button" data-view="config" aria-pressed="false">Configurações</button>
   </nav>
 
@@ -335,6 +345,24 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
       <span class="meta" id="diagMeta"></span>
     </div>
     <div id="diagBody"><div class="empty">Abra a aba para analisar.</div></div>
+  </section>
+
+  <section id="viewRoteador" hidden>
+    <div class="toolbar">
+      <span class="label">Período</span>
+      <select id="rtPeriod">
+        <option value="1">Últimas 24 h</option>
+        <option value="7" selected>7 dias</option>
+        <option value="15">15 dias</option>
+        <option value="30">30 dias</option>
+        <option value="90">90 dias</option>
+      </select>
+      <span class="meta" id="rtMeta"></span>
+    </div>
+    <div class="evgrid" id="rtSummary"></div>
+    <div id="rtBody"><div class="empty">Carregando…</div></div>
+    <div id="rtRank" style="margin-top:16px"></div>
+    <div id="rtCfg" style="margin-top:16px"></div>
   </section>
 
   <section id="viewConfig" hidden>
@@ -1079,10 +1107,12 @@ function switchView(v) {
   $("#viewEventos").hidden = v !== "eventos";
   $("#viewDiag").hidden = v !== "diag";
   $("#viewConfig").hidden = v !== "config";
+  $("#viewRoteador").hidden = v !== "roteador";
   if (v === "aparelhos") loadAparelhos();
   if (v === "eventos") loadEventos();
   if (v === "diag") loadDiag();
   if (v === "config") renderConfig();
+  if (v === "roteador") { renderRoteadorCfg(); loadRoteador(); }
 }
 
 // ------------------------------------------------------------------ aba aparelhos (roster: versão + última comunicação)
@@ -1469,22 +1499,9 @@ function renderConfig() {
     <div style="margin-top:12px"><button class="btn primary" type="button" id="gSave" ${dis}>Salvar limites</button>
       <span class="calib-note" id="gMsg">${mode === "live" ? "" : "Disponível ao conectar o Supabase."}</span></div>
   </div>
-  <div class="cfgcard" style="margin-top:16px">
-    <span class="label">Alerta de uso de roteador por e-mail</span>
-    <p class="cfg-hint">Quando um carro liga o roteador (hotspot) e depois desliga, envia um e-mail com o carro, a data/hora, o total de MB usados, o trajeto feito enquanto o roteador esteve ligado e a leitura do momento. O envio é feito por um serviço de apoio (ver observação abaixo); aqui você define para quem e a partir de quanto avisar.</p>
-    <div class="cfggrid">
-      <label>Enviar e-mail de alerta<select id="eOn" ${dis}><option value="0" ${g.email_alert_on ? "" : "selected"}>não</option><option value="1" ${g.email_alert_on ? "selected" : ""}>sim</option></select></label>
-      <label>Avisar a partir de (MB)<input type="number" step="0.1" id="eMin" value="${num("email_alert_min_mb", 0)}" ${dis}></label>
-      <label style="grid-column:1/-1">Destinatários (e-mails separados por vírgula)<input type="text" id="eTo" value="${esc(g.email_alert_to || "")}" placeholder="fulano@empresa.com, outro@empresa.com" ${dis}></label>
-    </div>
-    <div class="cfg-hint">Consumo mínimo 0 = avisa qualquer uso do roteador. A página do painel só guarda esta configuração; quem dispara o e-mail é o serviço de apoio ligado ao Supabase (combinar comigo qual: n8n de vocês ou função do Supabase).</div>
-    <div style="margin-top:12px"><button class="btn primary" type="button" id="eSave" ${dis}>Salvar alerta de e-mail</button>
-      <span class="calib-note" id="eMsg">${mode === "live" ? "" : "Disponível ao conectar o Supabase."}</span></div>
-  </div>`;
+`;
   const btn = $("#gSave");
   if (btn) btn.addEventListener("click", saveConfig);
-  const be = $("#eSave");
-  if (be) be.addEventListener("click", saveEmailAlert);
 }
 
 async function saveEmailAlert() {
@@ -1522,10 +1539,116 @@ async function saveConfig() {
   $("#gMsg").textContent = "Salvo. Os celulares aplicam em até 30 min ou ao reiniciar.";
 }
 
+// ------------------------------------------------------------------ aba uso no roteador (registros + alerta por e-mail)
+let rtRows = [], rtSel = null;
+const TRAT = { MOTORISTA_ORIENTADO: "Motorista orientado", USO_AUTORIZADO: "Uso autorizado", PASSAGEIRO: "Passageiro", FALHA: "Falha do aparelho", NAO_IDENTIFICADO: "Não identificado", OUTRO: "Outro" };
+const durMin = m => m == null ? "–" : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}min` : `${m}min`;
+const mbTxt = v => Number(v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+
+// Configuracao do alerta por e-mail (mesmas chaves e mesmos ids de antes: eOn, eMin, eTo, eSave).
+// O MB minimo (eMin) tambem filtra a lista de registros.
+function renderRoteadorCfg() {
+  const g = (deviceConfig && deviceConfig["*"]) || {};
+  const dis = mode !== "live" ? "disabled" : "";
+  $("#rtCfg").innerHTML = `<div class="cfgcard">
+    <span class="label">Alerta de uso de roteador por e-mail</span>
+    <p class="cfg-hint">Quando um carro liga o roteador (hotspot), consome dados e depois desliga, envia um e-mail com o carro, a data/hora, os MB usados, o trajeto e a leitura do momento. O envio é feito pelo serviço de apoio (n8n); aqui você define para quem e a partir de quantos MB avisar.</p>
+    <div class="cfggrid">
+      <label>Enviar e-mail de alerta<select id="eOn" ${dis}><option value="0" ${g.email_alert_on ? "" : "selected"}>não</option><option value="1" ${g.email_alert_on ? "selected" : ""}>sim</option></select></label>
+      <label>Avisar a partir de (MB)<input type="number" step="0.1" id="eMin" value="${g.email_alert_min_mb ?? 0}" ${dis}></label>
+      <label style="grid-column:1/-1">Destinatários (e-mails separados por vírgula)<input type="text" id="eTo" value="${esc(g.email_alert_to || "")}" placeholder="fulano@empresa.com, outro@empresa.com" ${dis}></label>
+    </div>
+    <div class="cfg-hint">Consumo mínimo 0 = avisa qualquer uso do roteador. Esse mesmo valor filtra a lista de registros ao lado (troque e clique em Salvar para valer também para o e-mail).</div>
+    <div style="margin-top:12px"><button class="btn primary" type="button" id="eSave" ${dis}>Salvar alerta de e-mail</button>
+      <span class="calib-note" id="eMsg">${mode === "live" ? "" : "Disponível ao conectar o Supabase."}</span></div>
+  </div>`;
+  $("#eSave").addEventListener("click", saveEmailAlert);
+  $("#eMin").addEventListener("change", loadRoteador);
+}
+
+async function loadRoteador() {
+  const days = parseInt($("#rtPeriod").value, 10) || 7;
+  const minMb = parseFloat($("#eMin")?.value) || 0;
+  if (mode !== "live") {
+    $("#rtMeta").textContent = "";
+    $("#rtBody").innerHTML = `<div class="empty">Disponível ao conectar o Supabase.</div>`;
+    return;
+  }
+  $("#rtMeta").textContent = "carregando…";
+  const { data, error } = await sb.rpc("roteador_registros", { p_dias: days, p_min_mb: minMb });
+  if (error) {
+    $("#rtMeta").textContent = "";
+    $("#rtBody").innerHTML = `<div class="empty">Não consegui carregar os registros: ${esc(error.message)}. Rode o SQL roteador-registros.sql no Supabase e atualize a página.</div>`;
+    return;
+  }
+  rtRows = data || [];
+  rtSel = null;
+  renderRoteador();
+}
+
+function renderRoteador() {
+  const rows = rtRows;
+  const pend = rows.filter(r => !r.tratado_em).length;
+  const carros = new Set(rows.map(r => r.carro)).size;
+  const mbTot = rows.reduce((s, r) => s + (Number(r.mb) || 0), 0);
+  $("#rtMeta").textContent = rows.length + " registro(s)";
+  $("#rtSummary").innerHTML = `
+    <div class="evcard"><span class="n">${rows.length}</span><span class="lbl">usos com consumo</span></div>
+    <div class="evcard"><span class="n">${mbTxt(mbTot)}</span><span class="lbl">MB no total</span></div>
+    <div class="evcard"><span class="n">${carros}</span><span class="lbl">carros envolvidos</span></div>
+    <div class="evcard"><span class="n ${pend ? "warn" : ""}">${pend}</span><span class="lbl">sem tratativa</span></div>`;
+
+  // Rankings: so com MB consumido. Motorista e sempre POSSIBILIDADE a investigar.
+  const agrupa = chave => {
+    const m = {};
+    rows.forEach(r => { const k = chave(r); if (!k) return; const o = m[k] || (m[k] = { n: 0, mb: 0 }); o.n++; o.mb += Number(r.mb) || 0; });
+    return Object.entries(m).sort((a, b) => b[1].mb - a[1].mb).slice(0, 10);
+  };
+  const tabela = (lista, col, vazio) => lista.length
+    ? `<table class="rttab"><thead><tr><th>${col}</th><th>Usos</th><th>MB</th></tr></thead><tbody>${lista.map(([k, o]) => `<tr><td>${esc(k)}</td><td>${o.n}</td><td>${mbTxt(o.mb)}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty">${vazio}</div>`;
+  $("#rtRank").innerHTML = `<div class="cfgcard">
+      <span class="label">Possível motorista que mais consumiu</span>
+      <p class="cfg-hint">Possibilidade a investigar, não prova. Quem estava na rota pode não ser quem usou o roteador (passageiro, lavador, outra pessoa). Confira a câmera antes de concluir.</p>
+      ${tabela(agrupa(r => r.motorista_sugerido), "Possível motorista", "Nenhum motorista sugerido ainda. Isso depende do fluxo do n8n (passo 3 da melhoria).")}
+    </div>
+    <div class="cfgcard">
+      <span class="label">Recorrência por carro</span>
+      ${tabela(agrupa(r => r.carro), "Carro", "Sem registros no período.")}
+    </div>`;
+
+  const linha = r => {
+    const id = String(r.event_id);
+    const status = r.tratado_em ? `<span class="rtchip ok">Tratado</span>` : `<span class="rtchip warn">Pendente</span>`;
+    const email = !r.email_enviado_em ? "–" : r.email_aberto_em ? `Aberto ${fmtTime(r.email_aberto_em)}` : "Enviado, não aberto";
+    const det = rtSel !== id ? "" : `<tr class="rtdet"><td colspan="8">
+      <b>Tratativa:</b> ${r.tratado_em ? esc(TRAT[r.tratativa] || r.tratativa) + " · por " + esc(r.tratado_por) + " em " + fmtTime(r.tratado_em) : "ainda não registrada"}<br>
+      <b>Evidência (o que foi feito):</b> ${r.observacao ? esc(r.observacao) : "nenhuma descrita"}<br>
+      <b>E-mail:</b> ${r.email_enviado_em ? "enviado em " + fmtTime(r.email_enviado_em) : "–"}${r.email_aberto_em ? " · aberto em " + fmtTime(r.email_aberto_em) : ""}
+      <div class="cfg-hint">"Aberto" = a imagem de rastreio do e-mail carregou. O Gmail pode carregar sozinho, então não prova que alguém leu.</div>
+    </td></tr>`;
+    return `<tr class="rtrow" data-id="${id}">
+      <td>${fmtTime(r.desligado)}</td>
+      <td><b>${esc(r.carro)}</b></td>
+      <td>${r.ligado ? fmtHour(r.ligado) : "–"} → ${fmtHour(r.desligado)}</td>
+      <td>${durMin(r.minutos)}</td>
+      <td><b>${mbTxt(r.mb)}</b></td>
+      <td>${r.motorista_sugerido ? esc(r.motorista_sugerido) + ' <span class="cfg-hint">?</span>' : "–"}</td>
+      <td>${status}</td>
+      <td>${esc(email)}</td>
+    </tr>` + det;
+  };
+  $("#rtBody").innerHTML = rows.length
+    ? `<div class="rtwrap"><table class="rttab"><thead><tr><th>Quando</th><th>Carro</th><th>Ligado → desligado</th><th>Tempo ligado</th><th>MB</th><th>Possível motorista</th><th>Tratativa</th><th>E-mail</th></tr></thead><tbody>${rows.map(linha).join("")}</tbody></table></div>`
+    : `<div class="empty">Nenhum uso com consumo de MB nesse período (com o mínimo de MB do filtro).</div>`;
+}
+
 // ------------------------------------------------------------------ interacoes
 document.querySelectorAll("#tabs .tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
 $("#evPeriod").addEventListener("change", loadEventos);
 $("#diagPeriod").addEventListener("change", loadDiag);
+$("#rtPeriod").addEventListener("change", loadRoteador);
+$("#rtBody").addEventListener("click", e => { const tr = e.target.closest("tr.rtrow"); if (!tr) return; rtSel = rtSel === tr.dataset.id ? null : tr.dataset.id; renderRoteador(); });
 $("#evType").addEventListener("change", e => { evType = e.target.value; evDrill = evType ? { t: evType } : null; renderEvCounts(); });
 $("#evVeh").addEventListener("change", e => { evVeh = e.target.value; renderEvCounts(); });
 $("#evCounts").addEventListener("click", e => { const c = e.target.closest(".evcard"); if (c) renderEvDrill({ t: c.dataset.type }); });
