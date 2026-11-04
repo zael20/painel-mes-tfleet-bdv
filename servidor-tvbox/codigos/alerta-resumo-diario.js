@@ -19,6 +19,8 @@ const TF_TOKEN  = String(cfg.tfleetToken  || '');
 const JANELA_H = Number(cfg.resumoHoras || 24); // janela do resumo (horas)
 const TRAT_URL = String(cfg.tratativaUrl || 'https://zael20.github.io/painel-mes-tfleet-bdv/roteador-tratativa.html');
 const MIN_MOVE_M   = Number(cfg.minMoveMeters   || 150);
+// Rastreio de abertura do e-mail (imagem 1x1). Funcao do Supabase: abriu-email-roteador.ts
+const ABERTURA_URL = String(cfg.aberturaUrl || 'https://orhuxmsrdnugpogvtnbg.supabase.co/functions/v1/abriu-email-roteador');
 
 const H = { apikey: KEY, Authorization: 'Bearer ' + KEY };
 const http = (opts) => this.helpers.httpRequest(opts);
@@ -183,6 +185,7 @@ for (const ev of offs) {
     // sugestao de motorista (SEMPRE como possibilidade; nunca definitivo)
     const frota = String(devName || '').trim();
     let motorista = '<span style="color:#888;">sem viagem no horario</span>';
+    let motoristaNome = null; // texto puro, vai para roteador_tratativas.motorista_sugerido
     if (onTs) {
       const cand = trips.filter((t) => sameFrota(pick(t, ['frota', 'Frota', 'numero', 'veiculo']), frota));
       let best = null, bestOv = 0;
@@ -200,6 +203,7 @@ for (const ev of offs) {
         const mot = pick(best, ['motorista', 'Motorista', 'nome', 'condutor']);
         const linha = pick(best, ['linha', 'Linha', 'rota']);
         motorista = (mot ? esc(mot) : 'nao informado') + (linha ? ` <span style="color:#888;">(${esc(linha)})</span>` : '') + ' <span style="color:#ad6800;">?</span>';
+        motoristaNome = mot ? String(mot) : 'nao informado';
       }
     }
 
@@ -207,7 +211,7 @@ for (const ev of offs) {
       id: ev.id, carro: frota || devId, mb, offMs,
       periodo: onTs ? `${fmtBelem(onTs)} → ${fmtBelem(offTs).slice(6)}` : `ate ${fmtBelem(offTs)}`,
       duracao: onTs ? dur(offMs - onMs) : '—',
-      local, carga, motorista,
+      local, carga, motorista, motoristaNome,
     });
   } catch (e) {
     // um evento com problema nao derruba os outros
@@ -219,9 +223,10 @@ let TRAT = null, pendentes = [];
 try {
   const ids = usos.map((u) => u.id);
   if (ids.length) {
+    // merge: cria a linha de cada uso ou atualiza carro/motorista/envio; o token e a tratativa ficam como estao
     await http({ method: 'POST', url: SB + '/rest/v1/roteador_tratativas?on_conflict=event_id', json: true,
-      headers: { ...H, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
-      body: ids.map((id) => ({ event_id: id })) });
+      headers: { ...H, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: usos.map((u) => ({ event_id: u.id, carro: u.carro, motorista_sugerido: u.motoristaNome, email_enviado_em: agoraIso })) });
   }
   const rows = ids.length
     ? await sbGet('roteador_tratativas?event_id=in.(' + ids.join(',') + ')&select=event_id,token,tratado_em,tratado_por')
@@ -301,6 +306,7 @@ const html =
     ${blocoPend}
     <div style="margin-top:16px;font-size:12px;color:#999;">Monitor Frota · resumo automatico do servidor da TV Box.</div>
   </div>
+  ${usos.length ? `<img src="${ABERTURA_URL}?ids=${usos.map((u) => u.id).join(',')}" width="1" height="1" alt="" style="display:block;border:0;">` : ''}
 </div>`;
 
 return [{ json: { to, subject, html, eventId: -1 } }];
