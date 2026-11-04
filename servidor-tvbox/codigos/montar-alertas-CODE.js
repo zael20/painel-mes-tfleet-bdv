@@ -156,25 +156,26 @@ for (const ev of offs) {
       plugged: s.plugged === true, ma: Number(s.current_ma),
     })).filter((p) => isFinite(p.lat) && isFinite(p.lon));
 
-    if (pts.length === 0) continue; // criterio: precisa ter rota OU localizacao
+    // sem GPS nesse uso: o aviso sai mesmo assim, so sem rota nem mapa
+    const temGps = pts.length > 0;
 
     // parado x em movimento
     let dist = 0;
     for (let i = 1; i < pts.length; i++) dist += hav(pts[i - 1], pts[i]);
     const maxSpd = pts.reduce((m, p) => Math.max(m, p.spd), 0);
-    const moved = dist >= MIN_MOVE_M || maxSpd >= 5;
+    const moved = temGps && (dist >= MIN_MOVE_M || maxSpd >= 5);
 
     // carga durante a janela
     const chg = (p) => p.plugged && (!isFinite(p.ma) || p.ma >= minCurrent);
     const chargedPts = pts.filter(chg).length;
-    const chargedPct = Math.round(100 * chargedPts / pts.length);
-    const cameCharging = chg(pts[0]);
+    const chargedPct = temGps ? Math.round(100 * chargedPts / pts.length) : null;
+    const cameCharging = temGps && chg(pts[0]);
 
     // links (sempre funcionam, sem chave)
-    const c = pts[Math.floor(pts.length / 2)];
-    const linkFixo  = `https://www.google.com/maps?q=${c.lat},${c.lon}`;
-    const linkRota  = 'https://www.google.com/maps/dir/' +
-      sampleN(pts, 10).map((p) => `${p.lat},${p.lon}`).join('/');
+    const c = temGps ? pts[Math.floor(pts.length / 2)] : null;
+    const linkFixo  = c ? `https://www.google.com/maps?q=${c.lat},${c.lon}` : '';
+    const linkRota  = temGps ? 'https://www.google.com/maps/dir/' +
+      sampleN(pts, 10).map((p) => `${p.lat},${p.lon}`).join('/') : '';
 
     // sugestao de motorista (SEMPRE como possibilidade; nunca definitivo)
     const frota = String(devName || '').trim();
@@ -226,10 +227,14 @@ for (const ev of offs) {
     const mbTxt = (Math.round(mb * 10) / 10).toLocaleString('pt-BR');
     const periodo = `${fmtBelem(onTs)} → ${fmtBelem(offTs)}`;
     const duracao = dur(offMs - onMs);
-    const carga = `${chargedPct}% do tempo carregando bem` +
+    const carga = !temGps ? 'sem dados (GPS nao estava ativo nesse uso)' :
+      `${chargedPct}% do tempo carregando bem` +
       (cameCharging ? ' · entrou carregando' : ' · <b>nao estava carregando no inicio</b>');
 
-    const locBloco = moved
+    const locBloco = !temGps
+      ? `<tr><td style="padding:6px 0;color:#555;">Local</td>
+             <td style="padding:6px 0;"><b>Sem localização</b> — o celular não enviou posição nesse uso.</td></tr>`
+      : moved
       ? `<tr><td style="padding:6px 0;color:#555;">Trajeto</td>
              <td style="padding:6px 0;"><a href="${linkRota}" style="color:#1677ff;">Ver rota no mapa</a>
              — ${(dist / 1000).toFixed(1)} km percorridos</td></tr>`
@@ -285,11 +290,11 @@ for (const ev of offs) {
       <tr><td style="padding:6px 0;color:#555;">Carga</td><td style="padding:6px 0;">${carga}</td></tr>
       ${locBloco}
     </table>
-    <div style="margin-top:18px;">
+    ${temGps ? `<div style="margin-top:18px;">
       <a href="${moved ? linkRota : linkFixo}" style="display:inline-block;background:#1677ff;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;font-size:14px;">
         📍 ${moved ? 'Abrir rota no mapa' : 'Abrir local no mapa'}
       </a>
-    </div>
+    </div>` : ''}
     ${sugestao}
     ${checklist}
     <div style="margin-top:16px;font-size:12px;color:#999;">
