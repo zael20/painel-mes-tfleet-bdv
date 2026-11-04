@@ -938,7 +938,47 @@ alter table public.avaliacao_links
   add column if not exists ultima_tentativa_em timestamptz;
 alter table public.avaliacoes
   add column if not exists avaliador_phone text,
-  add column if not exists avaliador_por   text;            -- 'telefone' | 'matricula'
+  add column if not exists avaliador_por   text,            -- 'telefone' | 'matricula'
+  add column if not exists aparelho_id     text,            -- codigo guardado no navegador do celular que avaliou
+  add column if not exists aparelho        jsonb,           -- modelo, Android, navegador, tela
+  add column if not exists ip              text;
+
+-- ANTIFRAUDE: toda tentativa na pagina fica registrada com o aparelho, o horario e o IP.
+-- Se o mesmo aparelho aparece com numeros diferentes, o CHECK BDV avisa (ex.: alguem copiou o numero de outro).
+-- Nao e prova absoluta (aba anonima ou limpar o navegador gera outro codigo), mas modelo + IP + horario ajudam a conferir.
+create table if not exists public.avaliacao_eventos (
+  id            bigserial primary key,
+  ocorrencia_id bigint references public.ocorrencias(id) on delete cascade,
+  ts            timestamptz not null default now(),
+  tipo          text not null,      -- identificou | numero_errado | avaliou | bloqueado
+  ident_final   text,               -- final do que foi digitado
+  fone          text,               -- numero de quem relatou que bateu (null se errado)
+  aparelho_id   text,
+  aparelho      jsonb,
+  ip            text
+);
+create index if not exists avaliacao_eventos_oc on public.avaliacao_eventos (ocorrencia_id, ts);
+create index if not exists avaliacao_eventos_ap on public.avaliacao_eventos (aparelho_id);
+alter table public.avaliacao_eventos enable row level security;
+drop policy if exists "painel le eventos de avaliacao" on public.avaliacao_eventos;
+create policy "painel le eventos de avaliacao" on public.avaliacao_eventos for select to anon, authenticated using (true);
+revoke all on public.avaliacao_eventos from anon, authenticated;
+grant select on public.avaliacao_eventos to anon, authenticated;
+
+-- IP de quem chamou (o Supabase passa os cabecalhos da requisicao)
+create or replace function public.req_ip() returns text
+language sql stable as $$
+  select nullif(coalesce(current_setting('request.headers', true)::json->>'cf-connecting-ip',
+                         split_part(current_setting('request.headers', true)::json->>'x-forwarded-for', ',', 1)), '');
+$$;
+-- so guarda os campos conhecidos do aparelho, com tamanho limitado
+create or replace function public.aparelho_limpo(a jsonb) returns jsonb
+language sql immutable as $$
+  select case when a is null or jsonb_typeof(a) <> 'object' then null else jsonb_strip_nulls(jsonb_build_object(
+    'modelo', left(a->>'modelo', 60), 'marca', left(a->>'marca', 40), 'sistema', left(a->>'sistema', 40),
+    'navegador', left(a->>'navegador', 60), 'tela', left(a->>'tela', 20), 'idioma', left(a->>'idioma', 20),
+    'ua', left(a->>'ua', 300))) end;
+$$;
 
 -- telefones de quem relatou a ocorrencia (so digitos, com DDI)
 create or replace function public.avaliacao_relatores(p_oc bigint) returns text[]
@@ -960,15 +1000,20 @@ language sql immutable as $$
 $$;
 
 -- confere a identificacao; conta tentativa errada. Devolve o telefone de quem relatou ou null.
-create or replace function public.avaliacao_conferir(p_token text, p_ident text, out ok boolean, out erro text, out fone text, out por text)
+drop function if exists public.avaliacao_conferir(text, text);
+create or replace function public.avaliacao_conferir(p_token text, p_ident text, p_aparelho jsonb, out ok boolean, out erro text, out fone text, out por text)
 language plpgsql security definer set search_path = public as $$
 declare l avaliacao_links; rel text[]; dig text := regexp_replace(coalesce(p_ident, ''), '\D', '', 'g');
+        ap jsonb := public.aparelho_limpo(p_aparelho); apid text := left(p_aparelho->>'id', 40);
 begin
   ok := false;
   select * into l from avaliacao_links where token = p_token;
   if not found then erro := 'Link de avaliação inválido.'; return; end if;
   if exists (select 1 from avaliacoes where ocorrencia_id = l.ocorrencia_id) then erro := 'Essa ocorrência já foi avaliada. Obrigado!'; return; end if;
-  if l.tentativas >= 5 then erro := 'Link bloqueado por tentativas erradas. Fale com a equipe do transporte.'; return; end if;
+  if l.tentativas >= 5 then
+    insert into avaliacao_eventos (ocorrencia_id, tipo, ident_final, aparelho_id, aparelho, ip) values (l.ocorrencia_id, 'bloqueado', right(dig, 4), apid, ap, public.req_ip());
+    erro := 'Link bloqueado por tentativas erradas. Fale com a equipe do transporte.'; return;
+  end if;
   if length(dig) < 4 then erro := 'Digite seu número de WhatsApp com DDD ou sua matrícula.'; return; end if;
   rel := public.avaliacao_relatores(l.ocorrencia_id);
   select r into fone from unnest(rel) r where public.fone_bate(r, dig) limit 1;
@@ -981,13 +1026,15 @@ begin
   if fone is null then
     update avaliacao_links set tentativas = tentativas + 1, ultima_tentativa = '…' || right(dig, 4), ultima_tentativa_em = now()
      where ocorrencia_id = l.ocorrencia_id;
+    insert into avaliacao_eventos (ocorrencia_id, tipo, ident_final, aparelho_id, aparelho, ip) values (l.ocorrencia_id, 'numero_errado', right(dig, 4), apid, ap, public.req_ip());
     erro := case when cardinality(rel) = 0 then 'Não achamos o número de quem relatou essa ocorrência, então ela não pode ser avaliada pelo link.'
                  else 'Esse número não é de quem relatou essa ocorrência no grupo. Só quem relatou pode avaliar.' end;
     return;
   end if;
+  insert into avaliacao_eventos (ocorrencia_id, tipo, ident_final, fone, aparelho_id, aparelho, ip) values (l.ocorrencia_id, 'identificou', right(dig, 4), fone, apid, ap, public.req_ip());
   ok := true;
 end $$;
-revoke all on function public.avaliacao_conferir(text, text) from public, anon, authenticated;
+revoke all on function public.avaliacao_conferir(text, text, jsonb) from public, anon, authenticated;
 
 -- a pagina de avaliacao (publica) so ve a ocorrencia do proprio codigo, sem telefone
 create or replace function public.avaliacao_ver(p_token text) returns jsonb
@@ -1005,11 +1052,12 @@ revoke all on function public.avaliacao_ver(text) from public;
 grant execute on function public.avaliacao_ver(text) to anon, authenticated, service_role;
 
 -- 1o passo da pagina: confere quem esta avaliando antes de mostrar as notas
-create or replace function public.avaliacao_identificar(p_token text, p_ident text) returns jsonb
+drop function if exists public.avaliacao_identificar(text, text);
+create or replace function public.avaliacao_identificar(p_token text, p_ident text, p_aparelho jsonb default null) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare c record; nome text;
 begin
-  select * into c from public.avaliacao_conferir(p_token, p_ident);
+  select * into c from public.avaliacao_conferir(p_token, p_ident, p_aparelho);
   if not c.ok then return jsonb_build_object('ok', false, 'erro', c.erro); end if;
   select coalesce(nullif(trim(r.nome), ''),
            (select w.autor_nome from whatsapp_msgs w join avaliacao_links l on l.ocorrencia_id = w.ocorrencia_id
@@ -1018,12 +1066,14 @@ begin
   nome := nullif(initcap(lower(split_part(public.nome_chave(nome), ' ', 1))), '');
   return jsonb_build_object('ok', true, 'nome', nome);
 end $$;
-revoke all on function public.avaliacao_identificar(text, text) from public;
-grant execute on function public.avaliacao_identificar(text, text) to anon, authenticated, service_role;
+revoke all on function public.avaliacao_identificar(text, text, jsonb) from public;
+grant execute on function public.avaliacao_identificar(text, text, jsonb) to anon, authenticated, service_role;
 
 -- grava a avaliacao (uma so por ocorrencia, de quem relatou)
 drop function if exists public.avaliacao_responder(text, integer, text[], text);
-create or replace function public.avaliacao_responder(p_token text, p_ident text, p_nota integer, p_motivos text[] default '{}', p_observacao text default null)
+drop function if exists public.avaliacao_responder(text, text, integer, text[], text);
+create or replace function public.avaliacao_responder(p_token text, p_ident text, p_nota integer, p_motivos text[] default '{}', p_observacao text default null,
+                                                      p_aparelho jsonb default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare c record; oc bigint; mot text[]; obs text := nullif(left(trim(coalesce(p_observacao, '')), 1000), '');
 begin
@@ -1032,17 +1082,19 @@ begin
    where m in ('demorou','voltou','provisorio','sem_retorno','atendimento','outro');
   if p_nota >= 4 then mot := '{}'; obs := null; end if;   -- nota boa: sem motivos
   if p_nota <= 3 and cardinality(mot) = 0 and obs is null then return jsonb_build_object('ok', false, 'erro', 'Conte o que poderia ter sido melhor.'); end if;
-  select * into c from public.avaliacao_conferir(p_token, p_ident);
+  select * into c from public.avaliacao_conferir(p_token, p_ident, p_aparelho);
   if not c.ok then return jsonb_build_object('ok', false, 'erro', c.erro); end if;
   select ocorrencia_id into oc from avaliacao_links where token = p_token;
-  insert into avaliacoes (ocorrencia_id, nota, motivos, observacao, avaliador_phone, avaliador_por)
-  values (oc, p_nota, mot, obs, c.fone, c.por)
+  insert into avaliacoes (ocorrencia_id, nota, motivos, observacao, avaliador_phone, avaliador_por, aparelho_id, aparelho, ip)
+  values (oc, p_nota, mot, obs, c.fone, c.por, left(p_aparelho->>'id', 40), public.aparelho_limpo(p_aparelho), public.req_ip())
   on conflict (ocorrencia_id) do nothing;
   if not found then return jsonb_build_object('ok', false, 'erro', 'Essa ocorrência já foi avaliada. Obrigado!'); end if;
+  insert into avaliacao_eventos (ocorrencia_id, tipo, ident_final, fone, aparelho_id, aparelho, ip)
+  values (oc, 'avaliou', right(regexp_replace(coalesce(p_ident, ''), '\D', '', 'g'), 4), c.fone, left(p_aparelho->>'id', 40), public.aparelho_limpo(p_aparelho), public.req_ip());
   return jsonb_build_object('ok', true);
 end $$;
-revoke all on function public.avaliacao_responder(text, text, integer, text[], text) from public;
-grant execute on function public.avaliacao_responder(text, text, integer, text[], text) to anon, authenticated, service_role;
+revoke all on function public.avaliacao_responder(text, text, integer, text[], text, jsonb) from public;
+grant execute on function public.avaliacao_responder(text, text, integer, text[], text, jsonb) to anon, authenticated, service_role;
 
 -- para o CHECK BDV ver tentativas de outro numero (sem o codigo do link)
 create or replace view public.v_avaliacao_tentativas as
@@ -1102,7 +1154,12 @@ create view public.v_avaliacoes with (security_invoker = on) as
   select a.id, a.ocorrencia_id, a.nota, a.motivos, a.observacao, a.tema_id, a.tema_status, a.criado_em, a.atualizado_em,
          t.titulo as tema_titulo, t.melhoria as tema_melhoria,
          o.tag, o.categoria, o.problema, o.solucao, o.resolvido_em, o.resolvido_por, o.reporter_phone, o.relatado_por,
-         a.avaliador_phone, a.avaliador_por, ra.nome as avaliador_nome, ra.matricula as avaliador_matricula
+         a.avaliador_phone, a.avaliador_por, ra.nome as avaliador_nome, ra.matricula as avaliador_matricula,
+         a.aparelho_id, a.aparelho, a.ip,
+         -- ALERTA: outros numeros que ja se identificaram neste mesmo aparelho (em qualquer avaliacao)
+         (select array_agg(distinct e.fone) from public.avaliacao_eventos e
+           where a.aparelho_id is not null and e.aparelho_id = a.aparelho_id and e.fone is not null
+             and not public.fone_bate(e.fone, a.avaliador_phone)) as aparelho_outros_numeros
     from avaliacoes a
     join ocorrencias o on o.id = a.ocorrencia_id
     left join avaliacao_temas t on t.id = a.tema_id

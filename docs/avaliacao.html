@@ -57,6 +57,32 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const dt = d => d ? new Date(d).toLocaleString("pt-BR", { timeZone: "America/Belem", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às") : "";
 
+// Antifraude: codigo guardado neste navegador + modelo do celular. Vai junto de cada tentativa, com o horario e o IP.
+function aparelhoId() {
+  try { let id = localStorage.getItem("tf_aparelho"); if (!id) { id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2); localStorage.setItem("tf_aparelho", id); } return id; }
+  catch (e) { return null; }
+}
+async function aparelho() {
+  const ua = navigator.userAgent, a = { id: aparelhoId(), ua, idioma: navigator.language, tela: screen.width + "x" + screen.height };
+  const m = ua.match(/Android\s([\d.]+);\s*([^;)]+?)(?:\sBuild\/|\)|;)/);
+  if (m) { a.sistema = "Android " + m[1]; if (m[2].trim() !== "K") a.modelo = m[2].trim(); }
+  const ios = ua.match(/(iPhone|iPad).*?OS (\d+)/); if (ios) { a.modelo = ios[1]; a.sistema = "iOS " + ios[2]; }
+  try {   // o Chrome novo esconde o modelo no texto acima, mas informa quando pedido
+    if (navigator.userAgentData?.getHighEntropyValues) {
+      const h = await navigator.userAgentData.getHighEntropyValues(["model", "platformVersion"]);
+      if (h.model) a.modelo = h.model; if (h.platform === "Android" && h.platformVersion) a.sistema = "Android " + h.platformVersion.split(".")[0];
+    }
+  } catch (e) {}
+  if (/^SM-/i.test(a.modelo || "")) a.marca = "Samsung"; else if (/moto/i.test(a.modelo || "")) a.marca = "Motorola";
+  else if (/redmi|poco|^M\d{4}|^2\d{3}/i.test(a.modelo || "")) a.marca = "Xiaomi"; else if (ios) a.marca = "Apple";
+  const nv = ua.match(/SamsungBrowser\/(\d+)/) ? "Samsung Internet " + ua.match(/SamsungBrowser\/(\d+)/)[1]
+    : / wv\)/.test(ua) ? "navegador dentro de app" : ua.match(/Firefox\/(\d+)/) ? "Firefox " + ua.match(/Firefox\/(\d+)/)[1]
+    : ua.match(/Chrome\/(\d+)/) ? "Chrome " + ua.match(/Chrome\/(\d+)/)[1] : ua.match(/Safari/) ? "Safari" : null;
+  if (nv) a.navegador = nv;
+  return a;
+}
+const AP = aparelho();
+
 async function rpc(fn, body) {
   const r = await fetch(CONFIG.url + "/rest/v1/rpc/" + fn, { method: "POST",
     headers: { apikey: CONFIG.key, Authorization: "Bearer " + CONFIG.key, "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -83,6 +109,7 @@ async function rpc(fn, body) {
         <div class="muted">Só quem relatou essa ocorrência no grupo pode avaliar. Digite o seu número de WhatsApp com DDD (ou a sua matrícula).</div>
         <input id="ident" class="campo" type="text" inputmode="numeric" autocomplete="tel" maxlength="20" placeholder="Ex.: 91 99999-8888">
       </fieldset>
+      <div class="muted" style="margin-top:8px;font-size:12px">Por segurança, registramos o celular usado, o horário e o IP de cada avaliação.</div>
       <button id="bi">Continuar</button>
       <div id="ei" class="err"></div>
     </form>`;
@@ -92,7 +119,7 @@ async function rpc(fn, body) {
     if (ident.replace(/\D/g, "").length < 4) { $("#ei").textContent = "Digite seu número com DDD ou sua matrícula."; return; }
     $("#bi").disabled = true; $("#ei").textContent = "";
     try {
-      const r = await rpc("avaliacao_identificar", { p_token: token, p_ident: ident });
+      const r = await rpc("avaliacao_identificar", { p_token: token, p_ident: ident, p_aparelho: await AP });
       if (!r.ok) { $("#bi").disabled = false; $("#ei").textContent = r.erro; return; }
       form(ident, r.nome);
     } catch (err) { $("#bi").disabled = false; $("#ei").textContent = "Não consegui conferir: " + err.message; }
@@ -124,7 +151,7 @@ async function rpc(fn, body) {
       if (n <= 3 && !ms.length && !obs) { $("#e").textContent = "Marque um motivo ou escreva o que poderia ter sido melhor."; $("#obs").focus(); return; }
       $("#b").disabled = true; $("#b").textContent = "Enviando…"; $("#e").textContent = "";
       try {
-        const r = await rpc("avaliacao_responder", { p_token: token, p_ident: ident, p_nota: n, p_motivos: ms, p_observacao: n <= 3 ? obs || null : null });
+        const r = await rpc("avaliacao_responder", { p_token: token, p_ident: ident, p_nota: n, p_motivos: ms, p_observacao: n <= 3 ? obs || null : null, p_aparelho: await AP });
         if (!r.ok) throw new Error(r.erro);
         $("#app").innerHTML = `<div class="ok">Avaliação registrada. Obrigado!</div>
           <p class="muted">${esc(NOTAS.find(x => x[0] === n)[2])}${n <= 3 ? ". Sua resposta ajuda a melhorar a vistoria dos celulares." : "."}</p>`;

@@ -1360,7 +1360,7 @@ var EXP = { ini: 8, fim: 17, sab: false, dom: false, fer: false, feriados: {}, d
 try { var ex0 = JSON.parse(ls("vb_exped") || "null"); if (ex0) EXP = ex0; } catch (e) {}
 function bhDia() { return Math.round((EXP.fim - EXP.ini) * 60); }   // 570 min = 1 dia util no padrao
 var ocRows = null, ocAt = null, ocMsgs = {}, relMap = {}, relServer = null, ocFilt = ls("vb_oc_filt") || "open", ocQ = "", ocDays = 90;
-var avRows = null, avCfg = null, avTent = {};   // avaliacoes dos motoristas (v_avaliacoes) e config do link (whatsapp_avisos)
+var avRows = null, avCfg = null, avEv = {};   // avEv: tentativas na pagina de avaliacao, por ocorrencia   // avaliacoes dos motoristas (v_avaliacoes) e config do link (whatsapp_avisos)
 try { avRows = JSON.parse(ls("vb_av_all") || "null"); avCfg = JSON.parse(ls("vb_av_cfg") || "null"); } catch (e) {}
 try { ocRows = JSON.parse(ls("vb_oc_all") || "null"); ocAt = ls("vb_oc_at"); relMap = JSON.parse(ls("vb_rel") || "{}"); } catch (e) {}
 // minutos uteis entre a e b (Belem = UTC-3 o ano todo, sem horario de verao)
@@ -1464,7 +1464,7 @@ function fetchOc() {
     .then(function (rows) { ocRows = rows; ocAt = new Date().toISOString(); });
   var av = getAll("v_avaliacoes?select=*&order=criado_em.desc,id.desc").then(function (rows) { avRows = rows; try { ls("vb_av_all", JSON.stringify(rows)); } catch (e) {} })
     .catch(function (e) { if (e && /^40[04]$/.test(e.message)) avRows = false; });   // 404 = o SQL da avaliacao ainda nao rodou
-  var avt = get("v_avaliacao_tentativas?select=*").then(function (rows) { var m = {}; rows.forEach(function (r) { m[r.ocorrencia_id] = r; }); avTent = m; }).catch(function () {});
+  var avt = getAll("avaliacao_eventos?select=*&order=ts.asc,id.asc").then(function (rows) { var m = {}; rows.forEach(function (r) { (m[r.ocorrencia_id] = m[r.ocorrencia_id] || []).push(r); }); avEv = m; }).catch(function () {});
   var avc = get("whatsapp_avisos?select=ligado,avaliacao_url,avaliacao_desde&id=eq.1").then(function (x) { avCfg = x[0] || null; ls("vb_av_cfg", JSON.stringify(avCfg)); }).catch(function () {});
   return Promise.all([msgs, rel, exp, oc.catch(function () {}), av, avc, avt]).then(function () {
     if (ocRows) { ocRows.forEach(function (r) { if (!r.reporter_phone && ocMsgs[r.id]) r.reporter_phone = ocMsgs[r.id]; });
@@ -1583,14 +1583,19 @@ function demoAv() { // so na previa
   return oc.slice(0, 18).map(function (o, i) {
     var n = [5, 4, 5, 2, 3, 4, 1, 5, 2, 4, 3, 5, 4, 2, 5, 4, 3, 5][i], t = n <= 3 ? i % 3 : null, tx = t != null ? txt[t][i % txt[t].length] : null;
     return { id: -500 - i, ocorrencia_id: o.id, nota: n, motivos: n <= 3 ? [["voltou"], ["demorou"], ["provisorio", "voltou"]][i % 3] : [], observacao: tx, tema_id: tx ? t + 1 : null,
-      tema_status: tx ? "ok" : null, tema_titulo: tx ? temas[t][0] : null, tema_melhoria: tx ? temas[t][1] : null, criado_em: o.fim, tag: o.tag, categoria: o.cat, problema: o.problema, avaliador_phone: o.phone, avaliador_nome: o.perfil || null, demo: true };
+      tema_status: tx ? "ok" : null, tema_titulo: tx ? temas[t][0] : null, tema_melhoria: tx ? temas[t][1] : null, criado_em: o.fim, tag: o.tag, categoria: o.cat, problema: o.problema, avaliador_phone: o.phone, avaliador_nome: o.perfil || null,
+      aparelho: { marca: "Samsung", modelo: i % 2 ? "SM-A055M" : "SM-A155M", sistema: "Android 14", navegador: "navegador dentro de app" }, ip: "177.12.34." + (10 + i),
+      aparelho_outros_numeros: i === 3 ? ["559199990002"] : null, demo: true };
   });
 }
 function avList() { var r = avRows || (IS_PREVIEW ? demoAv() : []); return r.filter(function (a) { return ocInPer(a.criado_em); }); }
 function avQuem(a) { return a.avaliador_nome ? a.avaliador_nome + (a.avaliador_matricula ? " · mat. " + a.avaliador_matricula : "") : a.avaliador_matricula ? "mat. " + a.avaliador_matricula : a.avaliador_phone ? fmtPhone(a.avaliador_phone) : ""; }
+function apTxt(ap) { if (!ap) return "aparelho não informado"; return [[ap.marca, ap.modelo].filter(Boolean).join(" ") || "modelo escondido pelo navegador", ap.sistema, ap.navegador].filter(Boolean).join(" · "); }
+function avSusp(a) { return (a.aparelho_outros_numeros || []).length > 0; }
+var AV_EV = { identificou: "Identificou", numero_errado: "Número que não é de quem relatou", avaliou: "Avaliou", bloqueado: "Tentou com o link bloqueado" };
 function avRow(a) {
   return { tag: a.tag ? normTag(a.tag) : "?", side: fmtDate(todayBelemOf(a.criado_em)), go: function () { openOc(a.ocorrencia_id); },
-    main: [el("span", { class: "badge " + avCls(a.nota), text: AV_NOTA[a.nota] }), " ", OC_CAT[a.categoria] || a.categoria || "", a.problema ? " · " + a.problema : "",
+    main: [el("span", { class: "badge " + avCls(a.nota), text: AV_NOTA[a.nota] }), " ", avSusp(a) ? el("span", { class: "badge nok", text: "conferir quem avaliou" }) : null, avSusp(a) ? " " : null, OC_CAT[a.categoria] || a.categoria || "", a.problema ? " · " + a.problema : "",
       (a.motivos || []).length ? el("span", { class: "hint", text: " · " + a.motivos.map(function (m) { return AV_MOT[m] || m; }).join(", ") }) : null,
       avQuem(a) ? el("span", { class: "hint", text: " · por " + avQuem(a) }) : null,
       a.observacao ? el("span", { class: "avq", text: "“" + a.observacao + "”" }) : null] };
@@ -1601,7 +1606,7 @@ function paintAv(perTxt) {
   var L = avList(), byNewAv = function (a, b) { return a.criado_em < b.criado_em ? 1 : -1; };
   var desde = avCfg && avCfg.avaliacao_desde, comLink = (ocRows || []).filter(function (o) { return o.aviso_status === "enviado" && desde && o.aviso_enviado_em >= desde && ocInPer(o.aviso_enviado_em); }).length;
   src.textContent = (avRows ? "" : IS_PREVIEW ? "Prévia: avaliações de EXEMPLO. " : "") + (avCfg && !avCfg.avaliacao_url ? "O link de avaliação está desligado no aviso. " : avCfg && !avCfg.ligado ? "Os avisos no grupo estão desligados, então nenhum link sai. " : "") +
-    "O link vai no aviso de ocorrência resolvida. Só quem relatou avalia (número do WhatsApp ou matrícula), uma vez por ocorrência; nota 3 ou menos pede o motivo.";
+    "O link vai no aviso de ocorrência resolvida. Só quem relatou avalia (número do WhatsApp ou matrícula), uma vez por ocorrência; cada tentativa guarda o celular, o horário e o IP.";
   var media = L.length ? L.reduce(function (s2, a) { return s2 + a.nota; }, 0) / L.length : null;
   var sat = L.filter(function (a) { return a.nota >= 4; }), ins = L.filter(function (a) { return a.nota <= 2; });
   function lst(t, f) { return function () { openList(t, perTxt, function () { return L.filter(f).sort(byNewAv).map(avRow); }, "ocorrência"); }; }
@@ -1610,6 +1615,10 @@ function paintAv(perTxt) {
    [String(ins.length), "pouco satisfeitos ou insatisfeitos", ins.length > 0, lst("Pouco satisfeitos ou insatisfeitos", function (a) { return a.nota <= 2; })],
    [comLink ? Math.round(L.filter(function (a) { return !a.demo; }).length * 100 / comLink) + "%" : "—", comLink ? "responderam (" + plural(comLink, "aviso", "avisos") + " com link)" : "taxa de resposta: nenhum aviso com link ainda", false, lst("Avaliações", function () { return true; })]
   ].forEach(function (x) { var bt = el("button", { type: "button", class: "kpi" + (x[2] ? " alert" : "") }, [el("b", { text: x[0] }), el("span", { text: x[1] })]); bt.addEventListener("click", x[3]); k.appendChild(bt); });
+  var susp = L.filter(avSusp);
+  if (susp.length) { var sb = el("button", { type: "button", class: "notice", style: "display:block;width:100%;text-align:left;margin-top:10px;font:inherit;cursor:pointer" },
+      ["⚠ " + plural(susp.length, "avaliação feita", "avaliações feitas") + " num celular que também já foi usado com outro número. Toque para conferir."]);
+    sb.addEventListener("click", lst("Conferir quem avaliou", function (a) { return avSusp(a); })); k.appendChild(sb); }
   // temas (agrupados pela IA)
   var g = {}, semTema = 0; L.forEach(function (a) { if (a.tema_id) (g[a.tema_id] = g[a.tema_id] || []).push(a); else if (a.observacao && !a.tema_status) semTema++; });
   var rows = Object.keys(g).map(function (t) { var it = g[t], m = it.reduce(function (s2, a) { return s2 + a.nota; }, 0) / it.length, tags = {};
@@ -1666,13 +1675,17 @@ function paintOcSheet(id) {
   rb.appendChild(fN); rb.appendChild(fM); rb.appendChild(sv); b.appendChild(rb);
   // resolucao
   if (o.fim || o.sol) b.appendChild(el("div", { class: "card" }, [el("h3", { text: "Resolução" }), el("div", { text: "Por: " + porTxt(o.por) }), o.sol ? el("div", { class: "hint", text: o.sol }) : null]));
-  var av = (avRows || (IS_PREVIEW ? demoAv() : [])).filter(function (a) { return a.ocorrencia_id === o.id; })[0], tn = avTent[o.id];
-  if (tn) b.appendChild(el("div", { class: "notice", text: "Link de avaliação: " + plural(tn.tentativas, "tentativa", "tentativas") + " com número que não é de quem relatou (último terminava em " + String(tn.ultima_tentativa || "").replace("…", "") + ", " + fmtDT(tn.ultima_tentativa_em) + ")." + (tn.tentativas >= 5 ? " O link foi bloqueado." : "") }));
+  var av = (avRows || (IS_PREVIEW ? demoAv() : [])).filter(function (a) { return a.ocorrencia_id === o.id; })[0], evs = avEv[o.id] || [];
   if (av) b.appendChild(el("div", { class: "card" }, [el("h3", { text: "Avaliação do motorista" }),
     el("div", {}, [el("span", { class: "badge " + avCls(av.nota), text: AV_NOTA[av.nota] }), el("span", { class: "hint", text: " em " + fmtDT(av.criado_em) + (avQuem(av) ? " · por " + avQuem(av) + (av.avaliador_por === "matricula" ? " (pela matrícula)" : "") : "") })]),
     (av.motivos || []).length ? el("div", { class: "hint", text: av.motivos.map(function (m) { return AV_MOT[m] || m; }).join(", ") }) : null,
     av.observacao ? el("div", { text: "“" + av.observacao + "”" }) : null,
-    av.tema_titulo ? el("div", { class: "hint", text: "Tema: " + av.tema_titulo + (av.tema_melhoria ? " · sugestão: " + av.tema_melhoria : "") }) : null]));
+    av.tema_titulo ? el("div", { class: "hint", text: "Tema: " + av.tema_titulo + (av.tema_melhoria ? " · sugestão: " + av.tema_melhoria : "") }) : null,
+    el("div", { class: "hint", text: "Celular: " + apTxt(av.aparelho) + (av.ip ? " · IP " + av.ip : "") }),
+    avSusp(av) ? el("div", { class: "notice", text: "⚠ Este mesmo celular já foi usado na avaliação com outro número: " + av.aparelho_outros_numeros.map(fmtPhone).join(", ") + ". Confira se foi mesmo quem relatou." }) : null]));
+  if (evs.length) b.appendChild(el("div", { class: "card" }, [el("h3", { text: "Registro do link de avaliação" })].concat(evs.map(function (e) {
+    return el("div", { class: "hint", style: e.tipo === "numero_errado" || e.tipo === "bloqueado" ? "color: var(--nok)" : null }, [el("b", { text: fmtDT(e.ts) + " · " + (AV_EV[e.tipo] || e.tipo) }),
+      " · digitou …" + (e.ident_final || "?") + (e.fone ? " (" + fmtPhone(e.fone) + ")" : "") + " · " + apTxt(e.aparelho) + (e.ip ? " · IP " + e.ip : "")]); }))));
   // evidencias do cruzamento
   var ev = [];
   if (o.bt) ev.push("Monitor (18h antes do relato): " + ({ bluetooth_desligado: "Bluetooth desligado", leitor_desconectado: "leitor desconectado", nao_rodou: "ônibus não rodou", bluetooth_ok: "Bluetooth OK", sem_dados: "sem dados" }[o.bt] || o.bt));
