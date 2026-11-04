@@ -2,6 +2,7 @@
 # e responde no grupo EM CIMA da mensagem do relato (Evolution API /message/sendText com "quoted").
 # Uso: python3 gerar_avisos.py [saida.json]   (placeholders __SUPABASE_URL__, __EVOLUTION_URL__, __INSTANCIA__)
 # Quem liga/desliga e o Supabase (tabela whatsapp_avisos); o fluxo pode ficar sempre ativo.
+# linkPreview false: o link da avaliacao vai como texto simples, sem o cartao grande de previa.
 import json, sys
 
 CRED_EVO  = {"httpHeaderAuth": {"id": "credEvolution001", "name": "Evolution API"}}
@@ -33,7 +34,7 @@ def code(name, js, pos, each=False):
     if each: p["mode"] = "runOnceForEachItem"
     return {"parameters": p, "name": name, "type": "n8n-nodes-base.code", "typeVersion": 2, "position": pos}
 
-ENVIO = ("={{ JSON.stringify({ number: $json.grupo_jid, text: $json.texto, delay: 1500, "
+ENVIO = ("={{ JSON.stringify({ number: $json.grupo_jid, text: $json.texto, delay: 1500, linkPreview: false, "
          "quoted: { key: { id: $json.quoted_id, remoteJid: $json.grupo_jid, fromMe: false, participant: $json.autor_jid }, "
          "message: { conversation: $json.quoted_texto } } }) }}")
 

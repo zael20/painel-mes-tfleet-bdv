@@ -129,6 +129,7 @@ echo; echo "=== 4/4 Ativando o fluxo no n8n ==="
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 curl -fsSL "$RAW/fluxo-ocorrencias.json" -o "$TMP/modelo.json" || erro "Nao consegui baixar o fluxo do GitHub"
 curl -fsSL "$RAW/fluxo-avisos.json" -o "$TMP/avisos.json" || erro "Nao consegui baixar o fluxo de avisos do GitHub"
+curl -fsSL "$RAW/fluxo-avaliacoes.json" -o "$TMP/avaliacoes.json" || erro "Nao consegui baixar o fluxo de avaliacoes do GitHub"
 export SUPABASE_URL SUPABASE_KEY GEMINI_KEY GEMINI_MODEL GRUPOS EVO_API_KEY TMP INSTANCIA
 python3 - <<'PY'
 import json, os
@@ -144,6 +145,12 @@ a = open(f"{e['TMP']}/avisos.json").read()
 for k, v in {'__SUPABASE_URL__': e['SUPABASE_URL'], '__EVOLUTION_URL__': 'http://evolution:8080', '__INSTANCIA__': e['INSTANCIA']}.items():
     a = a.replace(k, v)
 open(f"{e['TMP']}/imp/avisos.json", 'w').write(a)
+# fluxo 3: junta as criticas dos motoristas (avaliacao.html) em temas com o Gemini, a cada 30 min
+v = open(f"{e['TMP']}/avaliacoes.json").read()
+for k, val in {'__SUPABASE_URL__': e['SUPABASE_URL'],
+               '__GEMINI_URL__': f"https://generativelanguage.googleapis.com/v1beta/models/{e['GEMINI_MODEL']}:generateContent"}.items():
+    v = v.replace(k, val)
+open(f"{e['TMP']}/imp/avaliacoes.json", 'w').write(v)
 cred = lambda i, n, h, v: {"id": i, "name": n, "type": "httpHeaderAuth", "data": {"name": h, "value": v}}
 json.dump([cred("credEvolution001", "Evolution API", "apikey", e['EVO_API_KEY']),
            cred("credSupabase0001", "Supabase (chave secreta)", "apikey", e['SUPABASE_KEY']),
@@ -157,6 +164,8 @@ $DC exec -T n8n n8n import:workflow --input=/tmp/ocorr-imp/fluxo.json
 $DC exec -T n8n sh -c "n8n publish:workflow --id=$WF_ID 2>/dev/null || n8n update:workflow --id=$WF_ID --active=true"
 $DC exec -T n8n n8n import:workflow --input=/tmp/ocorr-imp/avisos.json
 $DC exec -T n8n sh -c "n8n publish:workflow --id=ocorrAvisos00001 2>/dev/null || n8n update:workflow --id=ocorrAvisos00001 --active=true"
+$DC exec -T n8n n8n import:workflow --input=/tmp/ocorr-imp/avaliacoes.json
+$DC exec -T n8n sh -c "n8n publish:workflow --id=avaliacoesTemas1 2>/dev/null || n8n update:workflow --id=avaliacoesTemas1 --active=true"
 $DC exec -T -u root n8n rm -rf /tmp/ocorr-imp || $DC exec -T n8n rm -rf /tmp/ocorr-imp || true
 info "Reiniciando o n8n para ligar o fluxo..."
 $DC restart n8n >/dev/null

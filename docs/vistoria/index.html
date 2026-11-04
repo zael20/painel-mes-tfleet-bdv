@@ -249,6 +249,9 @@ button.kpi:hover, .open button:hover, .legend button:hover { border-color: var(-
 .hbar .track { height: 14px; background: var(--grid); border-radius: 0 4px 4px 0; overflow: hidden; }
 .hbar .fill { height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
 .hbar .fill.nok { background: var(--nok); }
+.hbar .fill.ok { background: var(--ok); }
+.hbar .fill.warn { background: var(--warn); }
+.avq { display: block; margin-top: 3px; font-size: 13px; color: var(--muted); font-style: italic; }
 .hbar .v { font: 500 13px var(--font-data); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
 .hbar .v b { color: var(--fg); }
 .drill { padding: 6px 4px 10px; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -513,6 +516,25 @@ body.tf-cv::before { content: ""; position: fixed; z-index: 4; left: 0; right: 0
       <h3>Quem mais relata</h3>
       <div class="sub">Toque para ver os relatos. Para dar nome ou matrícula, abra uma ocorrência da pessoa.</div>
       <div class="hbars" id="ocRel"></div>
+    </div>
+    <div class="field" style="margin-top:8px">
+      <h2>Satisfação dos motoristas</h2>
+      <span class="src" id="avSrc"></span>
+    </div>
+    <div class="kpis" id="avKpis"></div>
+    <div class="card">
+      <h3>O que os motoristas pedem</h3>
+      <div class="sub">Críticas parecidas juntadas pela IA num tema só. Toque para ver o que cada um escreveu.</div>
+      <div class="hbars" id="avTemas"></div>
+    </div>
+    <div class="card">
+      <h3>Notas</h3>
+      <div class="hbars" id="avNotas"></div>
+    </div>
+    <div class="card">
+      <h3>Motivos marcados</h3>
+      <div class="sub">Nas notas de parcialmente satisfeito para baixo.</div>
+      <div class="hbars" id="avMot"></div>
     </div>
   </section>
 
@@ -1338,6 +1360,8 @@ var EXP = { ini: 8, fim: 17, sab: false, dom: false, fer: false, feriados: {}, d
 try { var ex0 = JSON.parse(ls("vb_exped") || "null"); if (ex0) EXP = ex0; } catch (e) {}
 function bhDia() { return Math.round((EXP.fim - EXP.ini) * 60); }   // 570 min = 1 dia util no padrao
 var ocRows = null, ocAt = null, ocMsgs = {}, relMap = {}, relServer = null, ocFilt = ls("vb_oc_filt") || "open", ocQ = "", ocDays = 90;
+var avRows = null, avCfg = null;   // avaliacoes dos motoristas (v_avaliacoes) e config do link (whatsapp_avisos)
+try { avRows = JSON.parse(ls("vb_av_all") || "null"); avCfg = JSON.parse(ls("vb_av_cfg") || "null"); } catch (e) {}
 try { ocRows = JSON.parse(ls("vb_oc_all") || "null"); ocAt = ls("vb_oc_at"); relMap = JSON.parse(ls("vb_rel") || "{}"); } catch (e) {}
 // minutos uteis entre a e b (Belem = UTC-3 o ano todo, sem horario de verao)
 function bhMin(a, b) {
@@ -1438,7 +1462,10 @@ function fetchOc() {
   var oc = getAll("v_ocorrencias_cruzadas?select=*&order=criado_em.desc,id.desc")
     .catch(function () { return getAll("ocorrencias?select=*&order=criado_em.desc,id.desc"); })
     .then(function (rows) { ocRows = rows; ocAt = new Date().toISOString(); });
-  return Promise.all([msgs, rel, exp, oc.catch(function () {})]).then(function () {
+  var av = getAll("v_avaliacoes?select=*&order=criado_em.desc,id.desc").then(function (rows) { avRows = rows; try { ls("vb_av_all", JSON.stringify(rows)); } catch (e) {} })
+    .catch(function (e) { if (e && /^40[04]$/.test(e.message)) avRows = false; });   // 404 = o SQL da avaliacao ainda nao rodou
+  var avc = get("whatsapp_avisos?select=ligado,avaliacao_url,avaliacao_desde&id=eq.1").then(function (x) { avCfg = x[0] || null; ls("vb_av_cfg", JSON.stringify(avCfg)); }).catch(function () {});
+  return Promise.all([msgs, rel, exp, oc.catch(function () {}), av, avc]).then(function () {
     if (ocRows) { ocRows.forEach(function (r) { if (!r.reporter_phone && ocMsgs[r.id]) r.reporter_phone = ocMsgs[r.id]; });
       try { ls("vb_oc_all", JSON.stringify(ocRows)); ls("vb_oc_at", ocAt); } catch (e) {} }
     paintOcBadge(); if (view === "oc") paintOc(); if (!$("sheet").hidden) renderTop();
@@ -1540,6 +1567,66 @@ function paintOc() {
   group(abP, function (o) { return o.tag; }, function (t) { return "Carro " + t; }, $("ocCar"), "nok", "oc_car:");
   group(resP, function (o) { return o.por || "?"; }, function (p) { return porTxt(p); }, $("ocPor"), "", "oc_por:");
   group(abP, function (o) { return relKey(o); }, function (kk, it) { return relTxt(it[0]); }, $("ocRel"), "", "oc_rel:");
+  paintAv(perTxt);
+}
+// ---- satisfacao dos motoristas (link no aviso de resolvida -> avaliacao.html)
+var AV_NOTA = { 5: "Muito satisfeito", 4: "Satisfeito", 3: "Parcialmente satisfeito", 2: "Pouco satisfeito", 1: "Insatisfeito" };
+var AV_MOT = { demorou: "Demorou para resolver", voltou: "O problema voltou / não foi resolvido", provisorio: "Conserto provisório ou mal feito",
+  sem_retorno: "Ninguém explicou o que foi feito", atendimento: "Atendimento / forma de tratar", outro: "Outro motivo" };
+function avCls(n) { return n >= 4 ? "ok" : n === 3 ? "warn" : "nok"; }
+function fmtNota(x) { return x.toFixed(1).replace(".", ","); }
+function demoAv() { // so na previa
+  var oc = ocList().filter(function (o) { return o.fim; }), temas = [["Suporte do celular não foi resolvido de vez", "Verificar o suporte com mais frequência durante a vistoria"],
+    ["Demora para trocar o cabo do carregador", "Levar cabo reserva na vistoria para trocar na hora"], ["Leitor volta a parar de contar", "Testar o leitor com um cartão antes de liberar o carro"]];
+  var txt = [["o suporte continuou quebrado", "podia ter trocado o suporte", "o suporte tá quase quebrando de novo"], ["demorou 2 dias pra trocar o cabo", "o cabo ainda está com mau contato"], ["o leitor voltou a não contar no outro dia"]];
+  return oc.slice(0, 18).map(function (o, i) {
+    var n = [5, 4, 5, 2, 3, 4, 1, 5, 2, 4, 3, 5, 4, 2, 5, 4, 3, 5][i], t = n <= 3 ? i % 3 : null, tx = t != null ? txt[t][i % txt[t].length] : null;
+    return { id: -500 - i, ocorrencia_id: o.id, nota: n, motivos: n <= 3 ? [["voltou"], ["demorou"], ["provisorio", "voltou"]][i % 3] : [], observacao: tx, tema_id: tx ? t + 1 : null,
+      tema_status: tx ? "ok" : null, tema_titulo: tx ? temas[t][0] : null, tema_melhoria: tx ? temas[t][1] : null, criado_em: o.fim, tag: o.tag, categoria: o.cat, problema: o.problema, demo: true };
+  });
+}
+function avList() { var r = avRows || (IS_PREVIEW ? demoAv() : []); return r.filter(function (a) { return ocInPer(a.criado_em); }); }
+function avRow(a) {
+  return { tag: a.tag ? normTag(a.tag) : "?", side: fmtDate(todayBelemOf(a.criado_em)), go: function () { openOc(a.ocorrencia_id); },
+    main: [el("span", { class: "badge " + avCls(a.nota), text: AV_NOTA[a.nota] }), " ", OC_CAT[a.categoria] || a.categoria || "", a.problema ? " · " + a.problema : "",
+      (a.motivos || []).length ? el("span", { class: "hint", text: " · " + a.motivos.map(function (m) { return AV_MOT[m] || m; }).join(", ") }) : null,
+      a.observacao ? el("span", { class: "avq", text: "“" + a.observacao + "”" }) : null] };
+}
+function paintAv(perTxt) {
+  var src = $("avSrc"), k = $("avKpis"); k.textContent = "";
+  if (avRows === false) { src.textContent = "Ainda não ligado: rode o ocorrencias.sql atualizado no Supabase."; ["avTemas", "avNotas", "avMot"].forEach(function (id) { $(id).textContent = ""; }); return; }
+  var L = avList(), byNewAv = function (a, b) { return a.criado_em < b.criado_em ? 1 : -1; };
+  var desde = avCfg && avCfg.avaliacao_desde, comLink = (ocRows || []).filter(function (o) { return o.aviso_status === "enviado" && desde && o.aviso_enviado_em >= desde && ocInPer(o.aviso_enviado_em); }).length;
+  src.textContent = (avRows ? "" : IS_PREVIEW ? "Prévia: avaliações de EXEMPLO. " : "") + (avCfg && !avCfg.avaliacao_url ? "O link de avaliação está desligado no aviso. " : avCfg && !avCfg.ligado ? "Os avisos no grupo estão desligados, então nenhum link sai. " : "") +
+    "O link vai no aviso de ocorrência resolvida; nota 3 ou menos pede o motivo.";
+  var media = L.length ? L.reduce(function (s2, a) { return s2 + a.nota; }, 0) / L.length : null;
+  var sat = L.filter(function (a) { return a.nota >= 4; }), ins = L.filter(function (a) { return a.nota <= 2; });
+  function lst(t, f) { return function () { openList(t, perTxt, function () { return L.filter(f).sort(byNewAv).map(avRow); }, "ocorrência"); }; }
+  [[media != null ? fmtNota(media) : "—", media != null ? "nota média de 5 (" + plural(L.length, "avaliação", "avaliações") + ")" : "nota média: ainda sem avaliações", false, lst("Avaliações", function () { return true; })],
+   [L.length ? Math.round(sat.length * 100 / L.length) + "%" : "—", "satisfeitos ou muito satisfeitos", false, lst("Satisfeitos", function (a) { return a.nota >= 4; })],
+   [String(ins.length), "pouco satisfeitos ou insatisfeitos", ins.length > 0, lst("Pouco satisfeitos ou insatisfeitos", function (a) { return a.nota <= 2; })],
+   [comLink ? Math.round(L.filter(function (a) { return !a.demo; }).length * 100 / comLink) + "%" : "—", comLink ? "responderam (" + plural(comLink, "aviso", "avisos") + " com link)" : "taxa de resposta: nenhum aviso com link ainda", false, lst("Avaliações", function () { return true; })]
+  ].forEach(function (x) { var bt = el("button", { type: "button", class: "kpi" + (x[2] ? " alert" : "") }, [el("b", { text: x[0] }), el("span", { text: x[1] })]); bt.addEventListener("click", x[3]); k.appendChild(bt); });
+  // temas (agrupados pela IA)
+  var g = {}, semTema = 0; L.forEach(function (a) { if (a.tema_id) (g[a.tema_id] = g[a.tema_id] || []).push(a); else if (a.observacao && !a.tema_status) semTema++; });
+  var rows = Object.keys(g).map(function (t) { var it = g[t], m = it.reduce(function (s2, a) { return s2 + a.nota; }, 0) / it.length, tags = {};
+    it.forEach(function (a) { if (a.tag) tags[normTag(a.tag)] = 1; });
+    return { k: t, label: (it[0].tema_melhoria || it[0].tema_titulo) + (it[0].tema_melhoria ? " — " + it[0].tema_titulo.toLowerCase() : ""), v: it.length,
+      extra: "nota " + fmtNota(m), title: plural(Object.keys(tags).length, "carro", "carros"),
+      onClick: function () { openList(it[0].tema_titulo, (it[0].tema_melhoria ? "Sugestão: " + it[0].tema_melhoria + " · " : "") + perTxt, function () { return it.slice().sort(byNewAv).map(avRow); }, "ocorrência"); } };
+  }).sort(function (a, b) { return b.v - a.v; });
+  hbars($("avTemas"), rows, Math.max.apply(null, rows.map(function (r) { return r.v; }).concat(1)), "nok", "av_tema:");
+  if (semTema) $("avTemas").appendChild(el("div", { class: "hint", text: plural(semTema, "crítica ainda sem tema", "críticas ainda sem tema") + ": a IA agrupa a cada 30 min." }));
+  // notas
+  var nr = [5, 4, 3, 2, 1].map(function (n) { var it = L.filter(function (a) { return a.nota === n; });
+    return { k: n, label: AV_NOTA[n], v: it.length, extra: L.length ? Math.round(it.length * 100 / L.length) + "%" : "", onClick: it.length ? lst(AV_NOTA[n], function (a) { return a.nota === n; }) : null }; });
+  var nbox = $("avNotas"); nbox.textContent = "";
+  if (!L.length) nbox.appendChild(el("div", { class: "hint", text: "Nenhuma avaliação no período." }));
+  else nr.forEach(function (r) { var one = el("div"); hbars(one, [r], Math.max.apply(null, nr.map(function (x) { return x.v; }).concat(1)), avCls(r.k), "av_nota:"); nbox.appendChild(one.firstChild); });
+  // motivos
+  var mg = {}; L.forEach(function (a) { (a.motivos || []).forEach(function (m) { (mg[m] = mg[m] || []).push(a); }); });
+  var mr = Object.keys(mg).map(function (m) { return { k: m, label: AV_MOT[m] || m, v: mg[m].length, onClick: lst(AV_MOT[m] || m, function (a) { return (a.motivos || []).indexOf(m) >= 0; }) }; }).sort(function (a, b) { return b.v - a.v; });
+  hbars($("avMot"), mr, Math.max.apply(null, mr.map(function (r) { return r.v; }).concat(1)), "", "av_mot:");
 }
 // ---- detalhe de uma ocorrencia
 function openOc(id) { showSheet(function () { paintOcSheet(id); }); }
@@ -1576,6 +1663,12 @@ function paintOcSheet(id) {
   rb.appendChild(fN); rb.appendChild(fM); rb.appendChild(sv); b.appendChild(rb);
   // resolucao
   if (o.fim || o.sol) b.appendChild(el("div", { class: "card" }, [el("h3", { text: "Resolução" }), el("div", { text: "Por: " + porTxt(o.por) }), o.sol ? el("div", { class: "hint", text: o.sol }) : null]));
+  var av = (avRows || (IS_PREVIEW ? demoAv() : [])).filter(function (a) { return a.ocorrencia_id === o.id; })[0];
+  if (av) b.appendChild(el("div", { class: "card" }, [el("h3", { text: "Avaliação do motorista" }),
+    el("div", {}, [el("span", { class: "badge " + avCls(av.nota), text: AV_NOTA[av.nota] }), el("span", { class: "hint", text: " em " + fmtDT(av.criado_em) })]),
+    (av.motivos || []).length ? el("div", { class: "hint", text: av.motivos.map(function (m) { return AV_MOT[m] || m; }).join(", ") }) : null,
+    av.observacao ? el("div", { text: "“" + av.observacao + "”" }) : null,
+    av.tema_titulo ? el("div", { class: "hint", text: "Tema: " + av.tema_titulo + (av.tema_melhoria ? " · sugestão: " + av.tema_melhoria : "") }) : null]));
   // evidencias do cruzamento
   var ev = [];
   if (o.bt) ev.push("Monitor (18h antes do relato): " + ({ bluetooth_desligado: "Bluetooth desligado", leitor_desconectado: "leitor desconectado", nao_rodou: "ônibus não rodou", bluetooth_ok: "Bluetooth OK", sem_dados: "sem dados" }[o.bt] || o.bt));

@@ -68,7 +68,7 @@
     "genericAuthType": "httpHeaderAuth",
     "sendBody": true,
     "specifyBody": "json",
-    "jsonBody": "={{ JSON.stringify({ number: $json.grupo_jid, text: $json.texto, delay: 1500, quoted: { key: { id: $json.quoted_id, remoteJid: $json.grupo_jid, fromMe: false, participant: $json.autor_jid }, message: { conversation: $json.quoted_texto } } }) }}",
+    "jsonBody": "={{ JSON.stringify({ number: $json.grupo_jid, text: $json.texto, delay: 1500, linkPreview: false, quoted: { key: { id: $json.quoted_id, remoteJid: $json.grupo_jid, fromMe: false, participant: $json.autor_jid }, message: { conversation: $json.quoted_texto } } }) }}",
     "options": {
      "timeout": 30000
     }

@@ -1,0 +1,197 @@
+{
+ "id": "avaliacoesTemas1",
+ "name": "Agrupar avaliacoes dos motoristas",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 30
+      }
+     ]
+    }
+   },
+   "name": "A cada 30 minutos",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__SUPABASE_URL__/rest/v1/rpc/avaliacoes_para_agrupar",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\"p_limite\": 25}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Avaliacoes sem tema",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    220,
+    300
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Monta o pedido ao Gemini. Sem avaliacao nova: nenhum item sai e o fluxo para aqui.\nconst r = $input.first().json || {};\nconst itens = r.itens || [];\nif (!itens.length) return [];\nconst temas = (r.temas || []).map(t => `#${t.id} | ${t.titulo} | melhoria: ${t.melhoria || '-'} | ${t.qtd} avaliacoes`).join('\\n') || '(nenhum ainda)';\nconst lista = itens.map(a => `id ${a.id} | nota ${a.nota} | ocorrencia: ${a.categoria} - ${a.problema || ''} | solucao dada: ${a.solucao || '-'}` +\n  ` | motivos: ${(a.motivos || []).join('; ') || '-'} | texto: ${a.observacao}`).join('\\n');\nconst SYS = \"Voce organiza as criticas dos motoristas de onibus sobre o atendimento de problemas no celular do onibus\\n(celular com o app da viagem, leitor RFID que conta passageiros, carregador/cabo, suporte do celular, chip/internet).\\nCada avaliacao traz a nota (1 a 5), os motivos marcados e o texto do motorista.\\nPara cada avaliacao escolha UM tema que diga o mesmo problema de fundo:\\n- Use um tema EXISTENTE (tema_id) sempre que ele servir, mesmo com palavras diferentes.\\n  Ex.: \\\"podia ter trocado o suporte\\\", \\\"o suporte continuou quebrado\\\" e \\\"o suporte esta quase quebrando\\\" sao o MESMO tema.\\n- So crie tema novo (novo_titulo + nova_melhoria) quando nenhum existente servir.\\n  Avaliacoes deste lote que dizem a mesma coisa recebem EXATAMENTE o mesmo novo_titulo.\\n- novo_titulo: o problema, especifico e curto (ate 60 caracteres). Ex.: \\\"Suporte do celular nao foi resolvido de vez\\\".\\n  Nada generico como \\\"Problemas\\\" ou \\\"Insatisfacao\\\".\\n- nova_melhoria: o que a equipe deve fazer, comecando com verbo (ate 120 caracteres).\\n  Ex.: \\\"Verificar o suporte com mais frequencia durante a vistoria\\\".\\n- sem_tema = true quando o texto nao traz critica nem sugestao (ex.: \\\"nada\\\", \\\"ok\\\", \\\"tudo certo\\\").\\nResponda em portugues do Brasil.\";\nreturn [{ json: {\n  ids: itens.map(a => a.id),\n  pedido: {\n    system_instruction: { parts: [{ text: SYS }] },\n    contents: [{ role: 'user', parts: [{ text: `TEMAS QUE JA EXISTEM:\\n${temas}\\n\\nAVALIACOES PARA AGRUPAR:\\n${lista}` }] }],\n    generationConfig: { temperature: 0.1, responseMimeType: 'application/json',\n      responseSchema: { type: 'OBJECT', properties: { itens: { type: 'ARRAY', items: { type: 'OBJECT', properties: {\n        id: { type: 'INTEGER' }, tema_id: { type: 'INTEGER', nullable: true }, novo_titulo: { type: 'STRING' },\n        nova_melhoria: { type: 'STRING' }, sem_tema: { type: 'BOOLEAN' } }, required: ['id'] } } }, required: ['itens'] } },\n  },\n} }];\n"
+   },
+   "name": "Montar pedido IA",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__GEMINI_URL__",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.pedido) }}",
+    "options": {
+     "timeout": 120000
+    }
+   },
+   "name": "Gemini",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    300
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credGeminiKey001",
+     "name": "Gemini"
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 2,
+   "waitBetweenTries": 5000
+  },
+  {
+   "parameters": {
+    "jsCode": "// Le a resposta do Gemini. Se falhar (cota, erro), nada e gravado e as avaliacoes voltam no proximo ciclo.\nconst ids = $('Montar pedido IA').first().json.ids;\nconst g = $input.first().json || {};\nif (g.error) throw new Error('Gemini: ' + (g.error.message || JSON.stringify(g.error)));\nconst txt = (g.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');\nconst r = JSON.parse(txt);\nconst itens = (r.itens || []).filter(i => ids.includes(i.id));\nif (!itens.length) return [];\nreturn [{ json: { p: { itens } } }];\n"
+   },
+   "name": "Ler resposta IA",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__SUPABASE_URL__/rest/v1/rpc/avaliacoes_aplicar_temas",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Gravar temas",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1100,
+    300
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "A cada 30 minutos": {
+   "main": [
+    [
+     {
+      "node": "Avaliacoes sem tema",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Avaliacoes sem tema": {
+   "main": [
+    [
+     {
+      "node": "Montar pedido IA",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Montar pedido IA": {
+   "main": [
+    [
+     {
+      "node": "Gemini",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Gemini": {
+   "main": [
+    [
+     {
+      "node": "Ler resposta IA",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ler resposta IA": {
+   "main": [
+    [
+     {
+      "node": "Gravar temas",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "none",
+  "saveDataErrorExecution": "all"
+ },
+ "pinData": {}
+}

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Avaliar atendimento</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#17212b">
+<style>
+/* Pagina aberta pelo link do aviso "ocorrencia resolvida" no WhatsApp. O motorista da a nota (5 opcoes);
+   nota 3 ou menos pede o motivo e o que poderia ter sido melhor. So grava ao tocar em Enviar. */
+:root { --bg: #eef1f4; --panel: #fff; --ink: #17212b; --muted: #5b6875; --line: #d5dce3; --accent: #0d6c8c; --accent-soft: #e0eff4; --good: #2e7d32; --good-soft: #e8f5e9; --crit: #c62828; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742; --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f; --crit: #f07b72; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #11171d; --panel: #18212a; --ink: #e4eaf0; --muted: #93a1ae; --line: #2a3742; --accent: #4fb3d4; --accent-soft: #15303b; --good: #5cc98a; --good-soft: #15301f; --crit: #f07b72; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+header { background: #17212b; color: #fff; padding: 16px; }
+header small { color: #93a1ae; letter-spacing: .06em; font-size: 12px; }
+header h1 { margin: 2px 0 0; font-size: 20px; }
+main { max-width: 560px; margin: 0 auto; padding: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.muted { color: var(--muted); font-size: 14px; }
+.caso { border-left: 3px solid var(--accent); padding: 2px 0 2px 12px; margin: 10px 0 4px; }
+.caso b { display: block; }
+fieldset { border: 0; padding: 0; margin: 18px 0 0; }
+legend { font-weight: 700; margin-bottom: 8px; font-size: 18px; }
+.opt { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; min-height: 52px; }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.opt input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.opt .cara { font-size: 24px; line-height: 1; width: 28px; text-align: center; }
+.melhor { border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin-top: 4px; }
+.melhor[hidden] { display: none; }
+.melhor p { margin: 0 0 8px; font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 99px; padding: 8px 12px; font-size: 14px; cursor: pointer; }
+.chip:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.chip input { accent-color: var(--accent); margin: 0; }
+textarea { width: 100%; min-height: 90px; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 10px; }
+button { width: 100%; margin-top: 14px; font-family: inherit; font-weight: 600; font-size: 16px; padding: 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+button:disabled { opacity: .6; }
+.ok { background: var(--good-soft); color: var(--good); border-radius: 10px; padding: 16px; font-weight: 600; }
+.err { color: var(--crit); margin-top: 10px; }
+</style>
+</head>
+<body>
+<header><small>TRANSPORTE · CELULAR DO ÔNIBUS</small><h1>Avaliar atendimento</h1></header>
+<main><div id="app" class="card">Carregando…</div></main>
+<script>
+// Conexao publica do painel: a pagina so ve e avalia a ocorrencia do codigo do link.
+const CONFIG = { url: "https://orhuxmsrdnugpogvtnbg.supabase.co", key: "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL" };
+const NOTAS = [[5, "😄", "Muito satisfeito"], [4, "🙂", "Satisfeito"], [3, "😐", "Parcialmente satisfeito"], [2, "🙁", "Pouco satisfeito"], [1, "😠", "Insatisfeito"]];
+const MOTIVOS = [["demorou", "Demorou para resolver"], ["voltou", "O problema voltou / não foi resolvido"], ["provisorio", "Conserto provisório ou mal feito"],
+  ["sem_retorno", "Ninguém explicou o que foi feito"], ["atendimento", "Atendimento / forma de tratar"], ["outro", "Outro motivo"]];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const dt = d => d ? new Date(d).toLocaleString("pt-BR", { timeZone: "America/Belem", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às") : "";
+const dia = d => d ? new Date(d).toLocaleDateString("pt-BR", { timeZone: "America/Belem", day: "2-digit", month: "2-digit" }) : "";
+
+async function rpc(fn, body) {
+  const r = await fetch(CONFIG.url + "/rest/v1/rpc/" + fn, { method: "POST",
+    headers: { apikey: CONFIG.key, Authorization: "Bearer " + CONFIG.key, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const txt = await r.text();
+  if (!r.ok) { let m = txt; try { m = JSON.parse(txt).message || txt; } catch (e) {} throw new Error(m); }
+  return txt ? JSON.parse(txt) : null;
+}
+
+(async () => {
+  const token = new URLSearchParams(location.search).get("t") || "";
+  if (!/^[0-9a-f]{12}$/i.test(token)) { $("#app").textContent = "Link inválido. Abra pelo link da mensagem do WhatsApp."; return; }
+  let c;
+  try { c = await rpc("avaliacao_ver", { p_token: token.toLowerCase() }); } catch (e) { $("#app").textContent = "Não consegui carregar: " + e.message; return; }
+  if (!c) { $("#app").textContent = "Ocorrência não encontrada."; return; }
+  const notaAnt = c.nota, mot = c.motivos || [];
+  if (notaAnt && !c.pode_mudar) {
+    $("#app").innerHTML = `<div class="ok">Você já avaliou esse atendimento: ${esc(NOTAS.find(n => n[0] === notaAnt)[2])}. Obrigado!</div>`; return;
+  }
+  $("#app").innerHTML = `
+    <div>${c.nome ? esc(c.nome) + ", conte" : "Conte"} pra gente como foi a solução do seu relato.</div>
+    <div class="caso"><b>Carro ${esc(c.tag || "?")} · ${esc(c.categoria)}</b>
+      <span class="muted">${esc(c.problema || "")}${c.resolvido_em ? " · resolvida em " + dt(c.resolvido_em) : ""}</span>
+      ${c.solucao ? `<div class="muted">Solução: ${esc(c.solucao)}</div>` : ""}</div>
+    ${notaAnt ? `<div class="ok" style="margin-top:10px">Você já avaliou em ${dia(c.avaliado_em)}. Pode mudar abaixo.</div>` : ""}
+    <form id="f">
+      <fieldset><legend>Como você avalia a solução?</legend>
+        ${NOTAS.map(([v, e, t]) => `<label class="opt"><input type="radio" name="n" value="${v}" ${v === notaAnt ? "checked" : ""}><span class="cara" aria-hidden="true">${e}</span>${t}</label>`).join("")}
+      </fieldset>
+      <div class="melhor" id="melhor" ${notaAnt && notaAnt <= 3 ? "" : "hidden"}>
+        <p>O que poderia ter sido feito melhor?</p>
+        <div class="chips">${MOTIVOS.map(([k, t]) => `<label class="chip"><input type="checkbox" name="m" value="${k}" ${mot.includes(k) ? "checked" : ""}>${t}</label>`).join("")}</div>
+        <textarea id="obs" maxlength="1000" placeholder="Ex.: o suporte continuou solto, podia ter trocado">${esc(c.observacao || "")}</textarea>
+      </div>
+      <button id="b">Enviar avaliação</button>
+      <div id="e" class="err"></div>
+    </form>`;
+  const nota = () => +($('input[name="n"]:checked')?.value || 0);
+  $("#f").addEventListener("change", e => { if (e.target.name === "n") { $("#melhor").hidden = nota() > 3; $("#e").textContent = ""; } });
+  $("#f").addEventListener("submit", async e => {
+    e.preventDefault();
+    const n = nota(), obs = $("#obs").value.trim(), ms = n <= 3 ? [...document.querySelectorAll('input[name="m"]:checked')].map(x => x.value) : [];
+    if (!n) { $("#e").textContent = "Escolha uma das opções."; return; }
+    if (n <= 3 && !ms.length && !obs) { $("#e").textContent = "Marque um motivo ou escreva o que poderia ter sido melhor."; $("#obs").focus(); return; }
+    $("#b").disabled = true; $("#b").textContent = "Enviando…"; $("#e").textContent = "";
+    try {
+      await rpc("avaliacao_responder", { p_token: token.toLowerCase(), p_nota: n, p_motivos: ms, p_observacao: n <= 3 ? obs || null : null });
+      $("#app").innerHTML = `<div class="ok">Avaliação registrada. Obrigado!</div>
+        <p class="muted">${esc(NOTAS.find(x => x[0] === n)[2])}${n <= 3 ? ". Sua resposta ajuda a melhorar a vistoria dos celulares." : "."}</p>`;
+    } catch (err) { $("#b").disabled = false; $("#b").textContent = "Enviar avaliação"; $("#e").textContent = "Não enviou: " + err.message; }
+  });
+})();
+</script>
+</body>
+</html>

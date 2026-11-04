@@ -792,7 +792,9 @@ create policy "painel le avisos" on public.whatsapp_avisos for select to anon, a
 drop policy if exists "painel liga avisos" on public.whatsapp_avisos;
 create policy "painel liga avisos" on public.whatsapp_avisos for update to anon, authenticated using (true) with check (true);
 revoke all on public.whatsapp_avisos from anon;
-grant select, update on public.whatsapp_avisos to anon, authenticated;
+grant select on public.whatsapp_avisos to anon, authenticated;
+-- o painel so pode ligar/desligar e mudar o limite; o texto e o link do aviso ficam so com o SQL Editor
+grant update (ligado, max_por_hora) on public.whatsapp_avisos to anon, authenticated;
 
 alter table public.ocorrencias
   add column if not exists aviso_enviado_em timestamptz,
@@ -807,8 +809,33 @@ language sql immutable as $$
                 when 'som_musica' then 'som / musica' else 'problema' end;
 $$;
 
+-- ---------------------------------------------------------------- LINK DE AVALIACAO no aviso (pesquisa de satisfacao)
+-- Cada ocorrencia avisada ganha um codigo curto; o link abre avaliacao.html?t=CODIGO no GitHub Pages.
+-- Os codigos ficam numa tabela que o painel NAO le (so as funcoes abaixo), para ninguem avaliar no lugar do motorista.
+-- Sem link no aviso:  update public.whatsapp_avisos set avaliacao_url = null;
+alter table public.whatsapp_avisos
+  add column if not exists avaliacao_url   text default 'https://zael20.github.io/painel-mes-tfleet-bdv/avaliacao.html',
+  add column if not exists avaliacao_desde timestamptz default now();
+create table if not exists public.avaliacao_links (
+  ocorrencia_id bigint primary key references public.ocorrencias(id) on delete cascade,
+  token         text not null unique default substr(replace(gen_random_uuid()::text, '-', ''), 1, 12),
+  criado_em     timestamptz not null default now()
+);
+alter table public.avaliacao_links enable row level security;
+revoke all on public.avaliacao_links from anon, authenticated;
+create or replace function public.avaliacao_token_de(p_id bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare t text;
+begin
+  insert into avaliacao_links (ocorrencia_id) values (p_id) on conflict (ocorrencia_id) do nothing;
+  select token into t from avaliacao_links where ocorrencia_id = p_id;
+  return t;
+end $$;
+revoke all on function public.avaliacao_token_de(bigint) from public, anon, authenticated;
+grant execute on function public.avaliacao_token_de(bigint) to service_role;
+
 create or replace function public.avisos_pendentes(p_limite integer default 1) returns jsonb
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql security definer set search_path = public as $$
 declare c whatsapp_avisos; e expediente; n integer; agora timestamp := now() at time zone 'America/Belem';
 begin
   select * into c from whatsapp_avisos where id = 1;
@@ -830,7 +857,8 @@ begin
               'A') ||
            ' ocorrência do carro ' || coalesce(o.tag, '?') || ' (' || public.categoria_texto(o.categoria) || ') foi resolvida em ' ||
            to_char(o.resolvido_em at time zone 'America/Belem', 'DD/MM "às" HH24:MI') || '.' ||
-           coalesce(E'\nSolução: ' || nullif(trim(o.solucao), ''), '') as texto
+           coalesce(E'\nSolução: ' || nullif(trim(o.solucao), ''), '') ||
+           coalesce(E'\n\n_Como foi o atendimento? Avalie aqui:_ ' || nullif(c.avaliacao_url, '') || '?t=' || public.avaliacao_token_de(o.id), '') as texto
     from ocorrencias o
     cross join lateral (select w.* from whatsapp_msgs w where w.ocorrencia_id = o.id and w.grupo_jid like '%@g.us'
                          order by w.ts limit 1) m
@@ -853,3 +881,149 @@ language sql security definer set search_path = public as $$
 $$;
 revoke all on function public.aviso_marcar(bigint, boolean, text) from public, anon, authenticated;
 grant execute on function public.aviso_marcar(bigint, boolean, text) to service_role;
+
+-- ================================================================ AVALIACAO DE SATISFACAO DOS MOTORISTAS
+-- O aviso de resolvida leva o link avaliacao.html?t=CODIGO (secao "LINK DE AVALIACAO" acima).
+-- Nota: 5 muito satisfeito, 4 satisfeito, 3 parcialmente, 2 pouco satisfeito, 1 insatisfeito.
+-- Nota 3 ou menos pede o motivo (botoes) e/ou o que poderia ser melhor (texto).
+-- O fluxo n8n "Agrupar avaliacoes" manda os textos ao Gemini, que junta os que dizem a mesma coisa num TEMA
+-- (ex.: "suporte continuou quebrado" + "podia ter trocado o suporte" -> "Suporte nao foi resolvido de vez").
+create table if not exists public.avaliacao_temas (
+  id        bigserial primary key,
+  titulo    text not null,      -- o problema, em poucas palavras
+  melhoria  text,               -- o que fazer, ex.: "Verificar o suporte com mais frequencia na vistoria"
+  criado_em timestamptz not null default now()
+);
+create unique index if not exists avaliacao_temas_titulo on public.avaliacao_temas (lower(titulo));
+
+create table if not exists public.avaliacoes (
+  id            bigserial primary key,
+  ocorrencia_id bigint not null unique references public.ocorrencias(id) on delete cascade,
+  nota          smallint not null check (nota between 1 and 5),
+  motivos       text[] not null default '{}',
+  observacao    text,
+  tema_id       bigint references public.avaliacao_temas(id) on delete set null,
+  tema_status   text,           -- null = falta agrupar | ok | sem_tema (texto sem sugestao) | erro
+  criado_em     timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+create index if not exists avaliacoes_tema on public.avaliacoes (tema_id);
+
+alter table public.avaliacao_temas enable row level security;
+alter table public.avaliacoes enable row level security;
+drop policy if exists "painel le temas" on public.avaliacao_temas;
+create policy "painel le temas" on public.avaliacao_temas for select to anon, authenticated using (true);
+drop policy if exists "painel ajusta temas" on public.avaliacao_temas;
+create policy "painel ajusta temas" on public.avaliacao_temas for update to anon, authenticated using (true) with check (true);
+drop policy if exists "painel le avaliacoes" on public.avaliacoes;
+create policy "painel le avaliacoes" on public.avaliacoes for select to anon, authenticated using (true);
+revoke all on public.avaliacao_temas, public.avaliacoes from anon, authenticated;
+grant select on public.avaliacao_temas, public.avaliacoes to anon, authenticated;
+grant update (titulo, melhoria) on public.avaliacao_temas to anon, authenticated;   -- o CHECK BDV pode reescrever o tema
+
+create or replace function public.avaliacao_motivo_texto(p text) returns text
+language sql immutable as $$
+  select case p when 'demorou' then 'Demorou para resolver' when 'voltou' then 'O problema voltou / não foi resolvido'
+                when 'provisorio' then 'Conserto provisório ou mal feito' when 'sem_retorno' then 'Ninguém explicou o que foi feito'
+                when 'atendimento' then 'Atendimento / forma de tratar' when 'outro' then 'Outro motivo' else p end;
+$$;
+
+-- a pagina de avaliacao (publica) so ve a ocorrencia do proprio codigo, sem telefone
+create or replace function public.avaliacao_ver(p_token text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'tag', o.tag, 'categoria', public.categoria_texto(o.categoria), 'problema', o.problema, 'status', o.status,
+    'resolvido_em', o.resolvido_em, 'solucao', o.solucao,
+    'nome', nullif(initcap(lower(split_part(public.nome_chave(coalesce(nullif(trim(r.nome),''),
+                   case when public.nome_valido(o.relatado_por) then o.relatado_por end)), ' ', 1))), ''),
+    'nota', a.nota, 'motivos', a.motivos, 'observacao', a.observacao, 'avaliado_em', a.criado_em,
+    'pode_mudar', a.id is null or a.criado_em > now() - interval '7 days')
+  from avaliacao_links l
+  join ocorrencias o on o.id = l.ocorrencia_id
+  left join relatores r on r.phone = o.reporter_phone
+  left join avaliacoes a on a.ocorrencia_id = o.id
+  where l.token = p_token and o.status <> 'descartada';
+$$;
+revoke all on function public.avaliacao_ver(text) from public;
+grant execute on function public.avaliacao_ver(text) to anon, authenticated, service_role;
+
+-- grava (ou muda, ate 7 dias depois) a avaliacao do codigo
+create or replace function public.avaliacao_responder(p_token text, p_nota integer, p_motivos text[] default '{}', p_observacao text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare oc bigint; ant avaliacoes; mot text[]; obs text := nullif(left(trim(coalesce(p_observacao, '')), 1000), '');
+begin
+  select ocorrencia_id into oc from avaliacao_links where token = p_token;
+  if oc is null then raise exception 'Link de avaliação inválido.'; end if;
+  if p_nota is null or p_nota not between 1 and 5 then raise exception 'Escolha uma das 5 opções.'; end if;
+  select coalesce(array_agg(distinct m), '{}') into mot from unnest(coalesce(p_motivos, '{}')) m
+   where m in ('demorou','voltou','provisorio','sem_retorno','atendimento','outro');
+  if p_nota >= 4 then mot := '{}'; end if;   -- nota boa: observacao e opcional, sem motivos
+  if p_nota <= 3 and cardinality(mot) = 0 and obs is null then raise exception 'Conte o que poderia ter sido melhor.'; end if;
+  select * into ant from avaliacoes where ocorrencia_id = oc;
+  if found and ant.criado_em < now() - interval '7 days' then raise exception 'Essa avaliação já foi registrada e não pode mais ser mudada.'; end if;
+  insert into avaliacoes (ocorrencia_id, nota, motivos, observacao)
+  values (oc, p_nota, mot, obs)
+  on conflict (ocorrencia_id) do update set nota = excluded.nota, motivos = excluded.motivos, observacao = excluded.observacao,
+    atualizado_em = now(),
+    tema_id     = case when avaliacoes.observacao is not distinct from excluded.observacao then avaliacoes.tema_id end,
+    tema_status = case when avaliacoes.observacao is not distinct from excluded.observacao then avaliacoes.tema_status end;
+end $$;
+revoke all on function public.avaliacao_responder(text, integer, text[], text) from public;
+grant execute on function public.avaliacao_responder(text, integer, text[], text) to anon, authenticated, service_role;
+
+-- n8n: textos que ainda nao tem tema + temas que ja existem (com quantas avaliacoes cada um tem)
+create or replace function public.avaliacoes_para_agrupar(p_limite integer default 25) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'itens', coalesce((select jsonb_agg(x) from (
+       select a.id, a.nota, a.observacao, (select array_agg(public.avaliacao_motivo_texto(m)) from unnest(a.motivos) m) as motivos,
+              public.categoria_texto(o.categoria) as categoria, o.problema, o.solucao
+         from avaliacoes a join ocorrencias o on o.id = a.ocorrencia_id
+        where a.tema_status is null and length(coalesce(a.observacao, '')) >= 3
+        order by a.atualizado_em limit greatest(least(p_limite, 50), 1)) x), '[]'::jsonb),
+    'temas', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'titulo', t.titulo, 'melhoria', t.melhoria,
+                 'qtd', (select count(*) from avaliacoes a where a.tema_id = t.id)) order by t.id) from avaliacao_temas t), '[]'::jsonb));
+$$;
+revoke all on function public.avaliacoes_para_agrupar(integer) from public, anon, authenticated;
+grant execute on function public.avaliacoes_para_agrupar(integer) to service_role;
+
+-- n8n: grava a resposta do Gemini. p = {"itens":[{"id":1,"tema_id":3}, {"id":2,"novo_titulo":"...","nova_melhoria":"..."},
+-- {"id":4,"sem_tema":true}]}. Tema novo com o mesmo titulo de um que ja existe reaproveita o existente.
+create or replace function public.avaliacoes_aplicar_temas(p jsonb) returns integer
+language plpgsql security definer set search_path = public as $$
+declare it jsonb; tid bigint; n integer := 0;
+begin
+  for it in select * from jsonb_array_elements(coalesce(p->'itens', '[]'::jsonb)) loop
+    tid := null;
+    if coalesce((it->>'sem_tema')::boolean, false) then
+      update avaliacoes set tema_id = null, tema_status = 'sem_tema' where id = (it->>'id')::bigint and tema_status is null;
+      n := n + 1; continue;
+    end if;
+    if nullif(it->>'tema_id', '') is not null and (it->>'tema_id') ~ '^\d+$' then
+      select id into tid from avaliacao_temas where id = (it->>'tema_id')::bigint;
+    end if;
+    if tid is null and nullif(trim(it->>'novo_titulo'), '') is not null then
+      insert into avaliacao_temas (titulo, melhoria) values (left(trim(it->>'novo_titulo'), 120), left(nullif(trim(it->>'nova_melhoria'), ''), 300))
+      on conflict ((lower(titulo))) do nothing returning id into tid;
+      if tid is null then select id into tid from avaliacao_temas where lower(titulo) = lower(left(trim(it->>'novo_titulo'), 120)); end if;
+    end if;
+    update avaliacoes set tema_id = tid, tema_status = case when tid is null then 'erro' else 'ok' end
+     where id = (it->>'id')::bigint and tema_status is null;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke all on function public.avaliacoes_aplicar_temas(jsonb) from public, anon, authenticated;
+grant execute on function public.avaliacoes_aplicar_temas(jsonb) to service_role;
+-- para mandar tudo de novo ao Gemini (ex.: depois de mudar o prompt):
+--   update public.avaliacoes set tema_id = null, tema_status = null; delete from public.avaliacao_temas;
+
+-- o que o CHECK BDV le: uma linha por avaliacao, com o carro, a ocorrencia e o tema
+create or replace view public.v_avaliacoes with (security_invoker = on) as
+  select a.id, a.ocorrencia_id, a.nota, a.motivos, a.observacao, a.tema_id, a.tema_status, a.criado_em, a.atualizado_em,
+         t.titulo as tema_titulo, t.melhoria as tema_melhoria,
+         o.tag, o.categoria, o.problema, o.solucao, o.resolvido_em, o.resolvido_por, o.reporter_phone, o.relatado_por
+    from avaliacoes a
+    join ocorrencias o on o.id = a.ocorrencia_id
+    left join avaliacao_temas t on t.id = a.tema_id;
+grant select on public.v_avaliacoes to anon, authenticated;
