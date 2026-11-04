@@ -1,5 +1,5 @@
 // Monitor Frota: rastreio de abertura do e-mail do resumo de roteador.
-// Supabase > Edge Functions > Create a new function > nome: abriu-email-roteador > colar este codigo > Deploy.
+// Supabase > Edge Functions > Create a new function > colar este codigo > Deploy. A URL usa o nome (slug) dado na criacao: aqui e bright-handler.
 // IMPORTANTE: desligar "Verify JWT" dessa funcao (a imagem do e-mail nao manda login).
 // Quem carrega a imagem (?ids=1,2,3) grava email_aberto_em nos usos ainda sem registro de abertura.
 // Responde sempre uma imagem 1x1 transparente, mesmo se algo falhar.

@@ -19,8 +19,8 @@ const TF_TOKEN  = String(cfg.tfleetToken  || '');
 const JANELA_H = Number(cfg.resumoHoras || 24); // janela do resumo (horas)
 const TRAT_URL = String(cfg.tratativaUrl || 'https://zael20.github.io/painel-mes-tfleet-bdv/roteador-tratativa.html');
 const MIN_MOVE_M   = Number(cfg.minMoveMeters   || 150);
-// Rastreio de abertura do e-mail (imagem 1x1). Funcao do Supabase: abriu-email-roteador.ts
-const ABERTURA_URL = String(cfg.aberturaUrl || 'https://orhuxmsrdnugpogvtnbg.supabase.co/functions/v1/abriu-email-roteador');
+// Rastreio de abertura do e-mail (imagem 1x1). Funcao do Supabase (slug bright-handler): abriu-email-roteador.ts
+const ABERTURA_URL = String(cfg.aberturaUrl || 'https://orhuxmsrdnugpogvtnbg.supabase.co/functions/v1/bright-handler');
 
 const H = { apikey: KEY, Authorization: 'Bearer ' + KEY };
 const http = (opts) => this.helpers.httpRequest(opts);
