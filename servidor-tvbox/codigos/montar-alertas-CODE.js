@@ -15,6 +15,7 @@ const MIN_MOVE_M   = Number(cfg.minMoveMeters   || 150);
 const MAPTILER_KEY = String(cfg.maptilerKey || 'G2MUHW7Q8hatR3VYbHUz');
 // Rastreio de abertura do e-mail (imagem 1x1). Funcao do Supabase, slug bright-handler.
 const ABERTURA_URL = String(cfg.aberturaUrl || 'https://orhuxmsrdnugpogvtnbg.supabase.co/functions/v1/bright-handler');
+const TRAT_URL = String(cfg.tratativaUrl || 'https://zael20.github.io/painel-mes-tfleet-bdv/roteador-tratativa.html');
 
 const H = { apikey: KEY, Authorization: 'Bearer ' + KEY };
 const http = (opts) => this.helpers.httpRequest(opts);
@@ -236,8 +237,37 @@ for (const ev of offs) {
              <td style="padding:6px 0;">Ficou <b>parado</b> — <a href="${linkFixo}" style="color:#1677ff;">ver no mapa</a>
              (${duracao} no mesmo ponto)</td></tr>`;
 
+    // registro do uso: carro, motorista sugerido e envio (alimenta a aba "Uso no roteador" do painel)
+    // merge: cria a linha ou atualiza so essas colunas; token e tratativa ficam como estao
+    let tratLink = '';
+    try {
+      await http({ method: 'POST', url: SB + '/rest/v1/roteador_tratativas?on_conflict=event_id', json: true,
+        headers: { ...H, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: [{ event_id: ev.id, carro: frota || devId, motorista_sugerido: motoristaNome, email_enviado_em: new Date().toISOString() }] });
+      const rows = await sbGet('roteador_tratativas?event_id=eq.' + ev.id + '&select=token');
+      if (Array.isArray(rows) && rows[0]) tratLink = `${TRAT_URL}?t=${rows[0].token}`;
+    } catch (e) { /* sem o SQL roteador-registros: o e-mail sai sem o botao */ }
+
     // imagem 1x1 no fim do e-mail: quando ele carrega, a funcao grava email_aberto_em
     const pixel = `<img src="${ABERTURA_URL}?ids=${ev.id}" width="1" height="1" alt="" style="display:block;border:0;">`;
+
+    // destaque: o que aconteceu, com o possivel motorista (sempre como possibilidade)
+    const destaqueMot = motoristaNome || 'não identificado';
+    const destaque = `<div style="margin-bottom:14px;padding:14px 16px;background:#fff1f0;border:2px solid #ff4d4f;border-radius:8px;">
+      <div style="font-size:15px;font-weight:700;color:#a8071a;">Carro ${frota || devId} consumiu ${mbTxt} MB no roteador</div>
+      <div style="font-size:14px;margin-top:6px;">Período: ${periodo}${duracao ? ' (' + duracao + ')' : ''}.</div>
+      <div style="font-size:14px;margin-top:6px;">Possível motorista nessa rota: <b>${esc(destaqueMot)}</b>.</div>
+      <div style="font-size:12px;color:#8c1d18;margin-top:6px;">Possibilidade a investigar, não confirmação. Pode ter sido outra pessoa (passageiro, lavador da garagem, etc.).</div>
+    </div>`;
+
+    // checklist de verificacao antes de concluir + botao de tratativa
+    const checklist = `<div style="margin-top:14px;padding:12px 14px;border:1px solid #e5e5e5;border-radius:8px;font-size:14px;">
+      <b>Antes de concluir, verificar:</b>
+      <div style="margin-top:6px;">☐ Câmera do veículo no horário do roteador</div>
+      <div style="margin-top:4px;">☐ Quem estava no carro (motorista, passageiros, lavador da garagem)</div>
+      <div style="margin-top:4px;">☐ Conversa com o motorista, se for o caso</div>
+      ${tratLink ? `<div style="margin-top:14px;"><a href="${tratLink}" style="display:inline-block;background:#0d6c8c;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-weight:600;font-size:14px;">Registrar tratativa</a></div>` : ''}
+    </div>`;
 
     const subject = `🚐 Roteador usado — carro ${frota || devId} — ${mbTxt} MB`;
     const html =
@@ -247,6 +277,7 @@ for (const ev of offs) {
     <div style="font-size:14px;opacity:.9;">Carro ${frota || devId} · ${fmtBelem(offTs)}</div>
   </div>
   <div style="border:1px solid #e5e5e5;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px;">
+    ${destaque}
     <table style="width:100%;border-collapse:collapse;font-size:14px;">
       <tr><td style="padding:6px 0;color:#555;width:120px;">Carro</td><td style="padding:6px 0;"><b>${frota || devId}</b></td></tr>
       <tr><td style="padding:6px 0;color:#555;">Consumo</td><td style="padding:6px 0;"><b>${mbTxt} MB</b> pelo roteador</td></tr>
@@ -260,6 +291,7 @@ for (const ev of offs) {
       </a>
     </div>
     ${sugestao}
+    ${checklist}
     <div style="margin-top:16px;font-size:12px;color:#999;">
       Monitor Frota · aviso automatico.
     </div>
@@ -267,13 +299,6 @@ for (const ev of offs) {
   ${pixel}
 </div>`;
 
-    // registro do uso: carro, motorista sugerido e envio (alimenta a aba "Uso no roteador" do painel)
-    // merge: cria a linha ou atualiza so essas colunas; token e tratativa ficam como estao
-    try {
-      await http({ method: 'POST', url: SB + '/rest/v1/roteador_tratativas?on_conflict=event_id', json: true,
-        headers: { ...H, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: [{ event_id: ev.id, carro: frota || devId, motorista_sugerido: motoristaNome, email_enviado_em: new Date().toISOString() }] });
-    } catch (e) { /* sem o SQL roteador-registros: o e-mail sai do mesmo jeito */ }
 
     out.push({ json: { to, subject, html, eventId: ev.id } });
   } catch (e) {
