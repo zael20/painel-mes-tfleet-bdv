@@ -84,6 +84,9 @@ async function rpc(fn, body) {
       </fieldset>
       <label class="campo" for="obs">Descreva a tratativa (evidência)</label>
       <textarea id="obs" maxlength="1000" placeholder="Ex.: conversei com o motorista Fulano às 17h, ele confirmou que ligou para o passageiro usar; orientado sobre a regra.">${esc(u.observacao || "")}</textarea>
+      <label class="campo" for="foto">Foto da evidência (obrigatória)</label>
+      ${u.evidencia_url ? `<p class="muted">Já tem foto: <a href="${esc(u.evidencia_url)}" target="_blank" rel="noopener">ver foto</a>. Anexe outra só se quiser trocar.</p>` : ""}
+      <input id="foto" type="file" accept="image/*" capture="environment" style="margin-top:6px;">
       <label class="campo" for="por">Quem tratou</label>
       <input id="por" type="text" maxlength="120" placeholder="Seu nome" value="${esc(u.tratado_por || lerNome())}">
       <button id="b">Registrar tratativa</button>
@@ -95,9 +98,21 @@ async function rpc(fn, body) {
     if (!r) { $("#e").textContent = "Escolha o que foi feito."; return; }
     if (obs.length < 5) { $("#e").textContent = "Descreva o que foi feito."; $("#obs").focus(); return; }
     if (por.length < 3) { $("#e").textContent = "Informe quem tratou."; $("#por").focus(); return; }
+    const arq = $("#foto").files[0];
+    if (!arq && !u.evidencia_url) { $("#e").textContent = "Anexe a foto da evidência."; $("#foto").focus(); return; }
     $("#b").disabled = true; $("#b").textContent = "Enviando…"; $("#e").textContent = "";
     try {
-      await rpc("roteador_tratar", { p_token: token, p_tratativa: r, p_por: por, p_obs: obs });
+      // foto: envia para o bucket publico com nome aleatorio, depois grava o link junto com a tratativa
+      let evid = u.evidencia_url || "";
+      if (arq) {
+        const ext = (arq.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const nome = crypto.randomUUID() + "." + ext;
+        const up = await fetch(CONFIG.url + "/storage/v1/object/evidencias-roteador/" + nome, { method: "POST",
+          headers: { apikey: CONFIG.key, Authorization: "Bearer " + CONFIG.key, "Content-Type": arq.type || "image/jpeg" }, body: arq });
+        if (!up.ok) throw new Error("não consegui enviar a foto (código " + up.status + ")");
+        evid = CONFIG.url + "/storage/v1/object/public/evidencias-roteador/" + nome;
+      }
+      await rpc("roteador_tratar", { p_token: token, p_tratativa: r, p_por: por, p_obs: obs, p_evidencia: evid });
       gravarNome(por);
       $("#app").innerHTML = `<div class="ok">Tratativa registrada. Obrigado!</div>
         <p class="muted">Carro ${esc(u.carro)} · ${esc(OPCOES.find(o => o[0] === r)[1])}<br>${esc(obs)}<br>— ${esc(por)}</p>`;
