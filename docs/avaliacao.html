@@ -36,6 +36,12 @@ legend { font-weight: 700; margin-bottom: 8px; font-size: 18px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 99px; padding: 8px 12px; font-size: 14px; cursor: pointer; }
 .chip:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .chip input { accent-color: var(--accent); margin: 0; }
+.vist { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 10px; font-size: 14px; }
+.vist ul { list-style: none; padding: 0; margin: 6px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; }
+.vist li::before { content: "✓ "; color: var(--good); font-weight: 700; }
+.vist li.inok::before { content: "• "; color: var(--crit); }
+.fotos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 8px; }
+.fotos img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
 .campo { width: 100%; font: inherit; font-size: 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 10px; }
 textarea { width: 100%; min-height: 90px; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 10px; }
 button { width: 100%; margin-top: 14px; font-family: inherit; font-weight: 600; font-size: 16px; padding: 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
@@ -92,16 +98,24 @@ async function rpc(fn, body) {
 }
 
 (async () => {
-  const token = (new URLSearchParams(location.search).get("t") || "").toLowerCase();
+  // link curto: a/?CODIGO  (o antigo avaliacao.html?t=CODIGO continua valendo)
+  const token = (new URLSearchParams(location.search).get("t") || location.search.slice(1)).toLowerCase();
   if (!/^[0-9a-f]{12}$/.test(token)) { $("#app").textContent = "Link inválido. Abra pelo link da mensagem do WhatsApp."; return; }
   let c;
   try { c = await rpc("avaliacao_ver", { p_token: token }); } catch (e) { $("#app").textContent = "Não consegui carregar: " + e.message; return; }
   if (!c) { $("#app").textContent = "Ocorrência não encontrada."; return; }
   if (c.ja_avaliada) { $("#app").innerHTML = `<div class="ok">Essa ocorrência já foi avaliada. Obrigado!</div>`; return; }
   if (c.bloqueado) { $("#app").textContent = "Link bloqueado por tentativas erradas. Fale com a equipe do transporte."; return; }
+  const vi = c.vistoria, ITENS = ["Aplicativo BDV", "Chip / internet", "Cabo / carregador", "Leitor", "Suporte", "Celular"];
   const caso = `<div class="caso"><b>Carro ${esc(c.tag || "?")} · ${esc(c.categoria)}</b>
-      <span class="muted">${esc(c.problema || "")}${c.resolvido_em ? " · resolvida em " + dt(c.resolvido_em) : ""}</span>
-      ${c.solucao ? `<div class="muted">Solução: ${esc(c.solucao)}</div>` : ""}</div>`;
+      <span class="muted">${esc(c.problema || "")}</span>
+      <div class="muted">${c.aberta_em ? "Aberta em " + dt(c.aberta_em) : ""}${c.resolvido_em ? " · resolvida em " + dt(c.resolvido_em) : ""}</div>
+      ${c.solucao ? `<div style="margin-top:4px"><b style="display:inline">Solução:</b> ${esc(c.solucao)}</div>` : ""}</div>
+    ${vi ? `<div class="vist"><b>O que foi visto na vistoria de ${dt(vi.ts)}</b>
+      <ul>${ITENS.filter(k => vi.itens && vi.itens[k]).map(k => `<li class="${vi.itens[k] === "OK" ? "iok" : "inok"}">${k}: ${vi.itens[k] === "OK" ? "OK" : vi.feito ? "corrigido" : "com problema"}</li>`).join("")}</ul>
+      ${vi.feito ? `<div><b style="display:inline">O que foi feito:</b> ${esc(vi.feito)}</div>` : ""}
+      ${(vi.fotos || []).length ? `<div class="fotos">${vi.fotos.filter(u => /^https:\/\//.test(u)).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Foto da vistoria" loading="lazy"></a>`).join("")}</div>` : ""}
+    </div>` : ""}`;
   // 1) quem esta avaliando: so quem relatou essa ocorrencia no grupo
   $("#app").innerHTML = `${caso}
     <form id="fi">

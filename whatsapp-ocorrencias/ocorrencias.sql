@@ -814,8 +814,12 @@ $$;
 -- Os codigos ficam numa tabela que o painel NAO le (so as funcoes abaixo), para ninguem avaliar no lugar do motorista.
 -- Sem link no aviso:  update public.whatsapp_avisos set avaliacao_url = null;
 alter table public.whatsapp_avisos
-  add column if not exists avaliacao_url   text default 'https://zael20.github.io/painel-mes-tfleet-bdv/avaliacao.html',
+  add column if not exists avaliacao_url   text default 'zael20.github.io/painel-mes-tfleet-bdv/a/',
   add column if not exists avaliacao_desde timestamptz default now();
+-- link curto (05/11): pasta a/ e sem "https://" (o WhatsApp reconhece o link do mesmo jeito)
+alter table public.whatsapp_avisos alter column avaliacao_url set default 'zael20.github.io/painel-mes-tfleet-bdv/a/';
+update public.whatsapp_avisos set avaliacao_url = 'zael20.github.io/painel-mes-tfleet-bdv/a/'
+ where avaliacao_url = 'https://zael20.github.io/painel-mes-tfleet-bdv/avaliacao.html';
 create table if not exists public.avaliacao_links (
   ocorrencia_id bigint primary key references public.ocorrencias(id) on delete cascade,
   token         text not null unique default substr(replace(gen_random_uuid()::text, '-', ''), 1, 12),
@@ -855,14 +859,19 @@ begin
               initcap(lower(split_part(public.nome_chave(coalesce(nullif(trim(r.nome),''),
                      case when public.nome_valido(o.relatado_por) then o.relatado_por end)), ' ', 1))) || ', a',
               'A') ||
-           ' ocorrência do carro ' || coalesce(o.tag, '?') || ' (' || public.categoria_texto(o.categoria) || ') foi resolvida em ' ||
+           ' ocorrência do carro ' || coalesce(o.tag, '?') || ' (' || public.categoria_texto(o.categoria) || '), aberta em ' ||
+           to_char(coalesce(o.primeira_msg_em, o.criado_em) at time zone 'America/Belem', 'DD/MM "às" HH24:MI') || ', foi resolvida em ' ||
            to_char(o.resolvido_em at time zone 'America/Belem', 'DD/MM "às" HH24:MI') || '.' ||
-           coalesce(E'\nSolução: ' || nullif(trim(o.solucao), ''), '') ||
-           coalesce(E'\n\n_Como foi o atendimento? Quem relatou pode avaliar aqui:_ ' || nullif(c.avaliacao_url, '') || '?t=' || public.avaliacao_token_de(o.id), '') as texto
+           -- solucao = o que foi escrito no CHECK BDV (o "o que foi feito" da vistoria, ou o texto do Marcar resolvida)
+           coalesce(E'\nSolução: ' || nullif(trim(coalesce(nullif(trim(v.acao), ''),
+                    regexp_replace(o.solucao, '^Vistoria de \d{2}/\d{2}: ', ''))), ''), '') ||
+           coalesce(E'\n\nAvalie o atendimento: ' || nullif(c.avaliacao_url, '') ||
+                    case when c.avaliacao_url like '%.html' then '?t=' else '?' end || public.avaliacao_token_de(o.id), '') as texto
     from ocorrencias o
     cross join lateral (select w.* from whatsapp_msgs w where w.ocorrencia_id = o.id and w.grupo_jid like '%@g.us'
                          order by w.ts limit 1) m
     left join relatores r on r.phone = o.reporter_phone
+    left join vistorias v on v.id = o.vistoria_id
     where o.status = 'resolvida' and o.aviso_status is null and o.origem = 'whatsapp' and coalesce(o.resolvido_por,'') <> 'api'
       and coalesce(o.primeira_msg_em, o.criado_em) >= c.desde and o.resolvido_em >= c.desde
       and not exists (select 1 from whatsapp_msgs w where w.ocorrencia_id = o.id and w.acao_ia = 'resolve')  -- ja avisaram no grupo
@@ -1041,11 +1050,18 @@ create or replace function public.avaliacao_ver(p_token text) returns jsonb
 language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'tag', o.tag, 'categoria', public.categoria_texto(o.categoria), 'problema', o.problema, 'status', o.status,
-    'resolvido_em', o.resolvido_em, 'solucao', o.solucao,
+    'aberta_em', coalesce(o.primeira_msg_em, o.criado_em), 'resolvido_em', o.resolvido_em, 'resolvido_por', o.resolvido_por,
+    'solucao', coalesce(nullif(trim(v.acao), ''), regexp_replace(o.solucao, '^Vistoria de \d{2}/\d{2}: ', '')),
+    -- o que a vistoria viu (sem observacao nem pendencias internas, que nao vao ao motorista)
+    'vistoria', case when v.id is not null then jsonb_build_object('ts', v.ts, 'data', v.data_vistoria, 'status', v.status, 'local', v.local,
+        'itens', jsonb_build_object('Aplicativo BDV', v.item_app, 'Chip / internet', v.item_chip, 'Cabo / carregador', v.item_cabo,
+                                    'Leitor', v.item_leitor, 'Suporte', v.item_suporte, 'Celular', v.item_celular),
+        'feito', nullif(trim(v.acao), ''), 'fotos', to_jsonb(v.fotos)) end,
     'ja_avaliada', exists (select 1 from avaliacoes a where a.ocorrencia_id = o.id),
     'bloqueado', l.tentativas >= 5)
   from avaliacao_links l
   join ocorrencias o on o.id = l.ocorrencia_id
+  left join vistorias v on v.id = o.vistoria_id
   where l.token = p_token and o.status <> 'descartada';
 $$;
 revoke all on function public.avaliacao_ver(text) from public;
