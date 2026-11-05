@@ -62,6 +62,54 @@
   },
   {
    "parameters": {
+    "url": "https://is.gd/create.php",
+    "sendQuery": true,
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "format",
+       "value": "simple"
+      },
+      {
+       "name": "url",
+       "value": "={{ 'https://' + String($json.link || '').replace(/^https?:\\/\\//, '') }}"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 10000,
+     "response": {
+      "response": {
+       "responseFormat": "text",
+       "outputPropertyName": "data"
+      }
+     }
+    }
+   },
+   "name": "Encurtar link",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    300
+   ],
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Troca o link da avaliacao pelo curto do is.gd. Se o encurtador falhar, o aviso vai com o link normal.\nconst a = $('Separar avisos').item.json;\nconst r = String($json.data || '').trim();\nconst curto = /^https:\\/\\/is\\.gd\\/[\\w-]+$/.test(r) ? r : null;\nreturn { json: { ...a, texto: curto && a.link ? a.texto.replace(a.link, curto) : a.texto } };\n",
+    "mode": "runOnceForEachItem"
+   },
+   "name": "Link curto no texto",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    300
+   ]
+  },
+  {
+   "parameters": {
     "method": "POST",
     "url": "__EVOLUTION_URL__/message/sendText/__INSTANCIA__",
     "authentication": "genericCredentialType",
@@ -77,7 +125,7 @@
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
    "position": [
-    660,
+    1100,
     300
    ],
    "credentials": {
@@ -97,7 +145,7 @@
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "position": [
-    880,
+    1320,
     300
    ]
   },
@@ -118,7 +166,7 @@
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
    "position": [
-    1100,
+    1540,
     300
    ],
    "credentials": {
@@ -153,6 +201,28 @@
    ]
   },
   "Separar avisos": {
+   "main": [
+    [
+     {
+      "node": "Encurtar link",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Encurtar link": {
+   "main": [
+    [
+     {
+      "node": "Link curto no texto",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Link curto no texto": {
    "main": [
     [
      {

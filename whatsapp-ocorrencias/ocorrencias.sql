@@ -865,13 +865,16 @@ begin
            -- solucao = o que foi escrito no CHECK BDV (o "o que foi feito" da vistoria, ou o texto do Marcar resolvida)
            coalesce(E'\nSolução: ' || nullif(trim(coalesce(nullif(trim(v.acao), ''),
                     regexp_replace(o.solucao, '^Vistoria de \d{2}/\d{2}: ', ''))), ''), '') ||
-           coalesce(E'\n\nAvalie o atendimento: ' || nullif(c.avaliacao_url, '') ||
-                    case when c.avaliacao_url like '%.html' then '?t=' else '?' end || public.avaliacao_token_de(o.id), '') as texto
+           coalesce(E'\n\nAvalie o atendimento: ' || lk.link, '') as texto,
+           -- o n8n troca o link por um curto (is.gd); se o encurtador falhar, vai este mesmo
+           lk.link
     from ocorrencias o
     cross join lateral (select w.* from whatsapp_msgs w where w.ocorrencia_id = o.id and w.grupo_jid like '%@g.us'
                          order by w.ts limit 1) m
     left join relatores r on r.phone = o.reporter_phone
     left join vistorias v on v.id = o.vistoria_id
+    cross join lateral (select nullif(c.avaliacao_url, '') || case when c.avaliacao_url like '%.html' then '?t=' else '?' end ||
+                               public.avaliacao_token_de(o.id) as link) lk
     where o.status = 'resolvida' and o.aviso_status is null and o.origem = 'whatsapp' and coalesce(o.resolvido_por,'') <> 'api'
       and coalesce(o.primeira_msg_em, o.criado_em) >= c.desde and o.resolvido_em >= c.desde
       and not exists (select 1 from whatsapp_msgs w where w.ocorrencia_id = o.id and w.acao_ia = 'resolve')  -- ja avisaram no grupo

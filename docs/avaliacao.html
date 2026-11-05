@@ -42,6 +42,7 @@ legend { font-weight: 700; margin-bottom: 8px; font-size: 18px; }
 .vist li.inok::before { content: "• "; color: var(--crit); }
 .fotos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 8px; }
 .fotos img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
+footer { color: var(--muted); font-size: 11px; line-height: 1.35; margin: 18px 4px 8px; opacity: .8; }
 .campo { width: 100%; font: inherit; font-size: 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 10px; }
 textarea { width: 100%; min-height: 90px; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 10px; }
 button { width: 100%; margin-top: 14px; font-family: inherit; font-weight: 600; font-size: 16px; padding: 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
@@ -52,7 +53,8 @@ button:disabled { opacity: .6; }
 </head>
 <body>
 <header><small>TRANSPORTE · CELULAR DO ÔNIBUS</small><h1>Avaliar atendimento</h1></header>
-<main><div id="app" class="card">Carregando…</div></main>
+<main><div id="app" class="card">Carregando…</div>
+<footer>Para a segurança das avaliações, guardamos o horário, o modelo do celular e o IP de cada envio, junto do número informado. Esses dados servem só para confirmar quem avaliou.</footer></main>
 <script>
 // Conexao publica do painel: a pagina so ve e avalia a ocorrencia do codigo do link.
 const CONFIG = { url: "https://orhuxmsrdnugpogvtnbg.supabase.co", key: "sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL" };
@@ -123,7 +125,6 @@ async function rpc(fn, body) {
         <div class="muted">Só quem relatou essa ocorrência no grupo pode avaliar. Digite o seu número de WhatsApp com DDD (ou a sua matrícula).</div>
         <input id="ident" class="campo" type="text" inputmode="numeric" autocomplete="tel" maxlength="20" placeholder="Ex.: 91 99999-8888">
       </fieldset>
-      <div class="muted" style="margin-top:8px;font-size:12px">Por segurança, registramos o celular usado, o horário e o IP de cada avaliação.</div>
       <button id="bi">Continuar</button>
       <div id="ei" class="err"></div>
     </form>`;
