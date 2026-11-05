@@ -98,6 +98,16 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
 .muted { color: var(--muted); font-size: 13px; }
 .mapa { height: 380px; border-radius: 8px; border: 1px solid var(--line); margin: 8px 0; background: var(--chart-grid); cursor: default; }
 .mapa.grande { height: 460px; }
+dialog.dd { border: 1px solid var(--line); border-radius: 10px; padding: 0; width: min(920px, calc(100vw - 32px)); max-height: calc(100vh - 48px); background: var(--panel); color: var(--ink); }
+dialog.dd::backdrop { background: rgba(10, 16, 22, .55); }
+.dd-h { display: flex; gap: 10px; align-items: start; justify-content: space-between; padding: 14px 16px 8px; position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--line); z-index: 1; }
+.dd-h h3 { margin: 0; font: 600 18px var(--f-display); } .dd-b { padding: 12px 16px 16px; }
+.dd-x { background: none; border: 0; font-size: 22px; line-height: 1; color: var(--muted); cursor: pointer; padding: 2px 6px; }
+.sit { font: 600 11px var(--f-body); padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.sit-ok { background: var(--good-soft); color: var(--good); } .sit-fora { background: var(--warn-soft); color: var(--warn); }
+.sit-sem { background: var(--accent-soft); color: var(--accent); } .sit-inat { background: var(--crit-soft); color: var(--crit); }
+.emp-h td { background: var(--bg); font-size: 14px; } .emp-h .btn { padding: 3px 10px; font-size: 12px; margin-left: 8px; }
+tbody[data-n] + tbody[data-n] .emp-h td { border-top: 2px solid var(--line); }
 @media (max-width: 640px) { .mapa { height: 300px; } .mapa.grande { height: 360px; } }
 .oc { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; font-size: 14px; }
 .oc.t-LOTA_FIM { border-left-color: var(--crit); } .oc.t-MOVER { border-left-color: var(--warn); } .oc.t-SOBREPOSTA { border-left-color: var(--accent); }
@@ -119,7 +129,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
 .painel summary { cursor: pointer; font-size: 14px; }
 .gl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .gl th, .gl td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-.gl input[type=text], .gl input[type=email] { width: 100%; min-width: 120px; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+.gl input[type=text], .gl input[type=email], .gl input[type=tel] { width: 100%; min-width: 120px; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
 .gl-wrap { overflow-x: auto; }
 .gl tr[hidden] { display: none !important; }
 @media (max-width: 640px) {
@@ -128,6 +138,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
   .gl td { border: 0; padding: 2px 0; }
   .gl td:first-child, .gl td:nth-child(4), .gl td:nth-child(5) { grid-column: 1 / -1; }
   .gl td[data-l]::before { content: attr(data-l); display: block; font-size: 11px; color: var(--muted); }
+  .gl tr.emp-h { display: block; padding: 8px 0 2px; } .gl tr.emp-h td { display: block; }
 }
 #gate { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #gate form { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; width: 100%; max-width: 300px; display: flex; flex-direction: column; gap: 10px; }
@@ -182,27 +193,29 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--accent-soft)
 
   <section class="painel" data-p="fora" hidden>
     <div class="kpis k4" id="fKpis"></div>
-    <details open><summary><b>Por rota</b> <span class="muted">· média por dia no período; clique na rota para ver as pessoas dela</span></summary>
+    <details open><summary><b>Por rota</b> <span class="muted">· média por dia no período; clique na rota para ver quem embarcou nela: na rota, fora de rota, não cadastrados e inativos</span></summary>
     <div id="fRotas"></div></details>
     <h3>Pessoas</h3>
     <div class="bar"><label>Buscar<input id="fBuscaP" type="search" placeholder="nome, matrícula, linha, gestor, empresa"></label><span id="fFiltro" class="muted"></span></div>
     <div id="fLista"></div>
   </section>
 
+  <dialog id="ddRota" class="dd"><div class="dd-h"><div><h3 id="ddTit"></h3><div class="muted" id="ddSub"></div></div><button type="button" class="dd-x" id="ddX" aria-label="Fechar">✕</button></div><div class="dd-b" id="ddCorpo"></div></dialog>
+
   <section class="painel" data-p="cad" hidden>
-    <p class="muted">Para quem vai o e-mail de passageiro fora de rota, nesta ordem: <b>1)</b> pessoa com gestor próprio; <b>2)</b> gestor da <b>empresa</b>; <b>3)</b> base de gestores por <b>centro de custo</b>; <b>4)</b> por <b>gerência de área (GA)</b>; <b>5)</b> por <b>gerência geral (GG)</b>. Sem nenhum, vem para você. Clique nos números para ir à lista.</p>
+    <p class="muted">Para quem vai o e-mail de passageiro fora de rota, nesta ordem: <b>1)</b> pessoa com gestor próprio; <b>2)</b> gestores da <b>empresa</b>; <b>3)</b> base de gestores por <b>centro de custo</b>; <b>4)</b> por <b>gerência de área (GA)</b>; <b>5)</b> por <b>gerência geral (GG)</b>. Sem nenhum, vem para você. O e-mail vai para <b>todos</b> os gestores ativos do primeiro item que tiver alguém. Clique nos números para ir à lista.</p>
     <div class="kpis k4" id="cKpis"></div>
     <div class="imp">
       <b>Atualizar pela planilha</b>
-      <p class="muted" style="margin:2px 0 8px">O modelo tem as abas <b>Gestor por empresa</b>, <b>Base de gestores</b> e <b>Pessoas</b>. Preencha só as que precisar; mandar de novo a mesma empresa, gerência/centro de custo ou matrícula atualiza.</p>
+      <p class="muted" style="margin:2px 0 8px">O modelo tem as abas <b>Gestor por empresa</b>, <b>Base de gestores</b> e <b>Pessoas</b>. Preencha só as que precisar. Na aba de empresa é <b>uma linha por gestor</b>: para a empresa mandar para 3 pessoas, repita a empresa em 3 linhas com nome, cargo e e-mail. Mandar de novo o mesmo e-mail na mesma empresa (ou gerência) atualiza.</p>
       <div class="bar" style="margin:0"><a class="btn" href="modelo-cadastro-gestores.xlsx" download>Baixar modelo Excel</a><label class="btn" style="flex-direction:row">Subir planilha<input id="cArq" type="file" accept=".xlsx,.xls" hidden></label><button id="cSalvar" type="button" class="btn" hidden>Salvar</button><span id="cMsg" class="muted"></span></div>
       <div id="cPrevia"></div>
     </div>
     <details open><summary><h3 id="sEmp">1. Vínculo por empresa</h3></summary>
-      <p class="muted">Uma linha por empresa: quem recebe o e-mail de todas as pessoas dela (gerente, gestor de contrato…). A empresa vem da TFleet; dá para incluir outra na última linha.</p>
+      <p class="muted">Quantos gestores precisar por empresa (preposto, gestor de contrato, coordenador, supervisor, gerente de área, gerente geral). Todos os marcados em "Envia" recebem o e-mail das pessoas da empresa. A empresa vem da TFleet; dá para incluir outra no fim da lista.</p>
       <div id="eLista" class="muted">Abra com a senha para ver.</div></details>
     <details open><summary><h3 id="sBase">2. Base de gestores</h3></summary>
-      <p class="muted">Gestor por gerência de área, gerência geral e centro de custo. Vale para quem não tem gestor pela empresa. Preencha só o que souber (ex.: só a GA).</p>
+      <p class="muted">Próprios: gestores por gerência de área, gerência geral e centro de custo, com o cargo. Dá para pôr várias pessoas na mesma GA (supervisor, coordenador, gerente…): todas recebem. Vale para quem não tem gestor pela empresa. Preencha só o que souber (ex.: só a GA).</p>
       <div id="bLista" class="muted">Abra com a senha para ver.</div></details>
     <details open><summary><h3 id="sSem">3. Quem ainda está sem gestor</h3></summary>
       <p class="muted">Passageiros dos últimos 30 dias que não caem em nenhuma regra acima, agrupados por empresa, GA, GG e centro de custo (sem nomes).</p>
@@ -608,7 +621,7 @@ async function foraLoad(ok) {
 function foraRender() {
   const rs = resumo.slice().sort((a, b) => b.de_outra_linha_dia - a.de_outra_linha_dia).filter(r => r.de_outra_linha_dia > 0 || r.inativos_dia > 0);
   $("#fRotas").innerHTML = rs.length ? `<div class="gl-wrap"><table class="gl"><tr><th>Rota</th><th>Embarques/dia</th><th>De outra rota/dia</th><th>Sem cadastro/dia</th><th>Inativos/dia</th><th>Pessoas recorrentes</th></tr>` +
-    rs.map(r => `<tr class="click${foraLinha === r.linha ? " on" : ""}" data-l="${esc(r.linha)}"><td data-l="Rota"><b>${esc(r.linha)}</b> <span class="muted">${esc(r.sentido || "")}</span></td><td data-l="Embarques/dia">${fmt(r.passageiros_dia)}</td>
+    rs.map(r => `<tr class="click${foraLinha === r.linha ? " on" : ""}" data-l="${esc(r.linha)}" data-s="${esc(r.sentido || "")}"><td data-l="Rota"><b>${esc(r.linha)}</b> <span class="muted">${esc(r.sentido || "")}</span></td><td data-l="Embarques/dia">${fmt(r.passageiros_dia)}</td>
       <td data-l="De outra rota/dia"><b>${fmt(r.de_outra_linha_dia)}</b></td><td data-l="Sem cadastro/dia">${fmt(r.sem_cadastro_dia)}</td><td data-l="Inativos/dia">${r.inativos_dia > 0 ? `<b style="color:var(--crit)">${fmt(r.inativos_dia)}</b>` : "0"}</td><td data-l="Recorrentes">${r.recorrentes}</td></tr>`).join("") + "</table></div>"
     : '<div class="msg">Ninguém embarcando fora da rota de cadastro nesse período.</div>';
   if (!foraL) {
@@ -644,7 +657,37 @@ function foraRender() {
       <td data-l="Gestor">${p.gestor_email ? `${esc(p.gestor_nome || "")}<br><span class="muted">${esc(p.gestor_email)} · via ${esc(p.gestor_origem)}</span>` : '<span class="v-err">sem gestor</span>'}</td></tr>`; }).join("") + "</table></div>" : "");
 }
 $("#fKpis").addEventListener("click", e => { const b = e.target.closest("button.kpi"); if (!b) return; foraF = foraF === b.dataset.f ? "" : b.dataset.f; foraRender(); });
-$("#fRotas").addEventListener("click", e => { const tr = e.target.closest("tr.click"); if (!tr) return; foraLinha = foraLinha === tr.dataset.l ? "" : tr.dataset.l; foraRender(); $("#fFiltro").scrollIntoView({ behavior: "smooth", block: "center" }); });
+$("#fRotas").addEventListener("click", e => { const tr = e.target.closest("tr.click"); if (!tr) return; foraLinha = tr.dataset.l; foraRender(); rotaDrill(tr.dataset.l, tr.dataset.s); });
+// drill-down da rota: todos que embarcaram nela, separados por situacao (com a senha de gestores)
+const SIT = { "FORA DE ROTA": ["sit-fora", "Fora de rota", "cadastrado em outra rota"], "NÃO CADASTRADO": ["sit-sem", "Não cadastrado", "sem matrícula ou sem cadastro na TFleet"],
+  "INATIVO": ["sit-inat", "Inativo", "cadastro INATIVO embarcando"], "NA ROTA": ["sit-ok", "Na rota", "cadastrados nesta rota"] };
+let ddL = [], ddF = "";
+async function rotaDrill(linha, sentido) {
+  const dlg = $("#ddRota");
+  $("#ddTit").textContent = linha; $("#ddSub").textContent = (sentido || "") + " · últimos " + $("#fDias").value + " dias";
+  $("#ddCorpo").innerHTML = '<div class="msg">Carregando…</div>'; ddF = "";
+  if (!dlg.open) dlg.showModal();
+  if (!senhaOk) { $("#ddCorpo").innerHTML = '<div class="msg">Digite a senha de gestores (em cima) para ver quem são as pessoas desta rota.</div>'; return; }
+  try { ddL = await api("rpc/rota_passageiros", { senha: gSenha, dias: +$("#fDias").value, p_linha: linha, p_sentido: sentido || null }); ddRender(); }
+  catch (err) { $("#ddCorpo").innerHTML = `<div class="msg">Erro: ${esc(err.message)}${/rota_passageiros/.test(err.message) ? " (rodou o lotacao-v8-gestores.sql?)" : ""}</div>`; }
+}
+function ddRender() {
+  const n = s => ddL.filter(p => p.situacao === s).length, dt = d => d ? String(d).slice(8, 10) + "/" + String(d).slice(5, 7) : "";
+  const v = ddL.filter(p => !ddF || p.situacao === ddF);
+  $("#ddCorpo").innerHTML = `<div class="kpis k4">${Object.entries(SIT).map(([k, [cls, tit, sub]]) =>
+      `<button type="button" class="kpi${ddF === k ? " on" : ""}" data-s="${k}"><b><span class="sit ${cls}" style="font-size:26px;padding:0 10px">${n(k)}</span></b><span><b style="font-size:14px;color:inherit;display:inline">${tit}</b><br>${sub}</span></button>`).join("")}</div>
+    <p class="base">${ddL.length} pessoa(s) embarcaram nesta rota no período${ddF ? ` · mostrando: <b>${SIT[ddF][1]}</b> (clique de novo para ver todos)` : ""}. Fonte: embarques da TFleet.</p>` +
+    (v.length ? tabela(["Colaborador", "Situação", "Rota de cadastro", "Dias", "Hora", "Período"], v.map(p => { const [cls, tit] = SIT[p.situacao] || ["", p.situacao];
+      return `<tr><td data-l="Colaborador"><b>${esc(p.nome || "")}</b><br><span class="muted">${esc(p.matricula || "sem matrícula")}${p.empresa ? " · " + esc(p.empresa) : ""}${p.ga ? " · " + esc(p.ga) : ""}</span></td>
+        <td data-l="Situação"><span class="sit ${cls}">${tit}</span>${p.tipopassageiro ? `<br><span class="muted">${esc(p.tipopassageiro)}</span>` : ""}</td>
+        <td data-l="Rota de cadastro">${esc(p.linha_cadastro ? String(p.linha_cadastro).replace(/\s*-\s*PASSAGEIRO\s*$/i, "") : "nenhuma")}</td>
+        <td data-l="Dias">${p.dias_embarque}</td><td data-l="Hora">${esc(p.hora || "")}</td><td data-l="Período">${dt(p.primeiro)} a ${dt(p.ultimo)}</td></tr>`; }))
+      : '<div class="msg">Ninguém nesta situação.</div>');
+}
+$("#ddCorpo").addEventListener("click", e => { const b = e.target.closest("button.kpi"); if (!b) return; ddF = ddF === b.dataset.s ? "" : b.dataset.s; ddRender(); });
+$("#ddX").addEventListener("click", () => $("#ddRota").close());
+$("#ddRota").addEventListener("click", e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
 $("#fFiltro").addEventListener("click", e => { if (e.target.id === "fLimpa") { foraLinha = ""; foraRender(); } });
 $("#fBuscaP").addEventListener("input", foraRender);
 
@@ -670,10 +713,10 @@ const COLS = {
     ["gestor_nome", /gestor|supervisor|respons/i], ["gg", /geral|^gg$/i], ["area", /ger[eê]ncia|área|area|setor|^ga$/i],
     ["nome", /nome|colaborador|funcion/i], ["empresa", /empresa|contratada|fornecedor/i]],
     ["matricula", "rfid", "nome", "empresa", "area", "gg", "gestor_email", "gestor_nome"]],
-  empresas: [[["gestor_email", /mail/i], ["cargo", /cargo|fun[cç][aã]o/i], ["empresa", /empresa|contratada|fornecedor/i], ["gestor_nome", /gestor|nome|respons/i]],
-    ["empresa", "gestor_nome", "cargo", "gestor_email"]],
-  base: [[["email", /mail/i], ["centrocusto", /custo|^cc$/i], ["gg", /geral|^gg$|\(gg\)/i], ["ga", /ger[eê]ncia|área|area|^ga$|\(ga\)/i], ["nome", /nome|gestor/i]],
-    ["nome", "email", "ga", "gg", "centrocusto"]],
+  empresas: [[["email", /mail/i], ["telefone", /whats|telefone|celular|fone|contato/i], ["cargo", /cargo|fun[cç][aã]o/i], ["empresa", /empresa|contratada|fornecedor/i], ["nome", /gestor|nome|respons/i]],
+    ["empresa", "nome", "cargo", "email", "telefone"]],
+  base: [[["email", /mail/i], ["telefone", /whats|telefone|celular|fone|contato/i], ["cargo", /cargo|fun[cç][aã]o/i], ["centrocusto", /custo|^cc$/i], ["gg", /geral|^gg$|\(gg\)/i], ["ga", /ger[eê]ncia|área|area|^ga$|\(ga\)/i], ["nome", /nome|gestor/i]],
+    ["nome", "cargo", "email", "ga", "gg", "centrocusto", "telefone"]],
 };
 function mapear(linhas, tipo) {
   const [cols, ordem] = COLS[tipo];
@@ -689,7 +732,7 @@ const texto2linhas = txt => { const lin = txt.split(/\r?\n/).filter(l => l.trim(
 const ERRO = {
   pessoas: o => !o.matricula && !o.nome ? "sem matrícula e sem nome" : o.gestor_email && !emailOk(o.gestor_email) ? "e-mail inválido"
     : !o.gestor_email && !o.area && !o.empresa ? "sem e-mail do gestor, sem empresa e sem gerência" : "",
-  empresas: o => !o.empresa ? "sem empresa" : !emailOk(o.gestor_email || "") ? "e-mail vazio ou inválido" : "",
+  empresas: o => !o.empresa ? "sem empresa" : !emailOk(o.email || "") ? "e-mail vazio ou inválido" : "",
   base: o => !emailOk(o.email || "") ? "e-mail vazio ou inválido" : !o.ga && !o.gg && !o.centrocusto ? "sem gerência e sem centro de custo" : "",
 };
 let imp = { empresas: [], base: [], pessoas: [] };
@@ -737,17 +780,17 @@ const tabela = (cab, linhas) => `<div class="gl-wrap"><table class="gl"><tr>${ca
 const okTd = er => `<td>${er ? `<span class="v-err">${esc(er)}</span>` : '<span class="v-ok">ok</span>'}</td>`;
 function previa() {
   const n = t => imp[t].filter(o => !ERRO[t](o)).length, ruim = t => imp[t].length - n(t);
-  const partes = [["empresas", "empresa(s)"], ["base", "gestor(es) na base"], ["pessoas", "pessoa(s)"]].filter(([t]) => imp[t].length);
+  const partes = [["empresas", "gestor(es) de empresa"], ["base", "gestor(es) na base"], ["pessoas", "pessoa(s)"]].filter(([t]) => imp[t].length);
   if (!partes.length) { $("#cMsg").textContent = "Nada para importar."; $("#cPrevia").innerHTML = ""; $("#cSalvar").hidden = true; return; }
   $("#cMsg").innerHTML = partes.map(([t, nome]) => `${n(t)} ${nome}${ruim(t) ? ` <span class="v-err">(${ruim(t)} com problema, não serão salvas)</span>` : ""}`).join(" · ");
   const tot = partes.reduce((s, [t]) => s + n(t), 0);
   $("#cSalvar").hidden = !tot; $("#cSalvar").textContent = "Salvar " + partes.filter(([t]) => n(t)).map(([t, nome]) => n(t) + " " + nome).join(" e ");
   const lim = a => a.slice(0, 200);
   $("#cPrevia").innerHTML =
-    (imp.empresas.length ? "<h4>Vínculo por empresa</h4>" + tabela(["Empresa", "Gestor", "Cargo", "E-mail", ""], lim(imp.empresas).map(o =>
-      `<tr><td data-l="Empresa">${esc(o.empresa || "")}</td><td data-l="Gestor">${esc(o.gestor_nome || "")}</td><td data-l="Cargo">${esc(o.cargo || "")}</td><td data-l="E-mail">${esc(o.gestor_email || "")}</td>${okTd(ERRO.empresas(o))}</tr>`)) : "") +
-    (imp.base.length ? "<h4>Base de gestores</h4>" + tabela(["Gestor", "E-mail", "GA", "GG", "Centro de custo", ""], lim(imp.base).map(o =>
-      `<tr><td data-l="Gestor">${esc(o.nome || "")}</td><td data-l="E-mail">${esc(o.email || "")}</td><td data-l="GA">${esc(o.ga || "")}</td><td data-l="GG">${esc(o.gg || "")}</td><td data-l="Centro de custo">${esc(o.centrocusto || "")}</td>${okTd(ERRO.base(o))}</tr>`)) : "") +
+    (imp.empresas.length ? "<h4>Vínculo por empresa</h4>" + tabela(["Empresa", "Gestor", "Cargo", "E-mail", "WhatsApp", ""], lim(imp.empresas).map(o =>
+      `<tr><td data-l="Empresa">${esc(o.empresa || "")}</td><td data-l="Gestor">${esc(o.nome || "")}</td><td data-l="Cargo">${esc(o.cargo || "")}</td><td data-l="E-mail">${esc(o.email || "")}</td><td data-l="WhatsApp">${esc(o.telefone || "")}</td>${okTd(ERRO.empresas(o))}</tr>`)) : "") +
+    (imp.base.length ? "<h4>Base de gestores</h4>" + tabela(["Gestor", "Cargo", "E-mail", "WhatsApp", "GA", "GG", "Centro de custo", ""], lim(imp.base).map(o =>
+      `<tr><td data-l="Gestor">${esc(o.nome || "")}</td><td data-l="Cargo">${esc(o.cargo || "")}</td><td data-l="E-mail">${esc(o.email || "")}</td><td data-l="WhatsApp">${esc(o.telefone || "")}</td><td data-l="GA">${esc(o.ga || "")}</td><td data-l="GG">${esc(o.gg || "")}</td><td data-l="Centro de custo">${esc(o.centrocusto || "")}</td>${okTd(ERRO.base(o))}</tr>`)) : "") +
     (imp.pessoas.length ? "<h4>Pessoas</h4>" + tabela(["Matrícula", "RFID", "Nome", "Empresa", "GA / GG", "Gestor", ""], lim(imp.pessoas).map(o =>
       `<tr><td data-l="Matrícula">${esc(o.matricula || "")}</td><td data-l="RFID">${esc(o.rfid || "")}</td><td data-l="Nome">${esc(o.nome || "")}</td><td data-l="Empresa">${esc(o.empresa || "")}</td>
       <td data-l="GA / GG">${esc(o.area || "")}${o.gg ? "<br>" + esc(o.gg) : ""}</td><td data-l="Gestor">${esc(o.gestor_nome || "")}${o.gestor_email ? "<br>" + esc(o.gestor_email) : ""}</td>${okTd(ERRO.pessoas(o))}</tr>`)) : "") +
@@ -758,9 +801,7 @@ $("#cSalvar").addEventListener("click", async () => {
   $("#cSalvar").disabled = true; $("#cMsg").textContent = "Salvando…";
   const res = [];
   try {
-    for (const e of ok("empresas")) await api("rpc/salvar_gestor_empresa", { senha: gSenha, p_empresa: e.empresa, p_nome: e.gestor_nome || null, p_cargo: e.cargo || null, p_email: e.gestor_email, p_ativo: true });
-    if (ok("empresas").length) res.push(ok("empresas").length + " empresa(s)");
-    for (const [t, fn, nome] of [["base", "importar_gestores_base", "gestor(es) na base"], ["pessoas", "importar_vinculos", "pessoa(s)"]]) {
+    for (const [t, fn, nome] of [["empresas", "importar_gestores_empresa", "gestor(es) de empresa"], ["base", "importar_gestores_base", "gestor(es) na base"], ["pessoas", "importar_vinculos", "pessoa(s)"]]) {
       if (!ok(t).length) continue;
       const r = await api("rpc/" + fn, { senha: gSenha, p_linhas: ok(t) });
       res.push(r.salvos + " " + nome + (r.erros.length ? ` <span class="v-err">(${r.erros.length} recusada(s): ${esc(r.erros.slice(0, 3).map(e => "linha " + e.linha + " " + e.motivo).join("; "))})</span>` : ""));
@@ -772,42 +813,66 @@ $("#cSalvar").addEventListener("click", async () => {
   $("#cSalvar").disabled = false;
 });
 
-// ---- 1. vinculo por empresa: so empresa -> gestor (sem pessoas)
+// ---- 1. gestores por empresa: varios por empresa, cada um com cargo (sem pessoas)
+const CARGOS = ["Preposto", "Gestor de contrato", "Coordenador", "Supervisor", "Gerente de área", "Gerente geral"];
+const fone = t => { const d = String(t || "").replace(/^55/, ""); return d.length >= 10 ? `(${d.slice(0, 2)}) ${d.slice(2, -4)}-${d.slice(-4)}` : String(t || ""); };
+const cargosList = `<datalist id="cargos">${CARGOS.map(c => `<option>${c}</option>`).join("")}</datalist>`;
 async function empLoad(ok) {
   if (!ok) { $("#eLista").textContent = "Abra com a senha para ver."; return; }
   try {
     const l = await api("rpc/empresas_lista", { senha: gSenha });
-    cSt.emp = l.length; cSt.empSem = l.filter(e => !e.gestor_email || !e.ativo).length; cadKpis();
-    l.push({ empresa: "", pessoas: 0, novo: true });
-    $("#eLista").innerHTML = `<div class="bar" style="margin:6px 0"><label>Buscar empresa<input id="eBusca" type="search" placeholder="nome da empresa"></label></div>` +
-      tabela(["Empresa", "Passageiros (30 dias)", "Gestor", "Cargo", "E-mail", "Envia", "", ""], l.map((e, i) =>
-      `<tr data-i="${i}" data-n="${esc((e.empresa || "").toLowerCase())}"><td data-l="Empresa">${e.novo ? '<input type="text" class="en" placeholder="Nova empresa">' : `<b>${esc(e.empresa)}</b>`}</td><td data-l="Passageiros">${e.pessoas}</td>
-        <td data-l="Gestor"><input type="text" class="egn" value="${esc(e.gestor_nome || "")}"></td>
-        <td data-l="Cargo"><input type="text" class="ec" value="${esc(e.cargo || "")}" placeholder="Gestor de contrato" list="cargos"></td>
-        <td data-l="E-mail"><input type="email" class="ee" value="${esc(e.gestor_email || "")}"></td>
-        <td data-l="Envia"><input type="checkbox" class="ea" ${e.ativo || e.novo || !e.gestor_email ? "checked" : ""}></td>
-        <td><button type="button" class="btn es">${e.novo ? "Incluir" : "Salvar"}</button></td>
-        <td>${e.gestor_email ? '<button type="button" class="btn er" title="Tirar o gestor desta empresa">✕</button>' : ""}</td></tr>`)) +
-      `<datalist id="cargos"><option>Gestor de contrato</option><option>Gerente</option><option>Supervisor</option><option>Coordenador</option></datalist>`;
-    $("#eBusca").oninput = ev => { const q = ev.target.value.trim().toLowerCase(); $("#eLista").querySelectorAll("tr[data-i]").forEach(tr => tr.hidden = q && !tr.dataset.n.includes(q) && tr.dataset.n !== ""); };
+    const ativos = e => (e.contatos || []).filter(c => c.ativo).length;
+    cSt.emp = l.length; cSt.empSem = l.filter(e => !ativos(e)).length; cadKpis();
+    const linhaG = (c, ei, ci) => `<tr data-e="${ei}" data-c="${ci}"><td data-l="Gestor"><input type="text" class="egn" value="${esc(c.nome || "")}" placeholder="Nome"></td>
+        <td data-l="Cargo"><input type="text" class="ec" value="${esc(c.cargo || "")}" placeholder="Cargo" list="cargos"></td>
+        <td data-l="E-mail"><input type="email" class="ee" value="${esc(c.email || "")}" placeholder="e-mail"></td>
+        <td data-l="WhatsApp"><input type="tel" class="ew" value="${esc(fone(c.telefone))}" placeholder="(91) 9xxxx-xxxx"></td>
+        <td data-l="Envia"><input type="checkbox" class="ea" ${c.ativo !== false ? "checked" : ""}></td>
+        <td><button type="button" class="btn es">${c.id ? "Salvar" : "Incluir"}</button></td>
+        <td>${c.id ? '<button type="button" class="btn er" title="Tirar este gestor da empresa">✕</button>' : ""}</td></tr>`;
+    const bloco = (e, ei) => { const cs = e.contatos || [], n = ativos(e);
+      return `<tbody data-n="${esc((e.empresa || "").toLowerCase())}"><tr class="emp-h"><td colspan="7"><b>${esc(e.empresa)}</b> <span class="muted">· ${e.pessoas} passageiro(s) em 30 dias ·</span>
+        ${n ? `<span class="tag">${n} gestor(es) recebem</span>` : '<span class="tag crit">sem gestor</span>'}<button type="button" class="btn eadd" data-e="${ei}">+ gestor</button></td></tr>
+        ${cs.map((c, ci) => linhaG(c, ei, ci)).join("")}${cs.length ? "" : linhaG({}, ei, -1)}</tbody>`; };
+    $("#eLista").innerHTML = `<div class="bar" style="margin:6px 0"><label>Buscar empresa<input id="eBusca" type="search" placeholder="nome da empresa"></label>
+        <label style="flex-direction:row;align-items:center;gap:6px"><input id="eSoSem" type="checkbox"> só sem gestor</label></div>
+      <div class="gl-wrap"><table class="gl"><tr><th>Gestor</th><th>Cargo</th><th>E-mail</th><th>WhatsApp</th><th>Envia</th><th></th><th></th></tr>${l.map(bloco).join("")}
+      <tbody data-n=""><tr class="emp-h"><td colspan="7"><b>Incluir outra empresa</b></td></tr>
+      <tr data-novo="1"><td data-l="Empresa" colspan="2"><input type="text" class="en" placeholder="Nome da empresa (como na TFleet)" style="width:100%"></td>
+        <td data-l="Gestor"><input type="text" class="egn" placeholder="Nome do gestor"></td><td data-l="Cargo"><input type="text" class="ec" placeholder="Cargo" list="cargos"></td>
+        <td data-l="E-mail"><input type="email" class="ee" placeholder="e-mail"></td><td data-l="WhatsApp"><input type="tel" class="ew" placeholder="(91) 9xxxx-xxxx"></td><td><button type="button" class="btn es">Incluir</button></td></tr></tbody></table></div>` + cargosList;
+    const filtra = () => { const q = $("#eBusca").value.trim().toLowerCase(), so = $("#eSoSem").checked;
+      $("#eLista").querySelectorAll("tbody[data-n]").forEach((tb, i) => { if (tb.dataset.n === "") return; const e = l[i];
+        tb.hidden = (q && !tb.dataset.n.includes(q)) || (so && ativos(e) > 0); }); };
+    $("#eBusca").oninput = filtra; $("#eSoSem").onchange = filtra;
     $("#eLista").onclick = async ev => {
+      const add = ev.target.closest(".eadd");
+      if (add) { const tb = add.closest("tbody"); tb.insertAdjacentHTML("beforeend", linhaG({}, add.dataset.e, -1)); tb.lastElementChild.querySelector(".egn").focus(); return; }
       const b = ev.target.closest(".es, .er"); if (!b) return;
-      const tr = b.closest("tr"), e = l[+tr.dataset.i], nome = e.novo ? tr.querySelector(".en").value.trim() : e.empresa;
+      const tr = b.closest("tr");
+      if (tr.dataset.novo) {
+        const emp = tr.querySelector(".en").value.trim(); if (!emp) { alert("Digite o nome da empresa."); return; }
+        b.disabled = true;
+        try { await api("rpc/salvar_contato_empresa", { senha: gSenha, p_id: null, p_empresa: emp, p_nome: tr.querySelector(".egn").value, p_cargo: tr.querySelector(".ec").value, p_email: tr.querySelector(".ee").value, p_ativo: true, p_telefone: tr.querySelector(".ew").value });
+          empLoad(true); semLoad(true); } catch (err) { alert("Não salvou: " + err.message); }
+        b.disabled = false; return;
+      }
+      const e = l[+tr.dataset.e], c = (e.contatos || [])[+tr.dataset.c] || {};
       if (b.classList.contains("er")) {
-        if (!confirm(`Tirar o gestor da empresa ${nome}? As pessoas dela voltam a seguir a base de gestores.`)) return;
-        try { await api("rpc/remover_gestor_empresa", { senha: gSenha, p_empresa: nome }); cadLoad(true); } catch (err) { alert("Não removeu: " + err.message); }
+        if (!confirm(`Tirar ${c.nome || c.email} da empresa ${e.empresa}? ${ativos(e) <= 1 ? "Sem gestor, as pessoas dela voltam a seguir a base de gestores." : ""}`)) return;
+        try { await api("rpc/remover_contato_empresa", { senha: gSenha, p_id: c.id }); empLoad(true); semLoad(true); } catch (err) { alert("Não removeu: " + err.message); }
         return;
       }
-      if (!nome) { alert("Digite o nome da empresa."); return; }
       b.disabled = true; b.textContent = "…";
       try {
-        await api("rpc/salvar_gestor_empresa", { senha: gSenha, p_empresa: nome, p_nome: tr.querySelector(".egn").value, p_cargo: tr.querySelector(".ec").value,
-          p_email: tr.querySelector(".ee").value, p_ativo: tr.querySelector(".ea").checked });
-        b.textContent = "Salvo ✓"; if (e.novo) empLoad(true); semLoad(true);
-      } catch (err) { b.textContent = e.novo ? "Incluir" : "Salvar"; alert("Não salvou: " + err.message); }
+        await api("rpc/salvar_contato_empresa", { senha: gSenha, p_id: c.id || null, p_empresa: e.empresa, p_nome: tr.querySelector(".egn").value, p_cargo: tr.querySelector(".ec").value,
+          p_email: tr.querySelector(".ee").value, p_ativo: tr.querySelector(".ea").checked, p_telefone: tr.querySelector(".ew").value });
+        if (!c.id) { empLoad(true); } else b.textContent = "Salvo ✓";
+        semLoad(true);
+      } catch (err) { b.textContent = c.id ? "Salvar" : "Incluir"; alert("Não salvou: " + err.message); }
       b.disabled = false;
     };
-  } catch (err) { $("#eLista").textContent = "Erro: " + err.message + " (rodou o lotacao-v4.sql?)"; }
+  } catch (err) { $("#eLista").textContent = "Erro: " + err.message + (/empresas_lista|contatos|function/i.test(err.message) ? " (rodou o lotacao-v8-gestores.sql?)" : ""); }
 }
 
 // ---- 2. base de gestores (GA / GG / centro de custo)
@@ -818,13 +883,13 @@ async function baseLoad(ok) {
     cSt.base = l.length; cadKpis();
     l.push({ novo: true, ativo: true, pessoas: 0 });
     const inp = (cls, v, ph = "") => `<input type="text" class="${cls}" value="${esc(v || "")}" placeholder="${ph}">`;
-    $("#bLista").innerHTML = tabela(["Gestor", "E-mail", "Gerência de área (GA)", "Gerência geral (GG)", "Centro de custo", "Passageiros (30 dias)", "Envia", "", ""], l.map((b, i) =>
-      `<tr data-i="${i}"><td data-l="Gestor">${inp("bn", b.nome)}</td><td data-l="E-mail"><input type="email" class="be" value="${esc(b.email || "")}"></td>
+    $("#bLista").innerHTML = tabela(["Gestor", "Cargo", "E-mail", "WhatsApp", "Gerência de área (GA)", "Gerência geral (GG)", "Centro de custo", "Passageiros (30 dias)", "Envia", "", ""], l.map((b, i) =>
+      `<tr data-i="${i}"><td data-l="Gestor">${inp("bn", b.nome)}</td><td data-l="Cargo"><input type="text" class="bc" value="${esc(b.cargo || "")}" placeholder="Cargo" list="cargos"></td><td data-l="E-mail"><input type="email" class="be" value="${esc(b.email || "")}"></td><td data-l="WhatsApp"><input type="tel" class="bw" value="${esc(fone(b.telefone))}" placeholder="(91) 9xxxx-xxxx"></td>
         <td data-l="GA">${b.novo ? inp("bga", "", "GA") : esc(b.ga || "")}</td><td data-l="GG">${b.novo ? inp("bgg", "", "GG") : esc(b.gg || "")}</td>
         <td data-l="Centro de custo">${b.novo ? inp("bcc", "", "centro de custo") : esc(b.centrocusto || "")}</td><td data-l="Passageiros">${b.novo ? "" : b.pessoas}</td>
         <td data-l="Envia"><input type="checkbox" class="ba" ${b.ativo ? "checked" : ""}></td>
         <td><button type="button" class="btn bs">${b.novo ? "Incluir" : "Salvar"}</button></td>
-        <td>${b.novo ? "" : '<button type="button" class="btn br" title="Remover da base">✕</button>'}</td></tr>`));
+        <td>${b.novo ? "" : '<button type="button" class="btn br" title="Remover da base">✕</button>'}</td></tr>`)) + cargosList;
     $("#bLista").onclick = async ev => {
       const bt = ev.target.closest(".bs, .br"); if (!bt) return;
       const tr = bt.closest("tr"), b = l[+tr.dataset.i];
@@ -835,12 +900,12 @@ async function baseLoad(ok) {
         }
         bt.disabled = true; bt.textContent = "…";
         if (b.novo) {
-          const r = await api("rpc/importar_gestores_base", { senha: gSenha, p_linhas: [{ nome: tr.querySelector(".bn").value, email: tr.querySelector(".be").value,
+          const r = await api("rpc/importar_gestores_base", { senha: gSenha, p_linhas: [{ nome: tr.querySelector(".bn").value, cargo: tr.querySelector(".bc").value, email: tr.querySelector(".be").value, telefone: tr.querySelector(".bw").value,
             ga: tr.querySelector(".bga").value, gg: tr.querySelector(".bgg").value, centrocusto: tr.querySelector(".bcc").value }] });
           if (r.erros.length) throw new Error(r.erros[0].motivo);
           cadLoad(true); return;
         }
-        await api("rpc/salvar_gestor_base", { senha: gSenha, p_id: b.id, p_nome: tr.querySelector(".bn").value, p_email: tr.querySelector(".be").value, p_ativo: tr.querySelector(".ba").checked });
+        await api("rpc/salvar_gestor_base", { senha: gSenha, p_id: b.id, p_nome: tr.querySelector(".bn").value, p_cargo: tr.querySelector(".bc").value, p_email: tr.querySelector(".be").value, p_ativo: tr.querySelector(".ba").checked, p_telefone: tr.querySelector(".bw").value });
         bt.textContent = "Salvo ✓"; semLoad(true);
       } catch (err) { bt.textContent = b.novo ? "Incluir" : "Salvar"; alert("Não salvou: " + err.message); }
       bt.disabled = false;
@@ -861,7 +926,7 @@ async function semLoad(ok) {
         `<tr class="click" data-e="${esc(r.empresa || "")}"><td data-l="Empresa"><b>${esc(r.empresa || "sem empresa")}</b></td><td data-l="GA">${esc(r.ga || "")}</td><td data-l="GG">${esc(r.gg || "")}</td>
         <td data-l="Centro de custo">${esc(r.centrocusto || "")}</td><td data-l="Sem gestor"><b>${r.pessoas - r.com_gestor}</b> de ${r.pessoas}</td></tr>`));
     $("#sgLista").onclick = ev => { const tr = ev.target.closest("tr.click"); if (!tr || !tr.dataset.e) return;
-      const linha = [...$("#eLista").querySelectorAll("tr[data-i]")].find(x => x.dataset.n === tr.dataset.e.toLowerCase());
+      const linha = [...$("#eLista").querySelectorAll("tbody[data-n]")].find(x => x.dataset.n === tr.dataset.e.toLowerCase());
       $("#eLista").closest("details").open = true;
       (linha || $("#eLista")).scrollIntoView({ behavior: "smooth", block: "center" });
       const campo = linha ? linha.querySelector(".egn") : null; if (campo) setTimeout(() => campo.focus(), 400); };
