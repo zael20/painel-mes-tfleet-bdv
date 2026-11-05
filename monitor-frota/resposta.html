@@ -48,6 +48,10 @@ button:disabled { opacity: .6; }
 .rotas > div { display: grid; grid-template-columns: 78px 1fr; align-items: baseline; }
 .rl { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .rotas > div:first-child .rl { color: var(--warn); } .rotas > div:last-child .rl { color: var(--good); }
+button.sec { background: none; color: var(--accent); border: 1px solid var(--accent); }
+input.quem { width: 100%; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 6px; }
+form[hidden] { display: none; }
+.pessoa .st { text-align: right; }
 .voltar { display: inline-block; margin-bottom: 10px; color: var(--accent); font-weight: 600; text-decoration: none; }
 a.btn2 { display: block; text-align: center; margin-top: 14px; font-weight: 600; padding: 14px; border-radius: 8px; background: var(--accent); color: #fff; text-decoration: none; }
 </style>
@@ -94,17 +98,19 @@ async function rpc(fn, body) {
 }
 
 const UUID = /^[0-9a-f-]{36}$/i;
+const nomeR = k => (OPCOES.find(o => o[0] === k) || [k, k])[1];
+const hm = d => { const x = new Date(d); return isNaN(x) ? "" : x.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Belem" }); };
+const meuNome = () => { try { return localStorage.getItem("tf_nome_gestor") || ""; } catch (e) { return ""; } };
 // link do WhatsApp (?l=...): lista as pessoas do aviso; cada uma abre a resposta normal
 async function lista(lote) {
   let l;
   try { l = await rpc("lote_ver", { p_token: lote }); } catch (e) { $("#app").textContent = "Não consegui carregar: " + e.message; return; }
   if (!l || !l.length) { $("#app").textContent = "Aviso não encontrado ou expirado."; return; }
   const falta = l.filter(c => !c.resposta).length;
-  const nomeR = k => (OPCOES.find(o => o[0] === k) || [k, k])[1];
   $("#app").innerHTML = `<div class="nome">${falta ? `Falta${falta > 1 ? "m" : ""} ${falta} de ${l.length}` : "Tudo respondido ✓"}</div>
     <div class="muted">Colaboradores embarcando num ônibus diferente da rota cadastrada. Toque no nome para dizer o motivo.</div>
     <div class="lista">${l.map(c => `<a class="pessoa${c.resposta ? " feita" : ""}" href="?t=${encodeURIComponent(c.token)}&l=${encodeURIComponent(lote)}">
-      <span class="st">${c.resposta ? "✓ " + esc(nomeR(c.resposta)) : "RESPONDER"}</span><b>${esc(c.nome)}</b>
+      <span class="st">${c.resposta ? "✓ " + esc(nomeR(c.resposta)) + (c.respondido_por ? `<br><span style="font-weight:400">por ${esc(c.respondido_por)}</span>` : "") : "RESPONDER"}</span><b>${esc(c.nome)}</b>
       <div class="muted">${c.matricula ? "Matrícula " + esc(c.matricula) + " · " : ""}${esc(c.tipopassageiro || "")}</div>
       <div class="rotas"><div><span class="rl">Usando</span><span><b>${esc(c.linha_usada)}</b> <span class="muted">(${esc(c.sentido || "")})</span></span></div>
       <div><span class="rl">Cadastro</span><b>${esc(c.linha_cadastro ? limpaLinha(c.linha_cadastro) : "sem rota cadastrada")}</b></div></div>
@@ -128,17 +134,24 @@ async function lista(lote) {
     <div class="rotas" style="margin:12px 0"><div><span class="rl">Usando</span><span><b>${esc(c.linha_usada)}</b> <span class="muted">(${esc(c.sentido || "")})</span></span></div>
       <div><span class="rl">Cadastro</span><b>${esc(c.linha_cadastro ? limpaLinha(c.linha_cadastro) : "sem rota cadastrada")}</b></div></div>
     <p class="muted" style="margin-top:0">Há <b>${c.dias} dias</b> nessa rota (${dt(c.primeiro)} a ${dt(c.ultimo)}).</p>
-    ${c.respondido_em ? `<div class="ok" style="margin-bottom:8px">Já respondido em ${dt(c.respondido_em)}. Pode alterar abaixo.</div>` : ""}
-    <form id="f">
+    ${c.respondido_em ? `<div class="ok feito"><div style="font-size:18px">✓ Já respondido${c.respondido_por ? " por " + esc(c.respondido_por) : ""}</div>
+      <div style="font-weight:400;margin-top:4px">${dt(c.respondido_em)} às ${hm(c.respondido_em)} · <b>${esc(nomeR(c.resposta))}</b>${c.periodo_fim ? " até " + dt(c.periodo_fim) : ""}${c.comentario ? " — " + esc(c.comentario) : ""}</div>
+      <div style="font-weight:400;margin-top:8px">Não precisa responder de novo. Obrigado!</div></div>
+      ${lote ? `<a class="btn2" href="?l=${encodeURIComponent(lote)}">Voltar à lista</a>` : ""}
+      <button type="button" id="alt" class="sec">Alterar a resposta</button>` : ""}
+    <form id="f"${c.respondido_em ? " hidden" : ""}>
       <fieldset><legend>Por que está nessa rota?</legend>
         ${OPCOES.map(([k, t]) => `<label class="opt"><input type="radio" name="r" value="${k}" ${k === sel ? "checked" : ""}> ${t}</label>
           <div class="extra" data-k="${k}" ${k === sel && extraDe(k, c) ? "" : "hidden"}>${k === sel ? extraDe(k, c) : ""}</div>`).join("")}
       </fieldset>
       <label for="obs" class="muted">Observação ${sel === "OUTRO" ? "(obrigatória)" : "(opcional)"}</label>
       <textarea id="obs" maxlength="1000" placeholder="Ex.: treinamento até 05/11; depois volta para a rota de cadastro">${esc(c.comentario || "")}</textarea>
+      <label for="quem" class="muted">Seu nome (os outros gestores veem quem respondeu)</label>
+      <input id="quem" class="quem" type="text" maxlength="80" autocomplete="name" value="${esc(meuNome())}">
       <button id="b">Enviar resposta</button>
       <div id="e" class="err"></div>
     </form>`;
+  $("#alt")?.addEventListener("click", () => { $("#f").hidden = false; $("#alt").hidden = true; $("#f").scrollIntoView({ behavior: "smooth" }); });
   $("#f").addEventListener("change", e => {
     if (e.target.name === "r") document.querySelectorAll(".extra").forEach(x => {
       const on = x.dataset.k === e.target.value, h = on ? extraDe(x.dataset.k, c) : "";
@@ -151,7 +164,10 @@ async function lista(lote) {
     const r = $('input[name="r"]:checked')?.value, obs = $("#obs").value.trim();
     if (!r) { $("#e").textContent = "Escolha uma opção."; return; }
     if (r === "OUTRO" && !obs) { $("#e").textContent = "Escreva o motivo."; $("#obs").focus(); return; }
-    const body = { p_token: token, p_resposta: r, p_comentario: obs || null };
+    const quem = $("#quem").value.trim();
+    if (!quem) { $("#e").textContent = "Escreva seu nome."; $("#quem").focus(); return; }
+    try { localStorage.setItem("tf_nome_gestor", quem); } catch (e) {}
+    const body = { p_token: token, p_resposta: r, p_comentario: obs || null, p_nome: quem };
     if (r === "TREINAMENTO" || r === "COBERTURA") {
       body.p_periodo_ini = $("#pIni").value || null; body.p_periodo_fim = $("#pFim").value || null;
       if (!body.p_periodo_fim) { $("#e").textContent = "Informe até quando."; $("#pFim").focus(); return; }
@@ -161,16 +177,21 @@ async function lista(lote) {
       body.p_endereco = { rua: $("#eRua").value.trim(), numero: $("#eNum").value.trim(), bairro: $("#eBai").value.trim(), cidade: $("#eCid").value.trim(), referencia: $("#eRef").value.trim() };
       if (!body.p_endereco.rua || !body.p_endereco.bairro) { $("#e").textContent = "Informe pelo menos a rua e o bairro."; (body.p_endereco.rua ? $("#eBai") : $("#eRua")).focus(); return; }
     }
+    const ok = () => {
+  $("#app").innerHTML = `<div class="ok">Resposta registrada. Obrigado, ${esc(quem.split(" ")[0])}!</div><p class="muted">${esc(c.nome)} · ${esc(OPCOES.find(o => o[0] === r)[1])}${body.p_periodo_fim ? " até " + dt(body.p_periodo_fim) : ""}${body.p_endereco ? " — " + esc([body.p_endereco.rua + (body.p_endereco.numero ? " " + body.p_endereco.numero : ""), body.p_endereco.bairro, body.p_endereco.cidade].filter(Boolean).join(", ")) : ""}${obs ? " — " + esc(obs) : ""}</p>${lote ? `<a class="btn2" href="?l=${encodeURIComponent(lote)}">Voltar à lista e responder o próximo</a>` : ""}`;
+    };
     $("#b").disabled = true; $("#b").textContent = "Enviando…"; $("#e").textContent = "";
     try {
       try { await rpc("consulta_responder", body); }
-      catch (err) {   // Supabase ainda sem o lotacao-v5: grava periodo/endereco na observacao
-        if (!/consulta_responder|function|schema cache/i.test(err.message) || Object.keys(body).length === 3) throw err;
+      catch (err) {   // Supabase ainda sem o lotacao-v13 (nome) ou sem o v5 (periodo/endereco): grava do jeito antigo
+        if (!/consulta_responder|function|schema cache/i.test(err.message)) throw err;
+        const semNome = { ...body }; delete semNome.p_nome;
+        try { await rpc("consulta_responder", semNome); return ok(); } catch (e2) { if (!/consulta_responder|function|schema cache/i.test(e2.message) || Object.keys(semNome).length === 3) throw e2; }
         const ex = [body.p_periodo_fim && ("período " + dt(body.p_periodo_ini) + " a " + dt(body.p_periodo_fim)),
                     body.p_endereco && ("endereço novo: " + Object.values(body.p_endereco).filter(Boolean).join(", "))].filter(Boolean).join("; ");
         await rpc("consulta_responder", { p_token: token, p_resposta: r, p_comentario: [ex, obs].filter(Boolean).join(" — ") });
       }
-      $("#app").innerHTML = `<div class="ok">Resposta registrada. Obrigado!</div><p class="muted">${esc(c.nome)} · ${esc(OPCOES.find(o => o[0] === r)[1])}${body.p_periodo_fim ? " até " + dt(body.p_periodo_fim) : ""}${body.p_endereco ? " — " + esc([body.p_endereco.rua + (body.p_endereco.numero ? " " + body.p_endereco.numero : ""), body.p_endereco.bairro, body.p_endereco.cidade].filter(Boolean).join(", ")) : ""}${obs ? " — " + esc(obs) : ""}</p>${lote ? `<a class="btn2" href="?l=${encodeURIComponent(lote)}">Voltar à lista e responder o próximo</a>` : ""}`;
+      ok();
     } catch (err) { $("#b").disabled = false; $("#b").textContent = "Enviar resposta"; $("#e").textContent = "Não enviou: " + err.message; }
   });
 })();
