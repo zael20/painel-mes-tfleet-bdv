@@ -38,6 +38,14 @@ button:disabled { opacity: .6; }
 .extra input { width: 100%; font: inherit; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 3px; }
 .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
 .extra p { margin: 0 0 4px; font-size: 14px; }
+.lista { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.pessoa { display: block; text-decoration: none; color: inherit; border: 1px solid var(--line); border-left: 5px solid var(--warn); border-radius: 8px; padding: 12px; }
+.pessoa:hover { border-color: var(--accent); }
+.pessoa.feita { border-left-color: var(--good); opacity: .8; }
+.pessoa b { font-size: 17px; } .pessoa .st { float: right; font-size: 12px; font-weight: 700; color: var(--warn); }
+.pessoa.feita .st { color: var(--good); }
+.voltar { display: inline-block; margin-bottom: 10px; color: var(--accent); font-weight: 600; text-decoration: none; }
+a.btn2 { display: block; text-align: center; margin-top: 14px; font-weight: 600; padding: 14px; border-radius: 8px; background: var(--accent); color: #fff; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -80,15 +88,34 @@ async function rpc(fn, body) {
   return txt ? JSON.parse(txt) : null;
 }
 
+const UUID = /^[0-9a-f-]{36}$/i;
+// link do WhatsApp (?l=...): lista as pessoas do aviso; cada uma abre a resposta normal
+async function lista(lote) {
+  let l;
+  try { l = await rpc("lote_ver", { p_token: lote }); } catch (e) { $("#app").textContent = "Não consegui carregar: " + e.message; return; }
+  if (!l || !l.length) { $("#app").textContent = "Aviso não encontrado ou expirado."; return; }
+  const falta = l.filter(c => !c.resposta).length;
+  const nomeR = k => (OPCOES.find(o => o[0] === k) || [k, k])[1];
+  $("#app").innerHTML = `<div class="nome">${falta ? `Falta${falta > 1 ? "m" : ""} ${falta} de ${l.length}` : "Tudo respondido ✓"}</div>
+    <div class="muted">Colaboradores embarcando num ônibus diferente da rota cadastrada. Toque no nome para dizer o motivo.</div>
+    <div class="lista">${l.map(c => `<a class="pessoa${c.resposta ? " feita" : ""}" href="?t=${encodeURIComponent(c.token)}&l=${encodeURIComponent(lote)}">
+      <span class="st">${c.resposta ? "✓ " + esc(nomeR(c.resposta)) : "RESPONDER"}</span><b>${esc(c.nome)}</b>
+      <div class="muted">${c.matricula ? "Matrícula " + esc(c.matricula) + " · " : ""}${esc(c.tipopassageiro || "")}</div>
+      <div style="font-size:14px;margin-top:4px">Usando <b>${esc(c.linha_usada)}</b> (${esc(c.sentido || "")}) · ${c.dias} dia(s), ${dt(c.primeiro)} a ${dt(c.ultimo)}<br>
+      <span class="muted">Cadastro: ${esc(c.linha_cadastro ? sem(c.linha_cadastro) : "sem rota cadastrada")}</span></div></a>`).join("")}</div>`;
+}
+
 (async () => {
-  const p = new URLSearchParams(location.search), token = p.get("t"), pre = p.get("r");
-  if (!/^[0-9a-f-]{36}$/i.test(token || "")) { $("#app").textContent = "Link inválido. Abra pelo botão do e-mail."; return; }
+  const p = new URLSearchParams(location.search), token = p.get("t"), pre = p.get("r"), lote = UUID.test(p.get("l") || "") ? p.get("l") : null;
+  if (!token && lote) return lista(lote);
+  if (!UUID.test(token || "")) { $("#app").textContent = "Link inválido. Abra pelo botão do e-mail."; return; }
+  const volta = lote ? `<a class="voltar" href="?l=${encodeURIComponent(lote)}">← Voltar à lista</a>` : "";
   let c;
   try { c = (await rpc("consulta_ver", { p_token: token }))[0]; } catch (e) { $("#app").textContent = "Não consegui carregar: " + e.message; return; }
   if (!c) { $("#app").textContent = "Consulta não encontrada ou expirada."; return; }
   const gc = grupo(c.linha_cadastro), gu = grupo(c.linha_usada);
   const sel = c.resposta || pre || "";
-  $("#app").innerHTML = `
+  $("#app").innerHTML = `${volta}
     ${gc && gu && gc !== gu ? `<span class="tag">POSSÍVEL MUDANÇA DE ${esc(gc).toUpperCase()} PARA ${esc(gu).toUpperCase()}</span>` : ""}
     <div class="nome">${esc(c.nome)}</div>
     <div class="muted">Matrícula ${esc(c.matricula)} · ${esc(c.tipopassageiro || "")} · ${esc(c.ga || "")}</div>
@@ -136,7 +163,7 @@ async function rpc(fn, body) {
                     body.p_endereco && ("endereço novo: " + Object.values(body.p_endereco).filter(Boolean).join(", "))].filter(Boolean).join("; ");
         await rpc("consulta_responder", { p_token: token, p_resposta: r, p_comentario: [ex, obs].filter(Boolean).join(" — ") });
       }
-      $("#app").innerHTML = `<div class="ok">Resposta registrada. Obrigado!</div><p class="muted">${esc(c.nome)} · ${esc(OPCOES.find(o => o[0] === r)[1])}${body.p_periodo_fim ? " até " + dt(body.p_periodo_fim) : ""}${body.p_endereco ? " — " + esc([body.p_endereco.rua + (body.p_endereco.numero ? " " + body.p_endereco.numero : ""), body.p_endereco.bairro, body.p_endereco.cidade].filter(Boolean).join(", ")) : ""}${obs ? " — " + esc(obs) : ""}</p>`;
+      $("#app").innerHTML = `<div class="ok">Resposta registrada. Obrigado!</div><p class="muted">${esc(c.nome)} · ${esc(OPCOES.find(o => o[0] === r)[1])}${body.p_periodo_fim ? " até " + dt(body.p_periodo_fim) : ""}${body.p_endereco ? " — " + esc([body.p_endereco.rua + (body.p_endereco.numero ? " " + body.p_endereco.numero : ""), body.p_endereco.bairro, body.p_endereco.cidade].filter(Boolean).join(", ")) : ""}${obs ? " — " + esc(obs) : ""}</p>${lote ? `<a class="btn2" href="?l=${encodeURIComponent(lote)}">Voltar à lista e responder o próximo</a>` : ""}`;
     } catch (err) { $("#b").disabled = false; $("#b").textContent = "Enviar resposta"; $("#e").textContent = "Não enviou: " + err.message; }
   });
 })();
