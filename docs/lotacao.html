@@ -707,6 +707,7 @@ $("#cKpis").addEventListener("click", e => { const b = e.target.closest(".kpi");
 
 // ---- leitura de planilha / texto colado: as colunas sao achadas pelo titulo (ordem do modelo quando nao tem titulo)
 const emailOk = e => /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(e);
+const foneOk = t => !String(t || "").trim() || /^(55)?\d{2}9\d{8}$/.test(String(t).replace(/\D/g, "").replace(/^0+/, ""));
 // ordem importa: "E-mail do gestor", "Nome do gestor" e "Gerência geral" tem que cair antes de "nome" e "gerência"
 const COLS = {
   pessoas: [[["matricula", /matr|chapa|^re$|registro/i], ["rfid", /rfid|crach|cart[aã]o|tag/i], ["gestor_email", /mail/i],
@@ -732,8 +733,8 @@ const texto2linhas = txt => { const lin = txt.split(/\r?\n/).filter(l => l.trim(
 const ERRO = {
   pessoas: o => !o.matricula && !o.nome ? "sem matrícula e sem nome" : o.gestor_email && !emailOk(o.gestor_email) ? "e-mail inválido"
     : !o.gestor_email && !o.area && !o.empresa ? "sem e-mail do gestor, sem empresa e sem gerência" : "",
-  empresas: o => !o.empresa ? "sem empresa" : !emailOk(o.email || "") ? "e-mail vazio ou inválido" : "",
-  base: o => !emailOk(o.email || "") ? "e-mail vazio ou inválido" : !o.ga && !o.gg && !o.centrocusto ? "sem gerência e sem centro de custo" : "",
+  empresas: o => !o.empresa ? "sem empresa" : !emailOk(o.email || "") ? "e-mail vazio ou inválido" : !foneOk(o.telefone) ? "WhatsApp inválido (celular com DDD)" : "",
+  base: o => !emailOk(o.email || "") ? "e-mail vazio ou inválido" : !foneOk(o.telefone) ? "WhatsApp inválido (celular com DDD)" : !o.ga && !o.gg && !o.centrocusto ? "sem gerência e sem centro de custo" : "",
 };
 let imp = { empresas: [], base: [], pessoas: [] };
 
