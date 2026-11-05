@@ -44,6 +44,10 @@ button:disabled { opacity: .6; }
 .pessoa.feita { border-left-color: var(--good); opacity: .8; }
 .pessoa b { font-size: 17px; } .pessoa .st { float: right; font-size: 12px; font-weight: 700; color: var(--warn); }
 .pessoa.feita .st { color: var(--good); }
+.rotas { display: grid; gap: 6px; margin-top: 8px; font-size: 15px; }
+.rotas > div { display: grid; grid-template-columns: 78px 1fr; align-items: baseline; }
+.rl { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rotas > div:first-child .rl { color: var(--warn); } .rotas > div:last-child .rl { color: var(--good); }
 .voltar { display: inline-block; margin-bottom: 10px; color: var(--accent); font-weight: 600; text-decoration: none; }
 a.btn2 { display: block; text-align: center; margin-top: 14px; font-weight: 600; padding: 14px; border-radius: 8px; background: var(--accent); color: #fff; text-decoration: none; }
 </style>
@@ -78,6 +82,7 @@ const EXTRA = {
 const extraDe = (k, c) => EXTRA[k === "TREINAMENTO" || k === "COBERTURA" ? "PERIODO" : k]?.(c) || "";
 const dt = d => d ? String(d).slice(0, 10).split("-").reverse().join("/") : "";
 const sem = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s*-\s*PASSAGEIRO\s*$/, "").trim();
+const limpaLinha = t => String(t || "").replace(/\s*-\s*PASSAGEIRO\s*$/i, "").replace(/\s+/g, " ").trim();
 const grupo = t => { const n = sem(t); return /^CT\s*-?\s*\d/.test(n) ? "terceiros (CT)" : /(^|[^A-Z])ADM([^A-Z]|$)/.test(n) ? "ADM" : /TURNO/.test(n) ? "turno" : null; };
 
 async function rpc(fn, body) {
@@ -101,8 +106,9 @@ async function lista(lote) {
     <div class="lista">${l.map(c => `<a class="pessoa${c.resposta ? " feita" : ""}" href="?t=${encodeURIComponent(c.token)}&l=${encodeURIComponent(lote)}">
       <span class="st">${c.resposta ? "✓ " + esc(nomeR(c.resposta)) : "RESPONDER"}</span><b>${esc(c.nome)}</b>
       <div class="muted">${c.matricula ? "Matrícula " + esc(c.matricula) + " · " : ""}${esc(c.tipopassageiro || "")}</div>
-      <div style="font-size:14px;margin-top:4px">Usando <b>${esc(c.linha_usada)}</b> (${esc(c.sentido || "")}) · ${c.dias} dia(s), ${dt(c.primeiro)} a ${dt(c.ultimo)}<br>
-      <span class="muted">Cadastro: ${esc(c.linha_cadastro ? sem(c.linha_cadastro) : "sem rota cadastrada")}</span></div></a>`).join("")}</div>`;
+      <div class="rotas"><div><span class="rl">Usando</span><span><b>${esc(c.linha_usada)}</b> <span class="muted">(${esc(c.sentido || "")})</span></span></div>
+      <div><span class="rl">Cadastro</span><b>${esc(c.linha_cadastro ? limpaLinha(c.linha_cadastro) : "sem rota cadastrada")}</b></div></div>
+      <div class="muted" style="margin-top:4px">${c.dias} dia(s) · ${dt(c.primeiro)} a ${dt(c.ultimo)}</div></a>`).join("")}</div>`;
 }
 
 (async () => {
@@ -119,8 +125,9 @@ async function lista(lote) {
     ${gc && gu && gc !== gu ? `<span class="tag">POSSÍVEL MUDANÇA DE ${esc(gc).toUpperCase()} PARA ${esc(gu).toUpperCase()}</span>` : ""}
     <div class="nome">${esc(c.nome)}</div>
     <div class="muted">Matrícula ${esc(c.matricula)} · ${esc(c.tipopassageiro || "")} · ${esc(c.ga || "")}</div>
-    <p>Está embarcando na <b>${esc(c.linha_usada)}</b> (${esc(c.sentido || "")}) há <b>${c.dias} dias</b> (${dt(c.primeiro)} a ${dt(c.ultimo)}).<br>
-      <span class="muted">Cadastrado em: ${esc(c.linha_cadastro || "sem linha")}</span></p>
+    <div class="rotas" style="margin:12px 0"><div><span class="rl">Usando</span><span><b>${esc(c.linha_usada)}</b> <span class="muted">(${esc(c.sentido || "")})</span></span></div>
+      <div><span class="rl">Cadastro</span><b>${esc(c.linha_cadastro ? limpaLinha(c.linha_cadastro) : "sem rota cadastrada")}</b></div></div>
+    <p class="muted" style="margin-top:0">Há <b>${c.dias} dias</b> nessa rota (${dt(c.primeiro)} a ${dt(c.ultimo)}).</p>
     ${c.respondido_em ? `<div class="ok" style="margin-bottom:8px">Já respondido em ${dt(c.respondido_em)}. Pode alterar abaixo.</div>` : ""}
     <form id="f">
       <fieldset><legend>Por que está nessa rota?</legend>
@@ -168,6 +175,6 @@ async function lista(lote) {
   });
 })();
 </script>
-<script src="central-voltar.js"></script>
+<!-- pagina do gestor (link do e-mail/WhatsApp): sem botao da Central de proposito -->
 </body>
 </html>
