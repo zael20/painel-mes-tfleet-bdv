@@ -21,20 +21,6 @@ const erro = ok ? null : String(r.error?.message || r.message || r.error || JSON
 return { json: { p_id: a.id, p_ok: ok, p_erro: erro } };
 """
 
-CURTO = r"""// Troca o link da avaliacao pelo curto do is.gd. Se o encurtador falhar, o aviso vai com o link normal.
-const a = $('Separar avisos').item.json;
-const r = String($json.data || '').trim();
-const curto = /^https:\/\/is\.gd\/[\w-]+$/.test(r) ? r : null;
-return { json: { ...a, texto: curto && a.link ? a.texto.replace(a.link, curto) : a.texto } };
-"""
-
-ENCURTAR = {"parameters": {"url": "https://is.gd/create.php", "sendQuery": True,
-              "queryParameters": {"parameters": [{"name": "format", "value": "simple"},
-                                                 {"name": "url", "value": "={{ 'https://' + String($json.link || '').replace(/^https?:\\/\\//, '') }}"}]},
-              "options": {"timeout": 10000, "response": {"response": {"responseFormat": "text", "outputPropertyName": "data"}}}},
-            "name": "Encurtar link", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [660, 300],
-            "onError": "continueRegularOutput"}
-
 def http(name, pos, url, body, cred, on_error=False):
     n = {"parameters": {"method": "POST", "url": url, "authentication": "genericCredentialType",
                         "genericAuthType": "httpHeaderAuth", "sendBody": True, "specifyBody": "json",
@@ -57,16 +43,13 @@ nodes = [
    "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 300]},
   http("Avisos pendentes", [220, 300], "__SUPABASE_URL__/rest/v1/rpc/avisos_pendentes", '={"p_limite": 1}', CRED_SUPA),
   code("Separar avisos", SEPARAR, [440, 300]),
-  ENCURTAR,
-  code("Link curto no texto", CURTO, [880, 300], each=True),
-  http("Responder no grupo", [1100, 300], "__EVOLUTION_URL__/message/sendText/__INSTANCIA__", ENVIO, CRED_EVO, on_error=True),
-  code("Resultado", RESULTADO, [1320, 300], each=True),
-  http("Marcar avisada", [1540, 300], "__SUPABASE_URL__/rest/v1/rpc/aviso_marcar", "={{ JSON.stringify($json) }}", CRED_SUPA),
+  http("Responder no grupo", [660, 300], "__EVOLUTION_URL__/message/sendText/__INSTANCIA__", ENVIO, CRED_EVO, on_error=True),
+  code("Resultado", RESULTADO, [880, 300], each=True),
+  http("Marcar avisada", [1100, 300], "__SUPABASE_URL__/rest/v1/rpc/aviso_marcar", "={{ JSON.stringify($json) }}", CRED_SUPA),
 ]
 def c(t): return {"main": [[{"node": t, "type": "main", "index": 0}]]}
 connections = {"A cada 2 minutos": c("Avisos pendentes"), "Avisos pendentes": c("Separar avisos"),
-               "Separar avisos": c("Encurtar link"),
-               "Encurtar link": c("Link curto no texto"), "Link curto no texto": c("Responder no grupo"), "Responder no grupo": c("Resultado"), "Resultado": c("Marcar avisada")}
+               "Separar avisos": c("Responder no grupo"), "Responder no grupo": c("Resultado"), "Resultado": c("Marcar avisada")}
 wf = {"id": "ocorrAvisos00001", "name": "Avisos de resolucao no WhatsApp", "nodes": nodes, "connections": connections,
       "active": False, "settings": {"executionOrder": "v1", "saveDataSuccessExecution": "none", "saveDataErrorExecution": "all"},
       "pinData": {}}
