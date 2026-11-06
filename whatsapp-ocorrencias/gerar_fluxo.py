@@ -43,6 +43,10 @@ for (const item of $input.all()) {
       tipo = 'documento'; texto = doc.caption || doc.fileName || '';
     }
     else continue; // reacao, figurinha, enquete, mensagem apagada, etc.
+    // resposta "em cima" de outra mensagem (ex.: "Carro 84" citando o relato ou a pergunta do sistema)
+    const ci = (m.extendedTextMessage || m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage || {}).contextInfo || {};
+    const qm = ci.quotedMessage || {};
+    const citado = qm.conversation || qm.extendedTextMessage?.text || qm.imageMessage?.caption || qm.videoMessage?.caption || '';
 
     if (tem_midia && tamanho > 15 * 1024 * 1024) { // grande demais para o Gemini gratis e para o Storage
       tem_midia = false;
@@ -64,6 +68,8 @@ for (const item of $input.all()) {
         tipo,
         texto: texto.slice(0, 4000),
         midia_tipo: (mime || '').split(';')[0],
+        quoted_id: ci.stanzaId || '',
+        quoted_texto: String(citado).slice(0, 300),
       },
     }});
   }
@@ -94,7 +100,11 @@ SYS = ("Voce analisa mensagens de um grupo de WhatsApp onde motoristas e a equip
 "- acao 'resolve': alguem diz que um problema foi resolvido/consertado/trocado. Informe ocorrencia_id e a solucao.\n"
 "- acao 'ignorar': conversa sem problema tecnico de celular (cumprimentos, escalas, perguntas gerais, avisos).\n\n"
 "tag = numero do onibus, so digitos ('carro 65', 'o 065', 'onibus 7' -> '65', '65', '7'). Se a mensagem nova nao citar o "
-"onibus, use o que o MESMO autor citou nas mensagens anteriores dos ultimos minutos; se ainda assim nao souber, deixe vazio.\n"
+"onibus, use o que o MESMO autor citou nas mensagens anteriores dos ultimos minutos; se ainda assim nao souber, deixe vazio. "
+"NUNCA chute o numero: so use numero que aparece no texto, no audio/video ou escrito na imagem como numero do carro. "
+"Nao tire numero do NOME do autor (ex.: 'Philippians 4:13', 'Joao 3:16', 'Ze 10'), de horario, data, telefone, placa, "
+"quantidade de passageiros ou versao de app. A lista FROTA traz os numeros de carro que existem: numero fora dela "
+"esta errado, deixe vazio. Imagem em que nao da para ler o numero com certeza: deixe vazio (o sistema pergunta ao motorista).\n"
 "categoria: carregamento (nao carrega, carrega devagar, cabo, carregador, tomada, bateria descarregando) | "
 "abrir_viagem (app BDV nao abre/inicia/encerra viagem, login, app travado) | contagem_passageiros (nao conta passageiro, "
 "leitor RFID, cartao nao le, Bluetooth do leitor) | internet_chip (sem internet, sem sinal, chip, dados) | celular_defeito "
@@ -117,10 +127,12 @@ if ($('Link da midia').isExecuted) {
 const ctx = $('Contexto do grupo').item.json || {};
 const hora = iso => new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Belem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const anteriores = (ctx.mensagens || []).filter(x => x.texto).map(x => `[${hora(x.ts)}] ${x.autor_nome || '?'}: ${x.texto}${x.ocorrencia_id ? ` (ocorrencia ${x.ocorrencia_id})` : ''}`).join('\n') || '(nenhuma)';
-const abertas = (ctx.abertas || []).map(o => `#${o.id} | onibus ${o.tag || '?'} | ${o.categoria} | ${o.problema} | ${o.status}`).join('\n') || '(nenhuma)';
-const nova = `[${hora(prep.msg.ts)}] ${prep.msg.autor_nome || '?'} (${prep.msg.tipo}): ${prep.msg.texto || '(sem texto)'}`;
+const abertas = (ctx.abertas || []).map(o => `#${o.id} | onibus ${o.tag || 'SEM NUMERO'} | ${o.categoria} | ${o.problema} | ${o.status}`).join('\n') || '(nenhuma)';
+const frota = (ctx.frota || []).join(', ') || '(lista indisponivel)';
+const nova = `[${hora(prep.msg.ts)}] ${prep.msg.autor_nome || '?'} (${prep.msg.tipo}): ${prep.msg.texto || '(sem texto)'}` +
+  (prep.msg.quoted_texto ? `\n(respondendo a mensagem: "${prep.msg.quoted_texto}")` : '');
 
-const parts = [{ text: `OCORRENCIAS ABERTAS:\n${abertas}\n\nMENSAGENS ANTERIORES DO GRUPO (ultimas 2 horas):\n${anteriores}\n\nMENSAGEM NOVA:\n${nova}${midia && midia.b64 ? '\n(a midia desta mensagem vai anexada)' : ''}` }];
+const parts = [{ text: `FROTA (numeros de carro que existem):\n${frota}\n\nOCORRENCIAS ABERTAS:\n${abertas}\n\nMENSAGENS ANTERIORES DO GRUPO (ultimas 2 horas):\n${anteriores}\n\nMENSAGEM NOVA:\n${nova}${midia && midia.b64 ? '\n(a midia desta mensagem vai anexada)' : ''}` }];
 if (midia && midia.b64 && midia.bytes <= 18 * 1024 * 1024) parts.push({ inline_data: { mime_type: midia.mime, data: midia.b64 } });
 
 const SYS = __SYS__;

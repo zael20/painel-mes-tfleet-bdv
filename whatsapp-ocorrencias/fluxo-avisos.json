@@ -127,6 +127,113 @@
      "name": "Supabase (chave secreta)"
     }
    }
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__SUPABASE_URL__/rest/v1/rpc/perguntas_carro_pendentes",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\"p_limite\": 1}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Perguntas pendentes",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    220,
+    520
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Um item por pergunta \"qual o numero do carro?\". Lista vazia (desligado, limite por hora) = para aqui.\nconst r = $input.first().json || {};\nreturn (r.perguntas || []).map(a => ({ json: a }));\n"
+   },
+   "name": "Separar perguntas",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    520
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__EVOLUTION_URL__/message/sendText/__INSTANCIA__",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ number: $json.grupo_jid, text: $json.texto, delay: 1500, linkPreview: false, quoted: { key: { id: $json.quoted_id, remoteJid: $json.grupo_jid, fromMe: false, participant: $json.autor_jid }, message: { conversation: $json.quoted_texto } } }) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Perguntar no grupo",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    520
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credEvolution001",
+     "name": "Evolution API"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Guarda o id da pergunta enviada: a resposta \"Carro 84\" citando ela vai para a ocorrencia certa.\nconst a = $('Separar perguntas').item.json;\nconst r = $json || {};\nconst ok = !!(r.key && r.key.id);\nconst erro = ok ? null : String(r.error?.message || r.message || r.error || JSON.stringify(r)).slice(0, 500);\nreturn { json: { p_id: a.id, p_ok: ok, p_erro: erro, p_msg_id: ok ? r.key.id : null } };\n",
+    "mode": "runOnceForEachItem"
+   },
+   "name": "Resultado pergunta",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    520
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__SUPABASE_URL__/rest/v1/rpc/pergunta_marcar",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Marcar perguntada",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1100,
+    520
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   }
   }
  ],
  "connections": {
@@ -135,6 +242,11 @@
     [
      {
       "node": "Avisos pendentes",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Perguntas pendentes",
       "type": "main",
       "index": 0
      }
@@ -179,6 +291,50 @@
     [
      {
       "node": "Marcar avisada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Perguntas pendentes": {
+   "main": [
+    [
+     {
+      "node": "Separar perguntas",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Separar perguntas": {
+   "main": [
+    [
+     {
+      "node": "Perguntar no grupo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Perguntar no grupo": {
+   "main": [
+    [
+     {
+      "node": "Resultado pergunta",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Resultado pergunta": {
+   "main": [
+    [
+     {
+      "node": "Marcar perguntada",
       "type": "main",
       "index": 0
      }
