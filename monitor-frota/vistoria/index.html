@@ -486,6 +486,7 @@ body.tf-cv::before { content: ""; position: fixed; z-index: 4; left: 0; right: 0
       <div class="seg small" id="ocFilt">
         <button type="button" data-f="open" aria-pressed="true">Abertas</button>
         <button type="button" data-f="res" aria-pressed="false">Resolvidas</button>
+        <button type="button" data-f="semcarro" aria-pressed="false">Sem carro <span class="tabcount" id="ocSemN" hidden></span></button>
         <button type="button" data-f="all" aria-pressed="false">Todas</button>
       </div>
       <input class="text" id="ocQ" inputmode="numeric" placeholder="Filtrar por carro (ex.: 65)" maxlength="4" aria-label="Filtrar por carro">
@@ -1355,7 +1356,7 @@ function refreshAll() {
 // padrao 07:30 as 17:00 (Belem), segunda a sexta, sem feriado. Resolvidas usam horas_uteis da view; abertas sao contadas aqui.
 var OC_CAT = { carregamento: "Carregamento", abrir_viagem: "Abrir viagem", contagem_passageiros: "Contagem de passageiros",
   internet_chip: "Internet / chip", celular_defeito: "Celular com defeito", suporte: "Suporte", som_musica: "Som / música", outro: "Outro" };
-var OC_ST = { aberta: ["Aberta", "nok"], em_andamento: ["Em andamento", "warn"], resolvida: ["Resolvida", "res"], descartada: ["Descartada", ""], historico: ["Sem desfecho", ""] };
+var OC_ST = { aberta: ["Aberta", "nok"], em_andamento: ["Em andamento", "warn"], resolvida: ["Resolvida", "res"], descartada: ["Descartada", ""], historico: ["Sem desfecho", ""], aguardando_carro: ["Aguardando nº do carro", "warn"] };
 var EXP = { ini: 8, fim: 17, sab: false, dom: false, fer: false, feriados: {}, desde: "2026-10-29T03:00:00Z" };
 try { var ex0 = JSON.parse(ls("vb_exped") || "null"); if (ex0) EXP = ex0; } catch (e) {}
 function bhDia() { return Math.round((EXP.fim - EXP.ini) * 60); }   // 570 min = 1 dia util no padrao
@@ -1397,6 +1398,7 @@ function fromOc(r) {
     por: r.resolvido_por, sol: r.solucao, phone: ph, perfil: r.relatado_por || "", reinc: r.reincidencias || 0, origem: r.origem,
     vistId: r.vistoria_id, bt: r.bt_causa, monSinal: r.mon_ultimo_sinal, demo: !!r.demo,
     relNome: r.reporter_nome || null, relMat: r.reporter_matricula || null,
+    pergSt: r.pergunta_status || null, pergEm: r.pergunta_em || null, pergN: r.pergunta_qtd || 0,
     ct: r.conta_no_tempo != null ? !!r.conta_no_tempo : null, obsMon: r.observacao_monitor || null,
     relExibir: r.relator_exibir || null, relFonte: r.relator_fonte || null, tagFonte: r.tag_fonte || null, motViagem: r.motorista_viagem || null, linha: r.viagem_linha || null, bhSrv: r.status === "resolvida" && r.horas_uteis != null ? +r.horas_uteis : null };
 }
@@ -1438,6 +1440,11 @@ function demoOc() { // so na previa: exemplos para ver a tela; nunca vao para o 
       solucao: fim ? "Cabo trocado na vistoria" : null, conta_no_tempo: i % 5 !== 0, origem: i % 7 === 3 ? "retroativo" : i % 9 === 4 ? "manual" : "whatsapp",
       observacao_monitor: cat === "contagem_passageiros" && i % 2 ? "Monitor Frota: provavelmente o Bluetooth do celular estava desligado (exemplo da prévia), por isso o leitor não registrou." : null, demo: true });
   }
+  [["Celular não liga", "celular_defeito", 2, 1], ["Leitor não conta", "contagem_passageiros", 1, 0]].forEach(function (x, j) {
+    var ini = new Date(Date.now() - (j + 1) * 3 * 3600000).toISOString();
+    out.push({ id: -90 - j, tag: null, categoria: x[1], problema: x[0], status: "aguardando_carro", urgencia: "media", relatado_por: "Carlos", reporter_phone: "559199990002",
+      primeira_msg_em: ini, criado_em: ini, origem: "whatsapp", pergunta_status: x[3] ? "enviada" : null, pergunta_em: x[3] ? ini : null, pergunta_qtd: x[2], demo: true });
+  });
   return out;
 }
 // ---- servidor
@@ -1505,7 +1512,7 @@ function paintOcBadge() { var n = ocList().filter(isOpenOc).length, b = $("tabOc
 // ---- tela
 function paintOc() {
   var all = ocList(), open = all.filter(isOpenOc);
-  var resP = all.filter(function (o) { return o.fim && ocInPer(o.fim); }), abP = all.filter(function (o) { return ocInPer(o.ini); });
+  var resP = all.filter(function (o) { return o.fim && ocInPer(o.fim); }), abP = all.filter(function (o) { return ocInPer(o.ini) && o.status !== "aguardando_carro"; });   // sem carro ainda nao e chamado
   var perTxt = ocDays ? "Últimos " + ocDays + " dias" : "Todo o histórico";
   $("ocSrc").textContent = ocRows ? "Servidor, atualizado " + fmtDT(ocAt) + "." : IS_PREVIEW ? "Prévia: ocorrências de EXEMPLO, só para ver a tela." : "Ainda sem dados do servidor (precisa de internet uma vez).";
   var mins = resP.map(ocTimeMin).filter(function (m) { return m != null; }).sort(function (a, b) { return a - b; });
@@ -1518,14 +1525,21 @@ function paintOc() {
    [mins.length ? fmtBhShort(avg) : "sem dados", mins.length ? "tempo médio de resolução (mediana " + fmtBhShort(med) + ", " + plural(mins.length, "caso", "casos") + ")" : "tempo médio: ainda sem relatos novos resolvidos", false, function () { openList("Tempo de resolução", perTxt + ", só relatos novos, mais demoradas primeiro", function () { return resP.filter(function (o) { return ocTimeMin(o) != null; }).sort(function (a, b) { return ocTimeMin(b) - ocTimeMin(a); }).map(ocRow); }, "ocorrência"); }],
    [mins.length ? Math.round(in1 * 100 / mins.length) + "%" : "sem dados", "resolvidas em até 1 dia útil", false, function () { openList("Resolvidas em até 1 dia útil", perTxt + ", só relatos novos", function () { return resP.filter(function (o) { var m = ocTimeMin(o); return m != null && m <= bhDia(); }).sort(byNew).map(ocRow); }, "ocorrência"); }]
   ].forEach(function (x) { var bt = el("button", { type: "button", class: "kpi" + (x[2] ? " alert" : "") }, [el("b", { text: x[0] }), el("span", { text: x[1] })]); bt.addEventListener("click", x[3]); k.appendChild(bt); });
+  var nsc = all.filter(function (o) { return o.status === "aguardando_carro"; }).length;
+  if (nsc) { var sw = el("button", { type: "button", class: "notice", style: "display:block;width:100%;text-align:left;margin-top:10px;font:inherit;cursor:pointer;grid-column:1/-1" },
+      [plural(nsc, "relato esperando", "relatos esperando") + " o número do carro (ainda não contam como abertos). Toque para ver e corrigir."]);
+    sw.addEventListener("click", function () { ocFilt = "semcarro"; ls("vb_oc_filt", ocFilt); document.querySelectorAll("#ocFilt button").forEach(function (x) { x.setAttribute("aria-pressed", String(x.dataset.f === ocFilt)); }); paintOc(); $("ocList").scrollIntoView({ block: "start" }); });
+    k.appendChild(sw); }
   function hm(h) { return String(Math.floor(h)).padStart(2, "0") + ":" + String(Math.round(h % 1 * 60)).padStart(2, "0"); }
   var dias = EXP.sab && EXP.dom ? "todos os dias" : EXP.sab ? "segunda a sábado" : EXP.dom ? "domingo a sexta" : "segunda a sexta";
   $("ocBh").textContent = "Horas úteis: " + hm(EXP.ini) + " às " + hm(EXP.fim) + ", " + dias + (EXP.fer ? "" : ", sem feriados") + ". 1 dia útil = " + fmtBhShort(bhDia()) + "." + (EXP.desde ? " Tempo médio e % só contam relatos a partir de " + fmtDT(EXP.desde).slice(0, 8) + "; os antigos entram só na quantidade." : "") + (EXP.srv ? "" : " (Regra padrão; o servidor ainda não respondeu.)");
   // lista
-  var q = normTag(ocQ), L = (ocFilt === "open" ? open : ocFilt === "res" ? all.filter(function (o) { return o.fim; }) : all)
-    .filter(function (o) { return !q || o.tag === q; }).sort(ocFilt === "open" ? byOld : byNew);
+  var semc = all.filter(function (o) { return o.status === "aguardando_carro"; });
+  $("ocSemN").hidden = !semc.length; $("ocSemN").textContent = semc.length;
+  var q = normTag(ocQ), L = (ocFilt === "open" ? open : ocFilt === "semcarro" ? semc : ocFilt === "res" ? all.filter(function (o) { return o.fim; }) : all)
+    .filter(function (o) { return !q || o.tag === q; }).sort(ocFilt === "open" || ocFilt === "semcarro" ? byOld : byNew);
   var box = $("ocList"); box.textContent = "";
-  if (!L.length) box.appendChild(el("div", { class: "empty", text: ocFilt === "open" ? "Nenhuma ocorrência aberta." : "Nada aqui." }));
+  if (!L.length) box.appendChild(el("div", { class: "empty", text: ocFilt === "open" ? "Nenhuma ocorrência aberta." : ocFilt === "semcarro" ? "Nenhum relato esperando o número do carro." : "Nada aqui." }));
   L.slice(0, 200).forEach(function (o) {
     var r = ocRow(o), bt = el("button", { type: "button", class: isOpenOc(o) && ocOpenMin(o) > 2 * bhDia() ? "late" : "" }, [el("span", { class: "n", text: r.tag }), el("span", { class: "w" }, r.main), el("span", { class: "a", text: r.side })]);
     bt.addEventListener("click", r.go); box.appendChild(bt);
@@ -1649,9 +1663,12 @@ function paintOcSheet(id) {
   var st = OC_ST[o.status] || [o.status, ""];
   b.appendChild(el("div", { class: "field" }, [el("div", { class: "rec-h" }, [el("span", { class: "badge " + st[1], text: st[0] }), o.prio ? el("span", { class: "badge " + (o.prio === "alta" ? "nok" : o.prio === "media" ? "warn" : ""), text: "prioridade " + o.prio }) : null,
     origBadge(o), o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null,
+    o.tagFonte === "painel" || o.tagFonte === "correcao" ? el("span", { class: "badge", text: "carro corrigido" }) : null,
     o.demo ? el("span", { class: "badge warn", text: "exemplo da prévia" }) : null]), el("b", { style: "font-size:18px", text: o.problema }),
     o.tagFonte === "viagem" ? el("span", { class: "hint", text: "O relato não dizia o carro: ele foi achado pela viagem que o motorista abriu" + (o.linha ? " (linha " + o.linha + ")" : "") + ". Confira." }) : null,
-    o.reinc ? el("span", { class: "hint", text: "Relatado de novo " + plural(o.reinc, "vez", "vezes") + " enquanto estava aberta." }) : null]));
+    o.reinc ? el("span", { class: "hint", text: "Relatado de novo " + plural(o.reinc, "vez", "vezes") + " enquanto estava aberta." }) : null,
+    o.status === "aguardando_carro" ? el("span", { class: "hint warn", text: "Relato sem número de carro válido: ainda não é chamado aberto." + (o.pergSt === "enviada" ? " O sistema perguntou o número no grupo" + (o.pergEm ? " às " + fmtDT(o.pergEm).slice(-5) + " de " + fmtDT(o.pergEm).slice(0, 5) : "") + (o.pergN > 1 ? " (" + o.pergN + " vezes)" : "") + "." : o.pergSt === "erro" ? " A pergunta no grupo falhou." : "") + " Se você souber o carro, corrija abaixo." }) : null]));
+  b.appendChild(carEditBox(o));
   b.appendChild(el("div", { class: "facts" }, [
     el("div", { class: "fact" }, [el("b", { text: fmtDT(o.ini).slice(0, 8) }), el("span", { text: "aberta às " + fmtDT(o.ini).slice(-5) + " · " + agoTxt(o.ini) })]),
     o.fim ? el("div", { class: "fact" }, [el("b", { text: fmtBhShort(ocResMin(o)) }), el("span", { text: "para resolver (horas úteis)" + (ocCt(o) ? "" : " · fora das métricas: caso antigo") })])
@@ -1721,6 +1738,35 @@ function paintOcSheet(id) {
   if (navigator.onLine) fetch(SB.url + "/rest/v1/whatsapp_msgs?select=ts,autor_nome,autor_jid,tipo,texto,transcricao,midia_path&ocorrencia_id=eq." + o.id + "&order=ts.asc", { headers: hdr({}) })
     .then(function (x) { if (!x.ok) throw new Error(x.status); return x.json(); })
     .then(function (rows) { try { ls(ck, JSON.stringify(rows)); } catch (e) {} if (mb.isConnected) paintMsgs(rows); }).catch(function () {});
+}
+// corrigir o numero do carro (a IA errou ou o relato nao dizia): RPC corrigir_carro junta com a aberta do mesmo carro e problema
+function carEditBox(o) {
+  var wrap = el("div", { class: "card" + (o.status === "aguardando_carro" ? " pendcard" : "") }, [el("h3", { text: o.tag ? "Carro errado?" : "Qual é o carro?" })]);
+  var inp = el("input", { class: "text", inputmode: "numeric", maxlength: "4", placeholder: o.tag ? "Número certo (hoje: " + o.tag + ")" : "Número do carro (ex.: 84)", "aria-label": "Número do carro" });
+  inp.addEventListener("input", function () { this.value = this.value.replace(/\D/g, "").slice(0, 4); });
+  var bt = el("button", { type: "button", class: "btn primary", text: o.tag ? "Corrigir carro" : "Salvar carro" });
+  bt.addEventListener("click", function () {
+    var t = normTag(inp.value); if (!t) { toast("Digite o número do carro."); return; }
+    if (t === o.tag) { toast("Já é o carro " + t + "."); return; }
+    if (o.demo) { toast("Exemplo da prévia: nada foi enviado."); return; }
+    if (!navigator.onLine) { toast("Sem internet: tente de novo quando conectar."); return; }
+    bt.disabled = true;
+    function rpc(fn, body) { return fetch(SB.url + "/rest/v1/rpc/" + fn, { method: "POST", headers: hdr({ "Content-Type": "application/json" }), body: JSON.stringify(body) })
+      .then(function (r) { if (!r.ok) return r.text().then(function (x) { throw new Error(r.status + " " + x.slice(0, 120)); }); return r.json(); }); }
+    var conhecido = latest[t] ? Promise.resolve(true) : rpc("frota_conhecida", { p_tag: t }).catch(function () { return null; });
+    conhecido.then(function (ok) {
+      if (ok === false && !window.confirm("Carro " + t + " não encontrado na frota (sem vistoria nem viagem). Confirmar mesmo assim?")) throw new Error("cancelado");
+      return rpc("corrigir_carro", { p_oc: o.id, p_tag: t, p_por: ($("nome").value || "CHECK BDV").slice(0, 80) });
+    }).then(function (r) {
+      if (!r || r.ok === false) throw new Error((r && r.erro) || "sem resposta");
+      toast(r.juntou ? "Carro " + (r.carro || t) + ": juntei com a ocorrência que já estava aberta." : "Carro corrigido para " + (r.carro || t) + ".");
+      return fetchOc().then(function () { if (r.ocorrencia_id && r.ocorrencia_id !== o.id) { stack.pop(); openOc(r.ocorrencia_id); } else renderTop(); });
+    }).catch(function (e) { if (e.message !== "cancelado") toast("Não consegui corrigir (" + e.message + ")."); })
+      .then(function () { bt.disabled = false; });
+  });
+  wrap.appendChild(el("div", { class: "addrow" }, [inp, bt]));
+  wrap.appendChild(el("div", { class: "hint", text: "Se já houver uma ocorrência aberta do mesmo carro e problema, as duas viram uma só." }));
+  return wrap;
 }
 // ocorrencias do carro, para o historico do carro
 function carOcBlock(t) {
