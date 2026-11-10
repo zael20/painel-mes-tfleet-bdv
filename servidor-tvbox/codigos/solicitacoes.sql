@@ -68,6 +68,11 @@ create table if not exists public.sol_sessoes (
   expira_em  timestamptz not null
 );
 
+create table if not exists public.sol_sessoes_gestor (   -- entrou com a senha de gestores (Lotação)
+  token      text primary key,
+  expira_em  timestamptz not null
+);
+
 create table if not exists public.sol_config (
   id                int primary key default 1 check (id = 1),
   chave_robo        text not null default encode(extensions.gen_random_bytes(18), 'hex'),
@@ -81,6 +86,8 @@ alter table public.sol_historico enable row level security;
 alter table public.sol_pessoas   enable row level security;
 alter table public.sol_sessoes   enable row level security;
 alter table public.sol_config    enable row level security;
+alter table public.sol_sessoes_gestor enable row level security;
+revoke all on public.sol_sessoes_gestor from anon, authenticated;
 revoke all on public.sol_cartoes, public.sol_historico, public.sol_pessoas, public.sol_sessoes, public.sol_config
   from anon, authenticated;
 
@@ -98,6 +105,11 @@ begin
     if a.id is not null and (a.admin or coalesce(a.perms, '{}'::jsonb) ? 'solicitacoes') then
       return jsonb_build_object('nome', a.nome, 'tipo', 'interno', 'fornecedor', null,
         'admin', a.admin, 'edita', a.admin or coalesce(a.perms->'solicitacoes', '[]'::jsonb) ? 'editar');
+    end if;
+  elsif p_token like 'tfg_%' then
+    if exists (select 1 from sol_sessoes_gestor where token = p_token and expira_em > now()) then
+      return jsonb_build_object('nome', 'Senha de gestores', 'tipo', 'interno', 'fornecedor', null,
+        'admin', true, 'edita', true);
     end if;
   elsif p_token like 'tfq_%' then
     select pe.* into p from sol_sessoes s join sol_pessoas pe on pe.id = s.pessoa_id
@@ -177,8 +189,18 @@ begin
       'Fornecedor entrou no quadro');
     return (jsonb_build_object('token', tk) || public._sol_quem(tk))::json;
   end if;
+  -- 3) senha de gestores (a mesma da Lotação)
+  if exists (select 1 from lotacao_admin where id = 1 and senha_hash = crypt(trim(p_senha), senha_hash)) then
+    tk := 'tfg_' || encode(gen_random_bytes(24), 'hex');
+    insert into sol_sessoes_gestor (token, expira_em) values (tk, now() + interval '30 days');
+    delete from sol_sessoes_gestor where expira_em < now();
+    perform public._central_log(null, 'Senha de gestores', 'entrou', 'solicitacoes', 'Entrou no quadro de solicitações');
+    return (jsonb_build_object('token', tk) || public._sol_quem(tk))::json;
+  end if;
   perform public._central_log(null, null, 'senha_errada', 'solicitacoes');
-  return json_build_object('erro', 'Senha incorreta.');
+  return json_build_object('erro', case when trim(p_senha) = '8015'
+    then 'O código geral 8015 não vale aqui. Use sua senha pessoal da Central ou a senha de gestores.'
+    else 'Senha incorreta.' end);
 end $$;
 
 create or replace function public.sol_sessao(p_token text) returns json
@@ -193,6 +215,7 @@ create or replace function public.sol_sair(p_token text) returns text
 language plpgsql security definer set search_path = public as $$
 begin
   delete from sol_sessoes where token = p_token;
+  delete from sol_sessoes_gestor where token = p_token;
   -- sessão da Central é a mesma da Central: não apaga aqui (a pessoa continua logada lá)
   return 'ok';
 end $$;
