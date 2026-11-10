@@ -586,12 +586,12 @@ end $$;
 -- e-mails do cartão (sem os arquivos)
 create or replace function public.sol_emails_cartao(p_token text, p_cartao bigint) returns json
 language plpgsql security definer set search_path = public as $$
-declare q jsonb := public._sol_exige(p_token); c sol_cartoes; interno boolean := q->>'tipo' = 'interno';
+declare q jsonb := public._sol_exige(p_token); c sol_cartoes; v_int boolean := q->>'tipo' = 'interno';
 begin
   select * into c from sol_cartoes where id = p_cartao;
-  if c.id is null or (not interno and lower(c.fornecedor) <> lower(q->>'fornecedor')) then raise exception 'Cartão não encontrado.'; end if;
+  if c.id is null or (not v_int and lower(c.fornecedor) <> lower(q->>'fornecedor')) then raise exception 'Cartão não encontrado.'; end if;
   return coalesce((select json_agg(json_build_object('id', e.id, 'assunto', e.assunto, 'corpo', e.corpo,
-      'para', case when interno then e.para end, 'cc', case when interno then e.cc end,
+      'para', case when v_int then e.para end, 'cc', case when v_int then e.cc end,
       'status', e.status, 'erro', e.erro, 'criado_por', e.criado_por, 'criado_em', e.criado_em, 'enviado_em', e.enviado_em,
       'anexos', (select coalesce(json_agg(json_build_object('id', an.id, 'nome', an.nome, 'tamanho', an.tamanho) order by an.id), '[]'::json)
                  from sol_anexos an where an.email_id = e.id)) order by e.criado_em desc)
@@ -624,7 +624,7 @@ begin
       from sol_historico where cartao_id = c.id and not (tipo = 'editou' and dados ?& array['emails'] and (dados - 'emails') = '{}'::jsonb)), '[]'::json),
     'emails', coalesce((select json_agg(json_build_object('assunto', e.assunto, 'corpo', e.corpo, 'criado_em', e.criado_em,
         'status', e.status, 'anexos', (select coalesce(json_agg(an.nome order by an.id), '[]'::json) from sol_anexos an where an.email_id = e.id))
-        order by e.criado_em desc) from sol_emails e where e.cartao_id = c.id), '[]'::json));
+        order by e.criado_em desc) from sol_emails e where e.cartao_id = c.id and not e.interno), '[]'::json));
 end $$;
 
 -- ---------- robô: fila de envio
@@ -671,6 +671,155 @@ grant execute on function public.sol_contatos_lista(text), public.sol_contato_sa
   public.sol_emails_cartao(text, bigint), public.sol_anexo(text, bigint), public.sol_publico(text),
   public.sol_emails_pendentes(text), public.sol_email_marcar(text, bigint, boolean, text)
   to anon, authenticated;
+
+-- ================================================================ REPASSAR PARA ALGUÉM DE FORA (com aprovação)
+-- O fornecedor pede acesso para outra pessoa → aparece para o administrador (quadro + e-mail do robô)
+-- → ao aprovar, cria a senha da pessoa (mesmo fornecedor) e manda por e-mail.
+alter table public.sol_emails add column if not exists segredo text;           -- senha que o robô troca por {{SENHA}}; apagada ao enviar
+alter table public.sol_emails add column if not exists interno boolean not null default false;  -- não aparece no link público
+
+create table if not exists public.sol_pedidos_acesso (
+  id            bigserial primary key,
+  cartao_id     bigint references public.sol_cartoes(id) on delete cascade,
+  fornecedor    text not null,
+  nome          text not null,
+  email         text not null,
+  mensagem      text,
+  pedido_por    text,
+  status        text not null default 'pendente' check (status in ('pendente','aprovado','recusado')),
+  avisado_em    timestamptz,                 -- robô já mandou o e-mail para o administrador
+  decidido_por  text,
+  decidido_em   timestamptz,
+  criado_em     timestamptz not null default now()
+);
+alter table public.sol_pedidos_acesso enable row level security;
+revoke all on public.sol_pedidos_acesso from anon, authenticated;
+
+create or replace function public.sol_repassar(p_token text, p_cartao bigint, p_nome text, p_email text, p_mensagem text) returns text
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token); c sol_cartoes; e text := lower(trim(p_email));
+  quem text := (q->>'nome') || case when q->>'tipo' = 'fornecedor' then ' (' || (q->>'fornecedor') || ')' else '' end;
+begin
+  if not (q->>'edita')::boolean then raise exception 'Seu acesso é só para ver.'; end if;
+  select * into c from sol_cartoes where id = p_cartao for update;
+  if c.id is null or (q->>'tipo' = 'fornecedor' and lower(c.fornecedor) <> lower(q->>'fornecedor')) then raise exception 'Cartão não encontrado.'; end if;
+  if coalesce(trim(p_nome), '') = '' then raise exception 'Coloque o nome da pessoa.'; end if;
+  if e !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'E-mail inválido.'; end if;
+  update sol_cartoes set responsavel = trim(p_nome), atualizado_em = now(),
+    ultimo_contato = case when q->>'tipo' = 'fornecedor' then public._sol_hoje() else ultimo_contato end where id = c.id;
+  insert into sol_historico (cartao_id, quem, tipo, texto, dados) values (c.id, quem, 'status',
+    'Repassou para ' || trim(p_nome) || coalesce(': ' || nullif(trim(p_mensagem), ''), ''),
+    jsonb_build_object('responsavel', jsonb_build_array(c.responsavel, trim(p_nome))));
+  if exists (select 1 from sol_pessoas where lower(email) = e and lower(fornecedor) in (lower(c.fornecedor), '*') and ativo) then
+    update sol_cartoes set emails = public._sol_emails_limpos(emails || e) where id = c.id;
+    return 'ja_tem_acesso';
+  end if;
+  if not exists (select 1 from sol_pedidos_acesso where lower(email) = e and status = 'pendente' and lower(fornecedor) = lower(c.fornecedor)) then
+    insert into sol_pedidos_acesso (cartao_id, fornecedor, nome, email, mensagem, pedido_por)
+      values (c.id, c.fornecedor, trim(p_nome), e, nullif(trim(p_mensagem), ''), quem);
+  end if;
+  insert into sol_historico (cartao_id, quem, tipo, texto) values (c.id, 'Quadro', 'aviso',
+    'Pedido de acesso para ' || trim(p_nome) || ' aguardando aprovação');
+  return 'pedido';
+end $$;
+
+create or replace function public.sol_pedidos_lista(p_token text) returns json
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token);
+begin
+  if q->>'tipo' <> 'interno' then return '[]'::json; end if;
+  return coalesce((select json_agg(json_build_object('id', p.id, 'cartao_id', p.cartao_id, 'assunto', c.assunto, 'fornecedor', p.fornecedor,
+      'nome', p.nome, 'email', p.email, 'mensagem', p.mensagem, 'pedido_por', p.pedido_por, 'criado_em', p.criado_em) order by p.criado_em)
+    from sol_pedidos_acesso p left join sol_cartoes c on c.id = p.cartao_id where p.status = 'pendente'), '[]'::json);
+end $$;
+
+create or replace function public.sol_pedido_decidir(p_token text, p_id bigint, p_aprovar boolean) returns json
+language plpgsql security definer set search_path = public, extensions as $$
+declare q jsonb := public._sol_exige(p_token, true); p sol_pedidos_acesso; senha text; h text; pid bigint; eid bigint; c sol_cartoes; i int := 0;
+begin
+  select * into p from sol_pedidos_acesso where id = p_id and status = 'pendente' for update;
+  if p.id is null then raise exception 'Pedido não encontrado ou já decidido.'; end if;
+  update sol_pedidos_acesso set status = case when p_aprovar then 'aprovado' else 'recusado' end,
+    decidido_por = q->>'nome', decidido_em = now() where id = p.id;
+  if not p_aprovar then
+    if p.cartao_id is not null then
+      insert into sol_historico (cartao_id, quem, tipo, texto) values (p.cartao_id, q->>'nome', 'aviso', 'Recusou o acesso de ' || p.nome);
+    end if;
+    return json_build_object('status', 'recusado');
+  end if;
+  -- senha aleatória de 8 caracteres, sem letras confusas
+  loop
+    senha := (select string_agg(substr('abcdefghjkmnpqrstuvwxyz23456789', 1 + (get_byte(gen_random_bytes(1), 0) % 31), 1), '') from generate_series(1, 8));
+    h := public._central_hash('sol:' || senha);
+    exit when not exists (select 1 from sol_pessoas where senha_hash = h) or i > 5; i := i + 1;
+  end loop;
+  select id into pid from sol_pessoas where lower(email) = p.email and lower(fornecedor) = lower(p.fornecedor);
+  if pid is null then
+    insert into sol_pessoas (nome, fornecedor, email, senha_hash) values (p.nome, p.fornecedor, p.email, h) returning id into pid;
+  else
+    update sol_pessoas set senha_hash = h, ativo = true, nome = p.nome where id = pid;
+    delete from sol_sessoes where pessoa_id = pid;
+  end if;
+  insert into sol_contatos (nome, email, fornecedor) values (p.nome, p.email, p.fornecedor)
+    on conflict (email) do update set nome = coalesce(sol_contatos.nome, excluded.nome);
+  select * into c from sol_cartoes where id = p.cartao_id;
+  if c.id is not null then
+    update sol_cartoes set emails = public._sol_emails_limpos(emails || p.email) where id = c.id;
+    insert into sol_emails (cartao_id, para, assunto, corpo, criado_por, segredo, interno)
+      values (c.id, array[p.email], 'Acesso ao quadro de solicitações – ' || c.assunto,
+        'Olá, ' || p.nome || '.' || E'\n\n' ||
+        coalesce(p.pedido_por, 'Um colega') || ' repassou para você a demanda "' || c.assunto || '".' || E'\n\n' ||
+        'Para atualizar o andamento (status, datas, prazo e recados), abra o link abaixo, clique em "Entrar para atualizar" e use a senha:' || E'\n\n' ||
+        '    {{SENHA}}' || E'\n\n' ||
+        'A senha é pessoal: não compartilhe. Você vê só as demandas de ' || p.fornecedor || '.',
+        q->>'nome', senha, true) returning id into eid;
+    insert into sol_historico (cartao_id, quem, tipo, texto) values (c.id, q->>'nome', 'aviso',
+      'Aprovou o acesso de ' || p.nome || ' (senha enviada por e-mail)');
+  end if;
+  perform public._central_log(null, q->>'nome', 'cadastro', 'solicitacoes', 'Aprovou acesso de fornecedor: ' || p.nome);
+  return json_build_object('status', 'aprovado', 'senha', senha, 'email_enviado', eid is not null);
+end $$;
+
+-- robô: pedidos novos para avisar o administrador por e-mail
+create or replace function public.sol_pedidos_avisar(p_chave text) returns json
+language plpgsql security definer set search_path = public as $$
+declare r json;
+begin
+  if p_chave is null or p_chave <> (select chave_robo from sol_config where id = 1) then
+    raise exception 'chave inválida' using errcode = '28000';
+  end if;
+  select coalesce(json_agg(json_build_object('nome', p.nome, 'email', p.email, 'fornecedor', p.fornecedor, 'pedido_por', p.pedido_por,
+      'mensagem', p.mensagem, 'assunto', c.assunto)), '[]'::json) into r
+    from sol_pedidos_acesso p left join sol_cartoes c on c.id = p.cartao_id where p.status = 'pendente' and p.avisado_em is null;
+  update sol_pedidos_acesso set avisado_em = now() where status = 'pendente' and avisado_em is null;
+  return json_build_object('pedidos', r, 'link', (select link_quadro from sol_config where id = 1) || '?acessos=1');
+end $$;
+
+-- o robô busca a fila com a senha (segredo) e, ao marcar enviado, ela é apagada
+create or replace function public.sol_emails_pendentes(p_chave text) returns json
+language plpgsql security definer set search_path = public as $$
+declare e sol_emails;
+begin
+  if p_chave is null or p_chave <> (select chave_robo from sol_config where id = 1) then
+    raise exception 'chave inválida' using errcode = '28000';
+  end if;
+  update sol_emails set status = 'pendente' where status = 'enviando' and criado_em < now() - interval '15 minutes' and tentativas < 3;
+  select * into e from sol_emails where status = 'pendente' order by criado_em limit 1 for update skip locked;
+  if e.id is null then return null; end if;
+  update sol_emails set status = 'enviando', tentativas = tentativas + 1 where id = e.id;
+  return json_build_object('id', e.id, 'para', e.para, 'cc', e.cc, 'assunto', e.assunto,
+    'corpo', replace(e.corpo, '{{SENHA}}', coalesce(e.segredo, '')),
+    'link', (select link_quadro from sol_config where id = 1) || '?v=' || (select chave_publica from sol_cartoes where id = e.cartao_id),
+    'anexos', (select coalesce(json_agg(json_build_object('nome', nome, 'tipo', tipo, 'base64', replace(encode(dados, 'base64'), E'\n', ''))
+      order by id), '[]'::json) from sol_anexos where email_id = e.id));
+end $$;
+create or replace function public._sol_apaga_segredo() returns trigger language plpgsql as $$
+begin if new.status = 'enviado' then new.segredo := null; end if; return new; end $$;
+drop trigger if exists sol_emails_segredo on public.sol_emails;
+create trigger sol_emails_segredo before update on public.sol_emails for each row execute function public._sol_apaga_segredo();
+
+grant execute on function public.sol_repassar(text, bigint, text, text, text), public.sol_pedidos_lista(text),
+  public.sol_pedido_decidir(text, bigint, boolean), public.sol_pedidos_avisar(text) to anon, authenticated;
 
 -- ---------------------------------------------------------------- pedidos já enviados (só cria os que ainda não existem)
 insert into public.sol_cartoes (fornecedor, assunto, descricao, link, status, enviado_em, ultimo_contato, criado_por, ordem)

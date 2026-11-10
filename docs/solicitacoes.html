@@ -135,6 +135,7 @@ code.key{background:var(--card2);border:1px solid var(--line);border-radius:6px;
     <span class="note" id="atual"></span>
   </div>
   <div id="alerta" class="alerta hidden"></div>
+  <div id="alertaP" class="alerta hidden" style="background:#eef4ff;color:#1d4ed8;border-color:#d6e2fb"></div>
   <div class="board" id="board"></div>
 </div>
 
@@ -150,7 +151,7 @@ const COR=Object.fromEntries(COLS);
 const FORN_STATUS=["Assumido","Em andamento","Entregue"];   // o que o fornecedor pode escolher
 const MAX_ANEXOS=15*1024*1024;
 const K_SESS="tf_solicitacoes", K_CENTRAL="tf_sessao";
-let TOKEN=null, QUEM=null, CARDS=[], CONTATOS=[];
+let TOKEN=null, QUEM=null, CARDS=[], CONTATOS=[], PEDIDOS=[];
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ls={get:k=>{try{return JSON.parse(localStorage.getItem(k)||"null")}catch(e){return null}},
@@ -197,7 +198,9 @@ async function carregar(primeira){
   $("atual").textContent="Atualizado "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
   const fs=[...new Set(CARDS.map(c=>c.fornecedor))].sort(),sel=$("fForn"),v=sel.value;
   sel.innerHTML='<option value="">Todos os fornecedores</option>'+fs.map(f=>`<option ${f===v?"selected":""}>${esc(f)}</option>`).join("");
+  if(QUEM.admin){try{PEDIDOS=await rpc("sol_pedidos_lista",{p_token:TOKEN})||[]}catch(e){}}
   desenhar();avisos(primeira);
+  if(primeira&&QS.get("acessos")&&QUEM.admin){acessos();return}
   if(primeira){const c=QS.get("c"),v=QS.get("v");
     if(c)abrir(+c);else if(v){const k=CARDS.find(x=>x.chave_publica===v);if(k)abrir(k.id)}}
 }
@@ -237,16 +240,19 @@ function desenhar(){
 function atrasados(){return CARDS.filter(c=>["vencido","vence_hoje","vence_amanha","sem_resposta"].includes(c.situacao))}
 function avisos(primeira){
   const a=atrasados(),v=a.filter(c=>c.situacao==="vencido").length,n=$("bellN");
-  n.textContent=a.length;n.classList.toggle("hidden",!a.length);
+  n.textContent=a.length+PEDIDOS.length;n.classList.toggle("hidden",!(a.length+PEDIDOS.length));
+  const ap=$("alertaP");if(PEDIDOS.length){ap.innerHTML=`🔑 ${PEDIDOS.length} pedido${PEDIDOS.length>1?"s":""} de acesso esperando sua aprovação: ${PEDIDOS.map(p=>esc(p.nome)+" (por "+esc(p.pedido_por)+")").join(", ")}. Clique para ver.`;ap.classList.remove("hidden")}else ap.classList.add("hidden");
   const al=$("alerta");
   if(v){al.innerHTML=`⚠️ ${v} ${v>1?"solicitações":"solicitação"} com prazo vencido. Clique para ver.`;al.classList.remove("hidden")}else al.classList.add("hidden");
   if(primeira&&a.length&&"Notification"in window&&Notification.permission==="granted"){
     const kd="tf_sol_notif_"+hoje();if(!ls.get(kd)){ls.set(kd,1);
       try{new Notification("Solicitações: "+a.length+" precisa"+(a.length>1?"m":"")+" de atenção",{body:a.slice(0,4).map(c=>c.fornecedor+": "+sitTxt(c)).join("\n")})}catch(e){}}}
 }
+$("alertaP").onclick=()=>acessos();
 $("alerta").onclick=$("bBell").onclick=()=>{
   const a=atrasados();
   dlg(`<div class="dh"><h3>Avisos</h3><button class="x" onclick="fechar()">×</button></div><div class="db ntf">
+  ${PEDIDOS.length?`<button class="it" onclick="acessos()">🔑 <b>${PEDIDOS.length} pedido(s) de acesso</b> esperando sua aprovação</button>`:""}
   ${a.length?a.map(c=>`<button class="it" onclick="abrir(${c.id})"><span class="chip ${c.situacao}">${esc(sitTxt(c))}</span> <b>${esc(c.fornecedor)}</b> · ${esc(c.assunto)}</button>`).join(""):'<div class="note">Nada atrasado. 👍</div>'}
   ${"Notification"in window&&Notification.permission!=="granted"?`<div class="acts" style="justify-content:flex-start"><button class="btn" onclick="Notification.requestPermission().then(()=>fechar())">Ativar notificação neste aparelho</button></div>`:""}
   <p class="note">Quando um prazo vence, também sai um e-mail para os e-mails do cartão (1 vez por dia).</p></div>`,true)};
@@ -314,6 +320,7 @@ async function abrir(id){
   ${c.link?`<p class="note">Documento: <a href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.link)}</a></p>`:""}
   <p class="note">Link para acompanhar (só ver, sem senha): <a href="${esc(pub)}" target="_blank" rel="noopener">${esc(pub)}</a> <button class="btn" type="button" onclick="copiar('${esc(pub)}',this)">Copiar</button></p>
   <div class="acts">${QUEM.admin?'<button class="btn d" id="cDel">Apagar</button>':""}<span style="flex:1"></span>
+   ${QUEM.edita?'<button class="btn" id="cRep">↪ Repassar</button>':""}
    ${interno&&QUEM.edita?'<button class="btn" id="cMail">✉ Enviar e-mail</button>':""}
    <button class="btn" onclick="fechar()">Fechar</button>${QUEM.edita?'<button class="btn p" id="cSalvar">Salvar</button>':""}</div>
   <div class="msg" id="cMsg"></div>
@@ -326,6 +333,7 @@ async function abrir(id){
   if($("cEnviar"))$("cEnviar").onclick=async()=>{const t=$("cCom").value.trim();if(!t)return;
     try{await rpc("sol_comentar",{p_token:TOKEN,p_id:c.id,p_texto:t});await carregar(false);abrir(c.id)}catch(e){msg("cMsg",e.message,"err")}};
   if($("cMail"))$("cMail").onclick=()=>compor(c);
+  if($("cRep"))$("cRep").onclick=()=>repassar(c);
   if($("cDel"))$("cDel").onclick=async()=>{if(!confirm("Apagar este cartão e todo o histórico? Não dá para desfazer."))return;
     try{await rpc("sol_remover",{p_token:TOKEN,p_id:c.id});fechar();carregar(false)}catch(e){msg("cMsg",e.message,"err")}};
 }
@@ -348,6 +356,27 @@ function detalhe(d){const p=Object.entries(d).filter(([k,v])=>k!=="status"&&k!==
 async function baixar(id){try{const a=await rpc("sol_anexo",{p_token:TOKEN,p_id:id});
   const bin=atob(a.base64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
   const l=document.createElement("a");l.href=URL.createObjectURL(new Blob([u],{type:a.tipo||"application/octet-stream"}));l.download=a.nome;l.click();}catch(e){alert(e.message)}}
+
+/* ---------------- repassar para alguém de fora ---------------- */
+function repassar(c){
+  dlg(`<div class="dh"><h3>Repassar a demanda</h3><button class="x" onclick="abrir(${c.id})">×</button></div><div class="db">
+  <p class="note">A pessoa passa a ser a responsável. ${QUEM.admin?"":"O Mizael recebe um aviso e, quando aprovar, ela ganha uma senha própria por e-mail para atualizar esta demanda."}</p>
+  <div class="grid"><label class="fl">Nome<input id="rNome"></label><label class="fl">E-mail<input id="rEmail" type="email"></label>
+  <label class="fl full">Recado (opcional)<textarea id="rMsg" rows="2" placeholder="ex.: vai cuidar da parte do mapa"></textarea></label></div>
+  <div class="acts"><button class="btn" onclick="abrir(${c.id})">Cancelar</button><button class="btn p" id="rOk">Repassar</button></div><div class="msg" id="rRes"></div></div>`,true);
+  $("rOk").onclick=async()=>{try{const r=await rpc("sol_repassar",{p_token:TOKEN,p_cartao:c.id,p_nome:$("rNome").value,p_email:$("rEmail").value,p_mensagem:$("rMsg").value});
+    await carregar(false);
+    if(r==="ja_tem_acesso"){msg("rRes","Repassado. Essa pessoa já tem acesso e vai receber os avisos de prazo.","ok")}
+    else if(QUEM.admin){acessos();return}
+    else msg("rRes","Repassado. Pedido de acesso enviado para aprovação. Assim que aprovar, a pessoa recebe a senha por e-mail.","ok");
+    $("rOk").outerHTML=`<button class="btn p" onclick="abrir(${c.id})">Voltar ao cartão</button>`;
+  }catch(e){msg("rRes",e.message,"err")}};
+}
+async function decidir(id,ok){
+  if(!ok&&!confirm("Recusar este pedido de acesso?"))return;
+  try{const r=await rpc("sol_pedido_decidir",{p_token:TOKEN,p_id:id,p_aprovar:ok});PEDIDOS=await rpc("sol_pedidos_lista",{p_token:TOKEN})||[];avisos(false);
+    await acessos();if(ok)msg("kPed",`Aprovado. Senha: ${r.senha} — ${r.email_enviado?"vai por e-mail em até 1 minuto":"anote e passe para a pessoa"}.`,"ok");
+  }catch(e){msg("kPed",e.message,"err")}}
 
 /* ---------------- escrever e-mail ---------------- */
 let ANEXOS=[];
@@ -409,9 +438,14 @@ async function ctDel(id){if(!confirm("Remover este contato?"))return;try{await r
 /* ---------------- acessos (administrador) ---------------- */
 $("bAcessos").onclick=acessos;
 async function acessos(){
-  let ps=[],cfg={};try{[ps,cfg]=await Promise.all([rpc("sol_pessoas_lista",{p_token:TOKEN}),rpc("sol_config_ver",{p_token:TOKEN})])}catch(e){alert(e.message);return}
+  let ps=[],cfg={};try{[ps,cfg,PEDIDOS]=await Promise.all([rpc("sol_pessoas_lista",{p_token:TOKEN}),rpc("sol_config_ver",{p_token:TOKEN}),rpc("sol_pedidos_lista",{p_token:TOKEN})]);PEDIDOS=PEDIDOS||[];avisos(false)}catch(e){alert(e.message);return}
   dlg(`<div class="dh"><h3>Acessos e robô de e-mail</h3><button class="x" onclick="fechar()">×</button></div><div class="db">
-  <h4 class="sec4">Senhas para editar</h4>
+  ${PEDIDOS.length?`<h4 class="sec4" style="color:var(--brand-ink)">Pedidos de acesso</h4>
+  <table class="tbl">${PEDIDOS.map(p=>`<tr><td><b>${esc(p.nome)}</b><br><span class="note">${esc(p.email)} · ${esc(p.fornecedor)}</span></td>
+   <td class="note">pedido por ${esc(p.pedido_por)}${p.assunto?"<br>"+esc(p.assunto):""}${p.mensagem?"<br>“"+esc(p.mensagem)+"”":""}</td>
+   <td style="white-space:nowrap"><button class="btn p" onclick="decidir(${p.id},true)">Aprovar</button> <button class="btn d" onclick="decidir(${p.id},false)">Recusar</button></td></tr>`).join("")}</table>`:""}
+  <div class="msg" id="kPed"></div>
+  <h4 class="sec4" style="margin-top:14px">Senhas para editar</h4>
   <p class="note">Cada pessoa entra só com a senha dela. Com fornecedor preenchido (ex.: TFleet) ela vê e atualiza só os cartões desse fornecedor: status (Assumido, Em andamento, Entregue), responsável, datas, prazo e andamento. Com <b>*</b> no fornecedor é alguém da casa: vê e edita tudo e envia e-mail, mas não mexe em acessos. Tudo fica registrado.</p>
   <table class="tbl"><tr><th>Nome</th><th>Fornecedor</th><th>Último acesso</th><th></th></tr>
   ${ps.map(p=>`<tr><td>${esc(p.nome)}${p.ativo?"":" <span class='note'>(desativado)</span>"}</td><td>${p.fornecedor==="*"?"* (interno)":esc(p.fornecedor)}</td><td>${p.ultimo_acesso?dtBR(p.ultimo_acesso):"nunca"}</td>

@@ -5,6 +5,8 @@
  *    e envia pelo SEU Gmail, com anexos e o link "Veja a gestão dessa demanda" no fim.
  *    Ficam na sua pasta Enviados e as respostas chegam na sua caixa.
  *
+ *    Também avisa você quando um fornecedor repassa a demanda e pede acesso para alguém.
+ *
  * 2) PRAZOS: todo dia às 8h (Brasília) pergunta ao Supabase quais cartões precisam de aviso:
  *   - prazo VENCIDO e ainda não entregue;
  *   - prazo vence HOJE ou AMANHÃ;
@@ -81,8 +83,21 @@ function verificarPrazos() {
   console.log(cartoes.length + ' aviso(s) enviado(s).');
 }
 
+/** Avisa você quando um fornecedor repassa a demanda e pede acesso para alguém de fora. */
+function avisarPedidos_() {
+  const r = rpc_('sol_pedidos_avisar', { p_chave: CHAVE });
+  if (!r || !r.pedidos || !r.pedidos.length) return;
+  const dono = Session.getEffectiveUser().getEmail();
+  if (!dono) return;
+  const linhas = r.pedidos.map(p => '• ' + p.pedido_por + ' quer dar acesso a ' + p.nome + ' (' + p.email + ')' +
+    (p.assunto ? '\n  Demanda: ' + p.assunto : '') + (p.mensagem ? '\n  Recado: ' + p.mensagem : '')).join('\n\n');
+  MailApp.sendEmail(dono, '[Quadro] Pedido de acesso: ' + r.pedidos.map(p => p.nome).join(', '),
+    linhas + '\n\nAprove ou recuse em: ' + r.link + '\n(Quadro → Acessos → Pedidos de acesso)');
+}
+
 /** Envia a fila de e-mails escritos no quadro (roda a cada minuto). */
 function enviarFila() {
+  try { avisarPedidos_(); } catch (err) { console.log('pedidos: ' + err); }
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   for (let n = 0; n < 5; n++) {                       // até 5 e-mails por rodada
     const e = rpc_('sol_emails_pendentes', { p_chave: CHAVE });
