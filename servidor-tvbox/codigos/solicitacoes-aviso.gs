@@ -16,7 +16,7 @@
  *
  * Instalar (uma vez):
  *  1. https://script.google.com → Novo projeto → apague o que tiver e cole este arquivo.
- *  2. Troque COLE_A_CHAVE_AQUI pela chave que aparece no quadro em  Acessos → Aviso por e-mail.
+ *  2. Troque COLE_A_CHAVE_AQUI pela chave do robô que aparece no quadro em "Contatos e acessos" (lá embaixo).
  *  3. Salve (Ctrl+S), escolha a função instalar em cima e clique em Executar.
  *     O Google pede autorização (Gmail + acesso externo): Avançado → Acessar → Permitir.
  *  Se já tinha instalado a versão antiga: cole esta por cima e execute instalar de novo.
@@ -92,7 +92,7 @@ function avisarPedidos_() {
   const linhas = r.pedidos.map(p => '• ' + p.pedido_por + ' quer dar acesso a ' + p.nome + ' (' + p.email + ')' +
     (p.assunto ? '\n  Demanda: ' + p.assunto : '') + (p.mensagem ? '\n  Recado: ' + p.mensagem : '')).join('\n\n');
   MailApp.sendEmail(dono, '[Quadro] Pedido de acesso: ' + r.pedidos.map(p => p.nome).join(', '),
-    linhas + '\n\nAprove ou recuse em: ' + r.link + '\n(Quadro → Acessos → Pedidos de acesso)');
+    linhas + '\n\nAprove ou recuse em: ' + r.link + '\n(Quadro → Contatos e acessos → Pedidos de acesso)');
 }
 
 /** Envia a fila de e-mails escritos no quadro (roda a cada minuto). */
