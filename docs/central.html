@@ -236,6 +236,12 @@ table.log td{vertical-align:top}
       <div class="d">Histórico dos e-mails de uso de roteador (hotspot) nos ônibus e as tratativas de cada uso.</div>
       <div class="go">Abrir →</div>
     </a>
+    <a class="card" href="https://gestao-integrada.github.io/demandas/" data-p="solicitacoes">
+      <div class="ic">📋</div>
+      <div class="t">Demandas</div>
+      <div class="d">Pedidos aos fornecedores: quem assumiu, prazo, documentos, cobranças e avisos por e-mail.</div>
+      <div class="go">Abrir →</div>
+    </a>
     <a class="card hidden" href="#gestao" id="cardGestao">
       <div class="ic">🔐</div>
       <div class="t">Gestão de acessos</div>
@@ -557,7 +563,8 @@ const PAINEIS=[
   ['ocorrencias','Ocorrências','ver: lista e indicadores · editar: resolver, descartar, reabrir'],
   ['lotacao','Lotação','ver: só indicadores (sem nomes) · editar: nomes, gestores, cadastro e respostas'],
   ['otimizacao','Otimização de rotas','ver: sugestões no mapa · editar: ver pessoas e marcar rotas'],
-  ['roteador','Roteador','ver: histórico dos e-mails enviados · editar: registrar tratativa']];
+  ['roteador','Roteador','ver: histórico dos e-mails enviados · editar: registrar tratativa'],
+  ['solicitacoes','Demandas','ver: acompanhar os pedidos · editar: criar, enviar e-mail e atualizar']];
 const NOME_P=Object.fromEntries(PAINEIS.map(p=>[p[0],p[1]]).concat([['central','Central']]));
 let GAUTH=null, gPessoas=[], gEdId=null, gLog=[];
 const $g=id=>document.getElementById(id);
