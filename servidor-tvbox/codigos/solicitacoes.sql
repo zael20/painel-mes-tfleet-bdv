@@ -747,12 +747,9 @@ begin
     end if;
     return json_build_object('status', 'recusado');
   end if;
-  -- senha aleatória de 8 caracteres, sem letras confusas
-  loop
-    senha := (select string_agg(substr('abcdefghjkmnpqrstuvwxyz23456789', 1 + (get_byte(gen_random_bytes(1), 0) % 31), 1), '') from generate_series(1, 8));
-    h := public._central_hash('sol:' || senha);
-    exit when not exists (select 1 from sol_pessoas where senha_hash = h) or i > 5; i := i + 1;
-  end loop;
+  -- senha de 4 números (entra com e-mail + senha)
+  senha := lpad(((get_byte(gen_random_bytes(1), 0) * 256 + get_byte(gen_random_bytes(1), 0)) % 10000)::text, 4, '0');
+  h := public._central_hash('sol:' || p.email || ':' || senha);
   select id into pid from sol_pessoas where lower(email) = p.email and lower(fornecedor) = lower(p.fornecedor);
   if pid is null then
     insert into sol_pessoas (nome, fornecedor, email, senha_hash) values (p.nome, p.fornecedor, p.email, h) returning id into pid;
@@ -769,8 +766,9 @@ begin
       values (c.id, array[p.email], 'Acesso ao quadro de solicitações – ' || c.assunto,
         'Olá, ' || p.nome || '.' || E'\n\n' ||
         coalesce(p.pedido_por, 'Um colega') || ' repassou para você a demanda "' || c.assunto || '".' || E'\n\n' ||
-        'Para atualizar o andamento (status, datas, prazo e recados), abra o link abaixo, clique em "Entrar para atualizar" e use a senha:' || E'\n\n' ||
-        '    {{SENHA}}' || E'\n\n' ||
+        'Para atualizar o andamento (status, datas, prazo e recados), abra o link abaixo, clique em "Entrar para atualizar" e use:' || E'\n\n' ||
+        '    E-mail: ' || p.email || E'\n' || '    Senha: {{SENHA}}' || E'\n\n' ||
+        'Se quiser, peça ao Mizael para trocar a senha pelos 4 últimos números do seu celular.' || E'\n\n' ||
         'A senha é pessoal: não compartilhe. Você vê só as demandas de ' || p.fornecedor || '.',
         q->>'nome', senha, true) returning id into eid;
     insert into sol_historico (cartao_id, quem, tipo, texto) values (c.id, q->>'nome', 'aviso',
@@ -1056,6 +1054,134 @@ grant execute on function public.sol_doc_enviar(text, bigint, text, text, text),
   public.sol_anexo_publico(text, bigint), public.sol_email_enviar(text, bigint, text[], text[], text, text, jsonb, bigint[])
   to anon, authenticated;
 revoke execute on function public._sol_por_chave(text), public._sol_docs(bigint) from public, anon, authenticated;
+
+-- ================================================================ v5: FORNECEDOR ENTRA COM E-MAIL + SENHA (pode ser 4 números)
+-- 4 números sozinhos seriam fáceis de chutar; com o e-mail junto e trava de 5 erros (15 min), fica seguro.
+alter table public.sol_pessoas drop constraint if exists sol_pessoas_senha_hash_key;
+alter table public.sol_pessoas add column if not exists falhas int not null default 0;
+alter table public.sol_pessoas add column if not exists travado_ate timestamptz;
+create unique index if not exists sol_pessoas_email on public.sol_pessoas (lower(email)) where email is not null;
+
+drop function if exists public.sol_entrar(text);
+create or replace function public.sol_entrar(p_senha text, p_email text default null) returns json
+language plpgsql security definer set search_path = public, extensions as $$
+declare a central_acessos; p sol_pessoas; tk text; e text := lower(trim(coalesce(p_email, '')));
+begin
+  if (select count(*) from central_acessos_log where evento = 'senha_errada' and painel = 'solicitacoes'
+      and ts > now() - interval '10 minutes') >= 30 then
+    return json_build_object('erro', 'Muitas tentativas erradas. Espere 10 minutos.');
+  end if;
+  if e <> '' then
+    -- fornecedor: e-mail + senha
+    select * into p from sol_pessoas where lower(email) = e and ativo;
+    if p.id is not null and p.travado_ate > now() then
+      return json_build_object('erro', 'Muitas tentativas erradas neste e-mail. Espere 15 minutos.');
+    end if;
+    if p.id is not null and (p.senha_hash = public._central_hash('sol:' || e || ':' || trim(p_senha))
+                             or p.senha_hash = public._central_hash('sol:' || trim(p_senha))) then
+      update sol_pessoas set falhas = 0, travado_ate = null where id = p.id;
+      tk := 'tfq_' || encode(gen_random_bytes(24), 'hex');
+      insert into sol_sessoes (token, pessoa_id, expira_em) values (tk, p.id, now() + interval '60 days');
+      delete from sol_sessoes where expira_em < now();
+      perform public._central_log(null, p.nome || ' (' || p.fornecedor || ')', 'entrou', 'solicitacoes', 'Fornecedor entrou no quadro');
+      return (jsonb_build_object('token', tk) || public._sol_quem(tk))::json;
+    end if;
+    if p.id is not null then
+      update sol_pessoas set falhas = falhas + 1,
+        travado_ate = case when falhas + 1 >= 5 then now() + interval '15 minutes' end where id = p.id;
+    end if;
+    perform public._central_log(null, e, 'senha_errada', 'solicitacoes');
+    return json_build_object('erro', 'E-mail ou senha incorretos.');
+  end if;
+  -- da casa: senha pessoal da Central
+  select * into a from central_acessos where senha_hash = public._central_hash(trim(p_senha)) and ativo;
+  if a.id is not null then
+    if not (a.admin or coalesce(a.perms, '{}'::jsonb) ? 'solicitacoes') then
+      return json_build_object('erro', 'Sua senha não tem acesso ao quadro de solicitações.');
+    end if;
+    tk := 'tfs_' || encode(gen_random_bytes(24), 'hex');
+    insert into central_sessoes (token, acesso_id, expira_em) values (tk, a.id, now() + interval '30 days');
+    perform public._central_log(a.id, a.nome, 'entrou', 'solicitacoes', 'Entrou no quadro de solicitações');
+    return (jsonb_build_object('token', tk) || public._sol_quem(tk))::json;
+  end if;
+  -- senha de gestores (a mesma da Lotação)
+  if exists (select 1 from lotacao_admin where id = 1 and senha_hash = crypt(trim(p_senha), senha_hash)) then
+    tk := 'tfg_' || encode(gen_random_bytes(24), 'hex');
+    insert into sol_sessoes_gestor (token, expira_em) values (tk, now() + interval '30 days');
+    delete from sol_sessoes_gestor where expira_em < now();
+    perform public._central_log(null, 'Senha de gestores', 'entrou', 'solicitacoes', 'Entrou no quadro de solicitações');
+    return (jsonb_build_object('token', tk) || public._sol_quem(tk))::json;
+  end if;
+  perform public._central_log(null, null, 'senha_errada', 'solicitacoes');
+  return json_build_object('erro', case when trim(p_senha) = '8015'
+    then 'O código geral 8015 não vale aqui. Use sua senha pessoal da Central ou a senha de gestores.'
+    else 'Senha incorreta. Se você é de fornecedor, preencha também o seu e-mail.' end);
+end $$;
+
+create or replace function public.sol_pessoa_salvar(p_token text, p_id bigint, p_nome text, p_fornecedor text,
+  p_email text, p_senha text, p_ativo boolean) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token, true); novo bigint; h text; e text := lower(trim(coalesce(p_email, '')));
+begin
+  if coalesce(trim(p_nome), '') = '' or coalesce(trim(p_fornecedor), '') = '' then
+    raise exception 'Preencha nome e fornecedor.';
+  end if;
+  if e !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'Preencha o e-mail da pessoa (ela entra com e-mail + senha).'; end if;
+  if exists (select 1 from sol_pessoas where lower(email) = e and id is distinct from p_id) then
+    raise exception 'Já existe um acesso com esse e-mail.';
+  end if;
+  if p_senha is not null and trim(p_senha) <> '' then
+    if length(trim(p_senha)) < 4 then raise exception 'A senha precisa ter pelo menos 4 caracteres (ex.: 4 últimos números do celular).'; end if;
+    h := public._central_hash('sol:' || e || ':' || trim(p_senha));
+  end if;
+  if p_id is null then
+    if h is null then raise exception 'Defina a senha.'; end if;
+    insert into sol_pessoas (nome, fornecedor, email, senha_hash, ativo)
+      values (trim(p_nome), trim(p_fornecedor), e, h, coalesce(p_ativo, true)) returning id into novo;
+  else
+    update sol_pessoas set nome = trim(p_nome), fornecedor = trim(p_fornecedor), email = e,
+      ativo = coalesce(p_ativo, true), falhas = 0, travado_ate = null,
+      senha_hash = coalesce(h, senha_hash) where id = p_id returning id into novo;
+    if h is not null or not coalesce(p_ativo, true) then delete from sol_sessoes where pessoa_id = p_id; end if;
+  end if;
+  perform public._central_log(null, q->>'nome', 'cadastro', 'solicitacoes', 'Acesso de fornecedor: ' || trim(p_nome));
+  return novo;
+end $$;
+
+grant execute on function public.sol_entrar(text, text) to anon, authenticated;
+
+-- contatos e acessos numa lista só (o administrador vê e cria o acesso de cada contato)
+create or replace function public.sol_contatos_lista(p_token text) returns json
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token); adm boolean := (q->>'admin')::boolean;
+begin
+  if q->>'tipo' <> 'interno' then raise exception 'Só para quem pediu.'; end if;
+  return coalesce((select json_agg(x order by x.tem_acesso desc, x.usos desc, x.nome nulls last, x.email) from (
+    select coalesce(c.id, -p.id) as id, c.id as contato_id, coalesce(c.nome, p.nome) as nome, coalesce(c.email, p.email) as email,
+           coalesce(p.fornecedor, c.fornecedor) as fornecedor, coalesce(c.usos, 0) as usos, p.id is not null as tem_acesso,
+           case when adm and p.id is not null then json_build_object('id', p.id, 'ativo', p.ativo, 'ultimo_acesso', p.ultimo_acesso,
+             'fornecedor', p.fornecedor, 'travado', p.travado_ate > now()) end as acesso
+    from sol_contatos c full join sol_pessoas p on lower(p.email) = c.email
+    where coalesce(c.email, p.email) is not null) x), '[]'::json);
+end $$;
+
+-- ao criar/editar um acesso, o contato também fica salvo
+create or replace function public._sol_pessoa_contato() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.email is not null then
+    insert into sol_contatos (nome, email, fornecedor) values (new.nome, lower(new.email), nullif(new.fornecedor, '*'))
+    on conflict (email) do update set nome = coalesce(excluded.nome, sol_contatos.nome),
+      fornecedor = coalesce(excluded.fornecedor, sol_contatos.fornecedor);
+  end if;
+  return new;
+end $$;
+drop trigger if exists sol_pessoas_contato on public.sol_pessoas;
+create trigger sol_pessoas_contato after insert or update of nome, email, fornecedor on public.sol_pessoas
+  for each row execute function public._sol_pessoa_contato();
+insert into public.sol_contatos (nome, email, fornecedor)
+select nome, lower(email), nullif(fornecedor, '*') from public.sol_pessoas where email is not null
+on conflict (email) do nothing;
+
 
 -- ---------------------------------------------------------------- pedidos já enviados (só cria os que ainda não existem)
 insert into public.sol_cartoes (fornecedor, assunto, descricao, link, status, enviado_em, ultimo_contato, criado_por, ordem)
