@@ -748,8 +748,12 @@ begin
     return json_build_object('status', 'recusado');
   end if;
   -- senha de 4 números (entra com e-mail + senha)
-  senha := lpad(((get_byte(gen_random_bytes(1), 0) * 256 + get_byte(gen_random_bytes(1), 0)) % 10000)::text, 4, '0');
-  h := public._central_hash('sol:' || p.email || ':' || senha);
+  loop  -- código de 4 números que ninguém usa
+    senha := lpad(((get_byte(gen_random_bytes(1), 0) * 256 + get_byte(gen_random_bytes(1), 0)) % 10000)::text, 4, '0');
+    h := public._central_hash('solpin:' || senha);
+    i := i + 1;
+    exit when i > 200 or not exists (select 1 from sol_pessoas where senha_hash in (h, public._central_hash('sol:' || senha)));
+  end loop;
   select id into pid from sol_pessoas where lower(email) = p.email and lower(fornecedor) = lower(p.fornecedor);
   if pid is null then
     insert into sol_pessoas (nome, fornecedor, email, senha_hash) values (p.nome, p.fornecedor, p.email, h) returning id into pid;
@@ -766,13 +770,13 @@ begin
       values (c.id, array[p.email], 'Acesso ao quadro de solicitações – ' || c.assunto,
         'Olá, ' || p.nome || '.' || E'\n\n' ||
         coalesce(p.pedido_por, 'Um colega') || ' repassou para você a demanda "' || c.assunto || '".' || E'\n\n' ||
-        'Para atualizar o andamento (status, datas, prazo e recados), abra o link abaixo, clique em "Entrar para atualizar" e use:' || E'\n\n' ||
-        '    E-mail: ' || p.email || E'\n' || '    Senha: {{SENHA}}' || E'\n\n' ||
-        'Se quiser, peça ao Mizael para trocar a senha pelos 4 últimos números do seu celular.' || E'\n\n' ||
-        'A senha é pessoal: não compartilhe. Você vê só as demandas de ' || p.fornecedor || '.',
+        'Para atualizar o andamento (status, datas, prazo e recados), abra o link abaixo, clique em "Entrar para atualizar" e digite o seu código de acesso:' || E'\n\n' ||
+        '    Código: {{SENHA}}' || E'\n\n' ||
+        'Se quiser, peça ao Mizael para trocar o código pelos 4 últimos números do seu celular.' || E'\n\n' ||
+        'O código é pessoal: não compartilhe. Você vê só as demandas de ' || p.fornecedor || '.',
         q->>'nome', senha, true) returning id into eid;
     insert into sol_historico (cartao_id, quem, tipo, texto) values (c.id, q->>'nome', 'aviso',
-      'Aprovou o acesso de ' || p.nome || ' (senha enviada por e-mail)');
+      'Aprovou o acesso de ' || p.nome || ' (código enviado por e-mail)');
   end if;
   perform public._central_log(null, q->>'nome', 'cadastro', 'solicitacoes', 'Aprovou acesso de fornecedor: ' || p.nome);
   return json_build_object('status', 'aprovado', 'senha', senha, 'email_enviado', eid is not null);
@@ -1071,28 +1075,7 @@ begin
       and ts > now() - interval '10 minutes') >= 30 then
     return json_build_object('erro', 'Muitas tentativas erradas. Espere 10 minutos.');
   end if;
-  if e <> '' then
-    -- fornecedor: e-mail + senha
-    select * into p from sol_pessoas where lower(email) = e and ativo;
-    if p.id is not null and p.travado_ate > now() then
-      return json_build_object('erro', 'Muitas tentativas erradas neste e-mail. Espere 15 minutos.');
-    end if;
-    if p.id is not null and (p.senha_hash = public._central_hash('sol:' || e || ':' || trim(p_senha))
-                             or p.senha_hash = public._central_hash('sol:' || trim(p_senha))) then
-      update sol_pessoas set falhas = 0, travado_ate = null where id = p.id;
-      tk := 'tfq_' || encode(gen_random_bytes(24), 'hex');
-      insert into sol_sessoes (token, pessoa_id, expira_em) values (tk, p.id, now() + interval '60 days');
-      delete from sol_sessoes where expira_em < now();
-      perform public._central_log(null, p.nome || ' (' || p.fornecedor || ')', 'entrou', 'solicitacoes', 'Fornecedor entrou no quadro');
-      return (jsonb_build_object('token', tk) || public._sol_quem(tk))::json;
-    end if;
-    if p.id is not null then
-      update sol_pessoas set falhas = falhas + 1,
-        travado_ate = case when falhas + 1 >= 5 then now() + interval '15 minutes' end where id = p.id;
-    end if;
-    perform public._central_log(null, e, 'senha_errada', 'solicitacoes');
-    return json_build_object('erro', 'E-mail ou senha incorretos.');
-  end if;
+  -- (p_email ficou só por compatibilidade: a entrada agora é só com a senha ou o código)
   -- da casa: senha pessoal da Central
   select * into a from central_acessos where senha_hash = public._central_hash(trim(p_senha)) and ativo;
   if a.id is not null then
@@ -1112,10 +1095,20 @@ begin
     perform public._central_log(null, 'Senha de gestores', 'entrou', 'solicitacoes', 'Entrou no quadro de solicitações');
     return (jsonb_build_object('token', tk) || public._sol_quem(tk))::json;
   end if;
+  -- fornecedor: só o código de acesso (cada código é de uma pessoa só)
+  select * into p from sol_pessoas where ativo and senha_hash in
+    (public._central_hash('solpin:' || trim(p_senha)), public._central_hash('sol:' || trim(p_senha))) limit 1;
+  if p.id is not null then
+    tk := 'tfq_' || encode(gen_random_bytes(24), 'hex');
+    insert into sol_sessoes (token, pessoa_id, expira_em) values (tk, p.id, now() + interval '60 days');
+    delete from sol_sessoes where expira_em < now();
+    perform public._central_log(null, p.nome || ' (' || p.fornecedor || ')', 'entrou', 'solicitacoes', 'Fornecedor entrou no quadro');
+    return (jsonb_build_object('token', tk) || public._sol_quem(tk))::json;
+  end if;
   perform public._central_log(null, null, 'senha_errada', 'solicitacoes');
   return json_build_object('erro', case when trim(p_senha) = '8015'
     then 'O código geral 8015 não vale aqui. Use sua senha pessoal da Central ou a senha de gestores.'
-    else 'Senha incorreta. Se você é de fornecedor, preencha também o seu e-mail.' end);
+    else 'Senha ou código incorreto.' end);
 end $$;
 
 create or replace function public.sol_pessoa_salvar(p_token text, p_id bigint, p_nome text, p_fornecedor text,
@@ -1126,13 +1119,16 @@ begin
   if coalesce(trim(p_nome), '') = '' or coalesce(trim(p_fornecedor), '') = '' then
     raise exception 'Preencha nome e fornecedor.';
   end if;
-  if e !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'Preencha o e-mail da pessoa (ela entra com e-mail + senha).'; end if;
+  if e !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'Preencha o e-mail da pessoa (é para onde vão os avisos).'; end if;
   if exists (select 1 from sol_pessoas where lower(email) = e and id is distinct from p_id) then
     raise exception 'Já existe um acesso com esse e-mail.';
   end if;
   if p_senha is not null and trim(p_senha) <> '' then
-    if length(trim(p_senha)) < 4 then raise exception 'A senha precisa ter pelo menos 4 caracteres (ex.: 4 últimos números do celular).'; end if;
-    h := public._central_hash('sol:' || e || ':' || trim(p_senha));
+    if length(trim(p_senha)) < 4 then raise exception 'O código precisa ter pelo menos 4 números (ex.: 4 últimos do celular).'; end if;
+    h := public._central_hash('solpin:' || trim(p_senha));
+    if exists (select 1 from sol_pessoas where senha_hash in (h, public._central_hash('sol:' || trim(p_senha))) and id is distinct from p_id) then
+      raise exception 'Esse código já é de outra pessoa. Escolha outro.';
+    end if;
   end if;
   if p_id is null then
     if h is null then raise exception 'Defina a senha.'; end if;
