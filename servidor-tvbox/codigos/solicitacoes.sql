@@ -64,6 +64,10 @@ create table if not exists public.sol_pessoas (          -- acessos de fornecedo
   criado_em   timestamptz not null default now(),
   ultimo_acesso timestamptz
 );
+-- nível do acesso: ver (só acompanha), comentar (acompanha, comenta e cobra resposta), editar (tudo do fornecedor)
+alter table public.sol_pessoas add column if not exists nivel text not null default 'editar';
+alter table public.sol_pessoas drop constraint if exists sol_pessoas_nivel_chk;
+alter table public.sol_pessoas add constraint sol_pessoas_nivel_chk check (nivel in ('ver', 'comentar', 'editar'));
 
 create table if not exists public.sol_sessoes (
   token      text primary key,
@@ -107,12 +111,13 @@ begin
     select * into a from public._central_pessoa(p_token);
     if a.id is not null and (a.admin or coalesce(a.perms, '{}'::jsonb) ? 'solicitacoes') then
       return jsonb_build_object('nome', a.nome, 'tipo', 'interno', 'fornecedor', null,
-        'admin', a.admin, 'edita', a.admin or coalesce(a.perms->'solicitacoes', '[]'::jsonb) ? 'editar');
+        'admin', a.admin, 'edita', a.admin or coalesce(a.perms->'solicitacoes', '[]'::jsonb) ? 'editar',
+        'comenta', a.admin or coalesce(a.perms->'solicitacoes', '[]'::jsonb) ? 'editar', 'nivel', 'editar');
     end if;
   elsif p_token like 'tfg_%' then
     if exists (select 1 from sol_sessoes_gestor where token = p_token and expira_em > now()) then
       return jsonb_build_object('nome', 'Senha de gestores', 'tipo', 'interno', 'fornecedor', null,
-        'admin', true, 'edita', true);
+        'admin', true, 'edita', true, 'comenta', true, 'nivel', 'editar');
     end if;
   elsif p_token like 'tfq_%' then
     select pe.* into p from sol_sessoes s join sol_pessoas pe on pe.id = s.pessoa_id
@@ -120,10 +125,11 @@ begin
     if p.id is not null then
       update sol_pessoas set ultimo_acesso = now() where id = p.id;
       if p.fornecedor = '*' then     -- acesso interno (pessoa da casa): vê e edita tudo, sem administrar
-        return jsonb_build_object('nome', p.nome, 'tipo', 'interno', 'fornecedor', null, 'admin', false, 'edita', true);
+        return jsonb_build_object('nome', p.nome, 'tipo', 'interno', 'fornecedor', null, 'admin', false,
+          'edita', p.nivel = 'editar', 'comenta', p.nivel <> 'ver', 'nivel', p.nivel);
       end if;
       return jsonb_build_object('nome', p.nome, 'tipo', 'fornecedor', 'fornecedor', p.fornecedor,
-        'admin', false, 'edita', true);
+        'admin', false, 'edita', p.nivel = 'editar', 'comenta', p.nivel <> 'ver', 'nivel', p.nivel);
     end if;
   end if;
   return null;
@@ -334,10 +340,13 @@ begin
   return public._sol_json(c, not forn)::json;
 end $$;
 
-create or replace function public.sol_comentar(p_token text, p_id bigint, p_texto text) returns text
+drop function if exists public.sol_comentar(text, bigint, text);
+-- p_cobrar = também manda o comentário por e-mail para quem recebe os avisos do cartão (cobrar resposta)
+create or replace function public.sol_comentar(p_token text, p_id bigint, p_texto text, p_cobrar boolean default false) returns text
 language plpgsql security definer set search_path = public as $$
-declare q jsonb := public._sol_exige(p_token); c sol_cartoes; forn boolean := q->>'tipo' = 'fornecedor';
+declare q jsonb := public._sol_exige(p_token); c sol_cartoes; forn boolean := q->>'tipo' = 'fornecedor'; para text[];
 begin
+  if not coalesce((q->>'comenta')::boolean, (q->>'edita')::boolean) then raise exception 'Seu acesso é só para acompanhar.'; end if;
   if coalesce(trim(p_texto), '') = '' then raise exception 'Escreva o comentário.'; end if;
   select * into c from sol_cartoes where id = p_id;
   if c.id is null or (forn and lower(c.fornecedor) <> lower(q->>'fornecedor')) then
@@ -345,7 +354,19 @@ begin
   end if;
   insert into sol_historico (cartao_id, quem, tipo, texto)
     values (p_id, (q->>'nome') || case when forn then ' (' || (q->>'fornecedor') || ')' else '' end,
-            'comentario', left(trim(p_texto), 4000));
+            'comentario', case when p_cobrar then '📣 Cobrou resposta: ' else '' end || left(trim(p_texto), 4000));
+  if p_cobrar then
+    para := array(select distinct lower(trim(x)) from unnest(c.emails) x where x like '%@%');
+    if coalesce(array_length(para, 1), 0) = 0 then
+      raise exception 'Este cartão não tem e-mails nos avisos. Coloque pelo menos um para poder cobrar.';
+    end if;
+    insert into sol_emails (cartao_id, para, assunto, corpo, criado_por)
+    values (c.id, para, 'Aguardando retorno: ' || c.assunto,
+      'Olá,' || E'\n\n' || trim(p_texto) || E'\n\n' ||
+      'Demanda: ' || c.assunto || E'\n' || 'Status: ' || c.status ||
+      case when c.prazo is not null then E'\n' || 'Prazo: ' || to_char(c.prazo, 'DD/MM/YYYY') else '' end ||
+      E'\n\n' || 'Enviado por ' || (q->>'nome') || ' pelo quadro de demandas.', q->>'nome');
+  end if;
   update sol_cartoes set ultimo_contato = public._sol_hoje(), atualizado_em = now() where id = p_id;
   return 'ok';
 end $$;
@@ -454,7 +475,7 @@ end $$;
 
 grant execute on function public.sol_entrar(text), public.sol_sessao(text), public.sol_sair(text),
   public.sol_listar(text), public.sol_cartao(text, bigint), public.sol_salvar(text, bigint, jsonb),
-  public.sol_comentar(text, bigint, text), public.sol_remover(text, bigint),
+  public.sol_comentar(text, bigint, text, boolean), public.sol_remover(text, bigint),
   public.sol_pessoas_lista(text), public.sol_pessoa_salvar(text, bigint, text, text, text, text, boolean),
   public.sol_pessoa_remover(text, bigint), public.sol_config_ver(text), public.sol_config_salvar(text, int, boolean),
   public.sol_avisos(text), public.sol_aviso_marcar(text, bigint, text, text)
@@ -1111,8 +1132,9 @@ begin
     else 'Senha ou código incorreto.' end);
 end $$;
 
+drop function if exists public.sol_pessoa_salvar(text, bigint, text, text, text, text, boolean);
 create or replace function public.sol_pessoa_salvar(p_token text, p_id bigint, p_nome text, p_fornecedor text,
-  p_email text, p_senha text, p_ativo boolean) returns bigint
+  p_email text, p_senha text, p_ativo boolean, p_nivel text default null) returns bigint
 language plpgsql security definer set search_path = public as $$
 declare q jsonb := public._sol_exige(p_token, true); novo bigint; h text; e text := lower(trim(coalesce(p_email, '')));
 begin
@@ -1132,10 +1154,10 @@ begin
   end if;
   if p_id is null then
     if h is null then raise exception 'Defina a senha.'; end if;
-    insert into sol_pessoas (nome, fornecedor, email, senha_hash, ativo)
-      values (trim(p_nome), trim(p_fornecedor), e, h, coalesce(p_ativo, true)) returning id into novo;
+    insert into sol_pessoas (nome, fornecedor, email, senha_hash, ativo, nivel)
+      values (trim(p_nome), trim(p_fornecedor), e, h, coalesce(p_ativo, true), coalesce(p_nivel, 'editar')) returning id into novo;
   else
-    update sol_pessoas set nome = trim(p_nome), fornecedor = trim(p_fornecedor), email = e,
+    update sol_pessoas set nome = trim(p_nome), fornecedor = trim(p_fornecedor), email = e, nivel = coalesce(p_nivel, nivel),
       ativo = coalesce(p_ativo, true), falhas = 0, travado_ate = null,
       senha_hash = coalesce(h, senha_hash) where id = p_id returning id into novo;
     if h is not null or not coalesce(p_ativo, true) then delete from sol_sessoes where pessoa_id = p_id; end if;
@@ -1145,6 +1167,7 @@ begin
 end $$;
 
 grant execute on function public.sol_entrar(text, text) to anon, authenticated;
+grant execute on function public.sol_pessoa_salvar(text, bigint, text, text, text, text, boolean, text) to anon, authenticated;
 
 -- contatos e acessos numa lista só (o administrador vê e cria o acesso de cada contato)
 create or replace function public.sol_contatos_lista(p_token text) returns json
@@ -1156,7 +1179,7 @@ begin
     select coalesce(c.id, -p.id) as id, c.id as contato_id, coalesce(c.nome, p.nome) as nome, coalesce(c.email, p.email) as email,
            coalesce(p.fornecedor, c.fornecedor) as fornecedor, coalesce(c.usos, 0) as usos, p.id is not null as tem_acesso,
            case when adm and p.id is not null then json_build_object('id', p.id, 'ativo', p.ativo, 'ultimo_acesso', p.ultimo_acesso,
-             'fornecedor', p.fornecedor, 'travado', p.travado_ate > now()) end as acesso
+             'fornecedor', p.fornecedor, 'nivel', p.nivel, 'travado', p.travado_ate > now()) end as acesso
     from sol_contatos c full join sol_pessoas p on lower(p.email) = c.email
     where coalesce(c.email, p.email) is not null) x), '[]'::json);
 end $$;
