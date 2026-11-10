@@ -1,7 +1,11 @@
 /**
- * Aviso de prazos do QUADRO DE SOLICITAÇÕES (Supabase)
+ * Robô de e-mail do QUADRO DE SOLICITAÇÕES (Supabase) — faz duas coisas:
  *
- * Todo dia às 8h (Brasília) pergunta ao Supabase quais cartões precisam de aviso:
+ * 1) ENVIO: a cada 1 minuto pega os e-mails escritos no quadro (botão "Enviar e-mail")
+ *    e envia pelo SEU Gmail, com anexos e o link "Veja a gestão dessa demanda" no fim.
+ *    Ficam na sua pasta Enviados e as respostas chegam na sua caixa.
+ *
+ * 2) PRAZOS: todo dia às 8h (Brasília) pergunta ao Supabase quais cartões precisam de aviso:
  *   - prazo VENCIDO e ainda não entregue;
  *   - prazo vence HOJE ou AMANHÃ;
  *   - sem prazo e X dias sem contato (padrão 5; muda no quadro).
@@ -11,8 +15,9 @@
  * Instalar (uma vez):
  *  1. https://script.google.com → Novo projeto → apague o que tiver e cole este arquivo.
  *  2. Troque COLE_A_CHAVE_AQUI pela chave que aparece no quadro em  Acessos → Aviso por e-mail.
- *  3. Salve (Ctrl+S), escolha a função instalarAvisoDiario em cima e clique em Executar.
- *     O Google pede autorização (e-mail + acesso externo): Permitir.
+ *  3. Salve (Ctrl+S), escolha a função instalar em cima e clique em Executar.
+ *     O Google pede autorização (Gmail + acesso externo): Avançado → Acessar → Permitir.
+ *  Se já tinha instalado a versão antiga: cole esta por cima e execute instalar de novo.
  */
 
 const CHAVE = 'COLE_A_CHAVE_AQUI';
@@ -76,12 +81,40 @@ function verificarPrazos() {
   console.log(cartoes.length + ' aviso(s) enviado(s).');
 }
 
-/** Execute UMA vez: cria o disparo diário (apaga um antigo, se existir) e já testa. */
-function instalarAvisoDiario() {
+/** Envia a fila de e-mails escritos no quadro (roda a cada minuto). */
+function enviarFila() {
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  for (let n = 0; n < 5; n++) {                       // até 5 e-mails por rodada
+    const e = rpc_('sol_emails_pendentes', { p_chave: CHAVE });
+    if (!e) return;
+    try {
+      const rodapeTxt = '\n\n---\nVeja a gestão dessa demanda neste link: ' + e.link;
+      const html = '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5">' +
+        esc(e.corpo).replace(/\n/g, '<br>') +
+        '<div style="margin-top:22px;padding-top:12px;border-top:1px solid #ddd">' +
+        '<a href="' + esc(e.link) + '" style="display:inline-block;background:#16324f;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Veja a gestão dessa demanda</a>' +
+        '<div style="color:#888;font-size:12px;margin-top:6px">Qualquer pessoa com o link vê o andamento. Para atualizar, entre com a sua senha.<br>' + esc(e.link) + '</div></div></div>';
+      const opc = { htmlBody: html };
+      if (e.cc && e.cc.length) opc.cc = e.cc.join(',');
+      if (e.anexos && e.anexos.length) {
+        opc.attachments = e.anexos.map(a => Utilities.newBlob(Utilities.base64Decode(a.base64), a.tipo || 'application/octet-stream', a.nome));
+      }
+      GmailApp.sendEmail(e.para.join(','), e.assunto, e.corpo + rodapeTxt, opc);
+      rpc_('sol_email_marcar', { p_chave: CHAVE, p_id: e.id, p_ok: true, p_erro: null });
+    } catch (err) {
+      rpc_('sol_email_marcar', { p_chave: CHAVE, p_id: e.id, p_ok: false, p_erro: String(err && err.message || err) });
+    }
+  }
+}
+
+/** Execute UMA vez: cria os disparos (envio a cada 1 min + prazos às 8h) e já testa. */
+function instalar() {
   ScriptApp.getProjectTriggers()
-    .filter(t => t.getHandlerFunction() === 'verificarPrazos')
+    .filter(t => ['verificarPrazos', 'enviarFila'].includes(t.getHandlerFunction()))
     .forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('enviarFila').timeBased().everyMinutes(1).create();
   ScriptApp.newTrigger('verificarPrazos').timeBased().everyDays(1).atHour(HORA_DO_AVISO)
     .inTimezone('America/Sao_Paulo').create();
+  enviarFila();
   verificarPrazos();
 }

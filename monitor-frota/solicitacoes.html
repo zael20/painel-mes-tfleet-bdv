@@ -6,52 +6,52 @@
 <title>Solicitações a fornecedores</title>
 <meta name="theme-color" content="#16324f">
 <style>
-:root{--bg:#eef1f5;--card:#fff;--ink:#1d2733;--mut:#5f6b7a;--line:#d8dee6;--pri:#16324f;--acc:#1f6feb;
-  --red:#c62828;--redbg:#fdecea;--ora:#d9480f;--orabg:#fff1e6;--yel:#9a6700;--yelbg:#fff8db;--grn:#1a7f37;--grnbg:#e6f6ea;--gry:#6e7781}
+/* mesmo visual da Central (tema claro fixo) */
+:root{--bg:#f4f6fb;--card:#fff;--card2:#f8fafc;--ink:#0f172a;--mut:#5b6678;--line:#e4e8f0;--brand:#2563eb;--brand-ink:#1d4ed8;
+  --ok:#16a34a;--warn:#d97706;--bad:#dc2626;--info:#0891b2;--shadow:0 1px 2px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.06);
+  --red:#dc2626;--redbg:#fdecec;--ora:#c2410c;--orabg:#fff1e6;--yel:#a16207;--yelbg:#fef6d8;--grn:#15803d;--grnbg:#e7f6ec;--gry:#64748b;color-scheme:light}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 .hidden{display:none!important}
-/* topo */
-header{position:sticky;top:0;z-index:20;background:var(--pri);color:#fff;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
-header h1{font-size:17px;margin:0;font-weight:650;margin-right:auto;display:flex;align-items:center;gap:8px}
-header h1 svg{flex:none}
-.tbtn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:8px;padding:6px 11px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
-.tbtn:hover{background:rgba(255,255,255,.22)}
-.tbtn.prim{background:#fff;color:var(--pri);border-color:#fff;font-weight:600}
+header.top{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:16px 16px 6px}
+header.top .tt{margin-right:auto}
+header.top h1{font-size:20px;margin:0;letter-spacing:.2px}
+header.top .sub{color:var(--mut);font-size:13px;margin:0}
+.btn{background:var(--card2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 12px;font:600 13px system-ui,sans-serif;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:#c9d1de}
+.btn.p,.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.d{color:var(--bad)}
+.btn:disabled{opacity:.6;cursor:default}
 .bell{position:relative}
-.bell b{position:absolute;top:-6px;right:-6px;background:#ff5252;color:#fff;font-size:11px;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 4px}
-.who{font-size:13px;opacity:.85}
-.bar{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;align-items:center}
+.bell b{position:absolute;top:-7px;right:-7px;background:var(--bad);color:#fff;font-size:11px;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.who{font-size:13px;color:var(--mut)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;padding:8px 16px;align-items:center}
 .bar input,.bar select{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 10px;min-width:0}
-.bar input{flex:1 1 200px;max-width:340px}
-.alerta{margin:0 16px 4px;background:var(--redbg);color:var(--red);border:1px solid #f3b8b3;border-radius:10px;padding:9px 12px;font-weight:600;display:flex;gap:8px;align-items:center;cursor:pointer}
-/* quadro */
-.board{display:flex;gap:12px;padding:8px 16px 24px;overflow-x:auto;align-items:flex-start;min-height:calc(100vh - 140px)}
-.col{flex:1 0 205px;max-width:340px;background:#e2e7ee;border-radius:12px;display:flex;flex-direction:column;max-height:calc(100vh - 150px)}
-.col h2{font-size:14px;margin:0;padding:10px 12px;display:flex;align-items:center;gap:8px}
-.col h2 i{width:10px;height:10px;border-radius:50%;flex:none}
-.col h2 span{margin-left:auto;font-weight:500;color:var(--mut);font-size:13px}
+.bar input[type=search]{flex:1 1 200px;max-width:340px}
+.alerta{margin:0 16px 6px;background:var(--redbg);color:var(--red);border:1px solid #f5c2c2;border-radius:10px;padding:9px 12px;font-weight:600;cursor:pointer}
+.board{display:flex;gap:12px;padding:6px 16px 24px;overflow-x:auto;align-items:flex-start}
+.col{flex:1 0 205px;max-width:340px;background:var(--card);border:1px solid var(--line);border-top:4px solid var(--c);border-radius:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;max-height:calc(100vh - 160px)}
+.col h2{font-size:13px;text-transform:uppercase;letter-spacing:.5px;margin:0;padding:10px 12px;display:flex;align-items:center;gap:8px;color:var(--c)}
+.col h2 span{margin-left:auto;background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c);border-radius:999px;padding:0 8px;font-size:12px}
 .list{padding:0 8px 10px;overflow-y:auto;flex:1;min-height:40px;display:flex;flex-direction:column;gap:8px}
-.col.over{outline:2px dashed var(--acc);outline-offset:-2px}
-.vazio{color:var(--mut);font-size:13px;text-align:center;padding:10px 0}
-.k{background:var(--card);border-radius:10px;padding:10px 11px;box-shadow:0 1px 2px rgba(16,24,40,.12);border-left:4px solid transparent;cursor:pointer}
-.k:hover{box-shadow:0 2px 6px rgba(16,24,40,.18)}
+.col.over{outline:2px dashed var(--brand);outline-offset:-2px}
+.vazio{color:var(--mut);font-size:13px;text-align:center;padding:8px 0}
+.k{background:color-mix(in srgb,var(--c) 6%,#fff);border:1px solid color-mix(in srgb,var(--c) 22%,var(--line));border-left:4px solid var(--c);border-radius:10px;padding:9px 10px;cursor:pointer}
+.k:hover{box-shadow:var(--shadow)}
 .k.vencido{border-left-color:var(--red)}.k.sem_resposta{border-left-color:var(--ora)}
-.k.vence_hoje,.k.vence_amanha{border-left-color:#e0a800}
-.k .f{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--acc)}
-.k .a{font-weight:600;margin:2px 0 6px}
+.k .f{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mut)}
+.k .a{font-weight:600;margin:2px 0 6px;line-height:1.3}
 .k .m{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--mut);align-items:center}
 .chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:600;white-space:nowrap}
 .chip.vencido{background:var(--redbg);color:var(--red)}.chip.sem_resposta{background:var(--orabg);color:var(--ora)}
 .chip.vence_hoje,.chip.vence_amanha{background:var(--yelbg);color:var(--yel)}
 .chip.no_prazo,.chip.entregue{background:var(--grnbg);color:var(--grn)}
-.chip.sem_prazo,.chip.cancelado{background:#eef0f3;color:var(--gry)}
-/* janelas */
-.ov{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto}
-.dlg{background:#fff;border-radius:14px;width:100%;max-width:760px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
-.dlg.small{max-width:420px}
+.chip.sem_prazo,.chip.cancelado{background:#eef1f5;color:var(--gry)}
+.ov{position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto}
+.dlg{background:#fff;border-radius:14px;width:100%;max-width:760px;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+.dlg.small{max-width:440px}
 .dh{display:flex;align-items:flex-start;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
 .dh h3{margin:0;font-size:17px;flex:1}
 .x{border:0;background:none;font-size:22px;line-height:1;color:var(--mut);padding:0 4px}
@@ -60,34 +60,49 @@ header h1 svg{flex:none}
 .grid .full{grid-column:1/-1}
 label.fl{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mut);font-weight:600}
 label.fl input,label.fl select,label.fl textarea{border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-weight:400;font-size:14px;color:var(--ink);background:#fff;width:100%}
-label.fl input:disabled,label.fl textarea:disabled,label.fl select:disabled{background:#f4f6f8;color:#444}
+label.fl input:disabled,label.fl textarea:disabled{background:var(--card2);color:#334155}
 textarea{resize:vertical}
 .st{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .st button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;font-size:13px}
-.st button.on{background:var(--pri);border-color:var(--pri);color:#fff}
+.st button.on{background:var(--c);border-color:var(--c);color:#fff}
 .st button:disabled{opacity:.4;cursor:not-allowed}
-.acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
-.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 14px}
-.btn.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
-.btn.d{color:var(--red);border-color:#f3b8b3}
+.acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px;align-items:center}
 .msg{font-size:13px;margin-top:8px}.msg.err{color:var(--red)}.msg.ok{color:var(--grn)}
 .tl{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
-.tl h4{margin:0 0 8px;font-size:14px}
-.ev{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed #e6e9ee;font-size:13px}
+.tl h4,.sec4{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
+.ev{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px}
 .ev .d{color:var(--mut);white-space:nowrap;min-width:92px}
-.ev.comentario .t{background:#f3f6fa;border-radius:8px;padding:6px 9px;white-space:pre-wrap;flex:1}
+.ev .t{flex:1;min-width:0}
+.ev.comentario .t{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;white-space:pre-wrap}
+.ev.email .t{background:#eef4ff;border:1px solid #d6e2fb;border-radius:8px;padding:6px 9px}
 .ev.aviso .t{color:var(--ora)}
 .cbox{display:flex;gap:8px;margin-bottom:8px}.cbox textarea{flex:1;border:1px solid var(--line);border-radius:8px;padding:7px 9px}
 .note{font-size:12px;color:var(--mut)}
-.login{max-width:360px;margin:12vh auto 0;background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+.login{max-width:380px;margin:12vh auto 0;background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:var(--shadow)}
 .login h2{margin:0 0 4px;font-size:19px}
 .login input{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;margin:14px 0 10px;font-size:16px}
-.login .btn{width:100%}
-.ntf .it{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #eef0f3;background:#fff;padding:9px 2px}
-.tbl{width:100%;border-collapse:collapse;font-size:13px}.tbl td,.tbl th{border-bottom:1px solid #eef0f3;padding:6px 4px;text-align:left}
-code.key{background:#f3f6fa;border:1px solid var(--line);border-radius:6px;padding:4px 7px;word-break:break-all;display:inline-block}
+.login .btn{width:100%;justify-content:center;padding:10px}
+.ntf .it{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:#fff;padding:9px 2px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}.tbl td,.tbl th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+code.key{background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:4px 7px;word-break:break-all;display:inline-block}
+/* destinatários */
+.dest{border:1px solid var(--line);border-radius:8px;padding:5px;display:flex;flex-wrap:wrap;gap:5px;background:#fff}
+.dest .tag{background:#eef4ff;color:var(--brand-ink);border-radius:999px;padding:2px 4px 2px 9px;font-size:13px;display:inline-flex;align-items:center;gap:2px}
+.dest .tag button{border:0;background:none;color:inherit;font-size:15px;line-height:1;padding:0 4px}
+.dest input{border:0!important;outline:0;flex:1 1 160px;padding:3px 4px!important;min-width:120px}
+.sug{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.sug button{border:1px dashed #c9d1de;background:#fff;border-radius:999px;padding:2px 9px;font-size:12px;color:var(--mut)}
+.sug button:hover{border-color:var(--brand);color:var(--brand)}
+.anx{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.anx span{background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12px}
+.anx a{cursor:pointer;color:var(--brand)}
+.pub{max-width:820px;margin:0 auto;padding:16px}
+.pubcard{background:#fff;border:1px solid var(--line);border-top:4px solid var(--c);border-radius:14px;box-shadow:var(--shadow);padding:16px}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:12px 0}
+.kv div{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.kv b{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
 @media (max-width:640px){
-  header{padding:8px 12px}.bar{padding:8px 12px}.board{padding:8px 12px 20px}
+  header.top{padding:12px 12px 4px}.bar{padding:6px 12px}.board{padding:6px 12px 20px}
   .col{flex-basis:84vw}.grid{grid-template-columns:1fr}.who{display:none}
   .ov{padding:0}.dlg{border-radius:0;min-height:100vh}
 }
@@ -104,13 +119,14 @@ code.key{background:#f3f6fa;border:1px solid var(--line);border-radius:6px;paddi
 </div>
 
 <div id="vApp" class="hidden">
-  <header>
-    <h1><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/></svg>Solicitações a fornecedores</h1>
+  <header class="top">
+    <div class="tt"><h1>Solicitações a fornecedores</h1><p class="sub">Andamento de cada pedido: quem assumiu, quando começou e o prazo</p></div>
     <span class="who" id="who"></span>
-    <button class="tbtn bell" id="bBell" title="Avisos"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg><b id="bellN" class="hidden">0</b></button>
-    <button class="tbtn prim hidden" id="bNovo">+ Nova</button>
-    <button class="tbtn hidden" id="bAcessos">Acessos</button>
-    <button class="tbtn" id="bSair">Sair</button>
+    <button class="btn bell" id="bBell" title="Avisos">🔔 Avisos<b id="bellN" class="hidden">0</b></button>
+    <button class="btn hidden" id="bContatos">Contatos</button>
+    <button class="btn hidden" id="bAcessos">Acessos</button>
+    <button class="btn" id="bSair">Sair</button>
+    <button class="btn p hidden" id="bNovo">+ Nova solicitação</button>
   </header>
   <div class="bar">
     <input id="fBusca" type="search" placeholder="Buscar assunto, responsável…">
@@ -122,22 +138,29 @@ code.key{background:#f3f6fa;border:1px solid var(--line);border-radius:6px;paddi
   <div class="board" id="board"></div>
 </div>
 
+<div id="vPub" class="pub hidden"></div>
+
 <div id="ov" class="ov hidden"><div class="dlg" id="dlg"></div></div>
 
 <script>
 const SB_URL="https://orhuxmsrdnugpogvtnbg.supabase.co";
 const SB_KEY="sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL";
-const COLS=[["Enviado","#6e7781"],["Assumido","#1f6feb"],["Em andamento","#8250df"],["Entregue","#1a7f37"],["Sem resposta","#d9480f"],["Cancelado","#9aa4b2"]];
+const COLS=[["Enviado","#475569"],["Assumido","#2563eb"],["Em andamento","#7c3aed"],["Entregue","#16a34a"],["Sem resposta","#ea580c"],["Cancelado","#94a3b8"]];
+const COR=Object.fromEntries(COLS);
 const FORN_STATUS=["Assumido","Em andamento","Entregue"];   // o que o fornecedor pode escolher
+const MAX_ANEXOS=15*1024*1024;
 const K_SESS="tf_solicitacoes", K_CENTRAL="tf_sessao";
-let TOKEN=null, QUEM=null, CARDS=[], ABERTO=null;
+let TOKEN=null, QUEM=null, CARDS=[], CONTATOS=[];
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ls={get:k=>{try{return JSON.parse(localStorage.getItem(k)||"null")}catch(e){return null}},
   set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
-const dBR=s=>s?s.slice(0,10).split("-").reverse().join("/"):"—";
+const dBR=s=>s?String(s).slice(0,10).split("-").reverse().join("/"):"—";
 const dtBR=s=>{if(!s)return"";const d=new Date(s);return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})};
-const hoje=()=>{const d=new Date(Date.now()-3*3600e3);return d.toISOString().slice(0,10)};
+const hoje=()=>new Date(Date.now()-3*3600e3).toISOString().slice(0,10);
+const kb=n=>n>1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB";
+const okMail=e=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);
+const QS=new URLSearchParams(location.search);
 
 async function rpc(fn,body){
   const r=await fetch(SB_URL+"/rest/v1/rpc/"+fn,{method:"POST",headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,"Content-Type":"application/json"},body:JSON.stringify(body||{})});
@@ -150,20 +173,23 @@ async function rpc(fn,body){
 async function iniciar(){
   const cand=[ls.get(K_SESS), ls.get(K_CENTRAL)].filter(s=>s&&s.token);
   for(const s of cand){try{const q=await rpc("sol_sessao",{p_token:s.token});if(q&&!q.erro){entrar(s.token,q);return}}catch(e){}}
-  $("vLogin").classList.remove("hidden");$("lSenha").focus();
+  if(QS.get("v")){publico(QS.get("v"));return}
+  mostrarLogin();
 }
-$("fLogin").onsubmit=async e=>{e.preventDefault();$("lMsg").textContent="Entrando…";$("lMsg").className="msg";
+function mostrarLogin(){$("vPub").classList.add("hidden");$("vLogin").classList.remove("hidden");$("lSenha").focus()}
+$("fLogin").onsubmit=async e=>{e.preventDefault();msg("lMsg","Entrando…");
   try{const r=await rpc("sol_entrar",{p_senha:$("lSenha").value});
-    if(r.erro){$("lMsg").textContent=r.erro;$("lMsg").className="msg err";return}
+    if(r.erro){msg("lMsg",r.erro,"err");return}
     ls.set(K_SESS,{token:r.token,nome:r.nome});entrar(r.token,r);
-  }catch(err){$("lMsg").textContent="Erro: "+err.message;$("lMsg").className="msg err"}};
-function entrar(tk,q){TOKEN=tk;QUEM=q;$("vLogin").classList.add("hidden");$("vApp").classList.remove("hidden");
+  }catch(err){msg("lMsg","Erro: "+err.message,"err")}};
+function entrar(tk,q){TOKEN=tk;QUEM=q;["vLogin","vPub"].forEach(i=>$(i).classList.add("hidden"));$("vApp").classList.remove("hidden");
   $("who").textContent=q.nome+(q.tipo==="fornecedor"?" · "+q.fornecedor:"");
   const interno=q.tipo==="interno";$("bNovo").classList.toggle("hidden",!(interno&&q.edita));$("bAcessos").classList.toggle("hidden",!q.admin);
-  $("fForn").classList.toggle("hidden",!interno);carregar(true);setInterval(()=>carregar(false),120000);}
+  $("bContatos").classList.toggle("hidden",!(interno&&q.edita));
+  $("fForn").classList.toggle("hidden",!interno);carregar(true);setInterval(()=>carregar(false),120000);
+  if(interno)rpc("sol_contatos_lista",{p_token:TOKEN}).then(c=>CONTATOS=c||[]).catch(()=>{});}
 function sairLocal(){ls.del(K_SESS);TOKEN=null;}
-$("bSair").onclick=async()=>{try{await rpc("sol_sair",{p_token:TOKEN})}catch(e){}sairLocal();
-  if(ls.get(K_CENTRAL)&&ls.get(K_CENTRAL).token===TOKEN){/* sessão da Central: continua lá */}location.href=location.pathname};
+$("bSair").onclick=async()=>{try{await rpc("sol_sair",{p_token:TOKEN})}catch(e){}sairLocal();location.href=location.pathname};
 
 /* ---------------- dados ---------------- */
 async function carregar(primeira){
@@ -172,7 +198,8 @@ async function carregar(primeira){
   const fs=[...new Set(CARDS.map(c=>c.fornecedor))].sort(),sel=$("fForn"),v=sel.value;
   sel.innerHTML='<option value="">Todos os fornecedores</option>'+fs.map(f=>`<option ${f===v?"selected":""}>${esc(f)}</option>`).join("");
   desenhar();avisos(primeira);
-  if(primeira){const c=new URLSearchParams(location.search).get("c");if(c)abrir(+c);}
+  if(primeira){const c=QS.get("c"),v=QS.get("v");
+    if(c)abrir(+c);else if(v){const k=CARDS.find(x=>x.chave_publica===v);if(k)abrir(k.id)}}
 }
 function sitTxt(c){switch(c.situacao){
   case"vencido":return"Vencido há "+(-c.dias_para_prazo)+" dia"+(c.dias_para_prazo===-1?"":"s");
@@ -187,8 +214,8 @@ function desenhar(){
   const lst=filtrados(),bd=$("board");bd.innerHTML="";
   const podeMover=QUEM.edita;
   COLS.forEach(([st,cor])=>{
-    const cs=lst.filter(c=>c.status===st),col=document.createElement("section");col.className="col";col.dataset.st=st;
-    col.innerHTML=`<h2><i style="background:${cor}"></i>${st}<span>${cs.length}</span></h2><div class="list"></div>`;
+    const cs=lst.filter(c=>c.status===st),col=document.createElement("section");col.className="col";col.dataset.st=st;col.style.setProperty("--c",cor);
+    col.innerHTML=`<h2>${st}<span>${cs.length}</span></h2><div class="list"></div>`;
     const L=col.querySelector(".list");
     if(!cs.length)L.innerHTML='<div class="vazio">—</div>';
     cs.forEach(c=>{const k=document.createElement("article");k.className="k "+c.situacao;k.dataset.id=c.id;
@@ -222,96 +249,187 @@ $("alerta").onclick=$("bBell").onclick=()=>{
   dlg(`<div class="dh"><h3>Avisos</h3><button class="x" onclick="fechar()">×</button></div><div class="db ntf">
   ${a.length?a.map(c=>`<button class="it" onclick="abrir(${c.id})"><span class="chip ${c.situacao}">${esc(sitTxt(c))}</span> <b>${esc(c.fornecedor)}</b> · ${esc(c.assunto)}</button>`).join(""):'<div class="note">Nada atrasado. 👍</div>'}
   ${"Notification"in window&&Notification.permission!=="granted"?`<div class="acts" style="justify-content:flex-start"><button class="btn" onclick="Notification.requestPermission().then(()=>fechar())">Ativar notificação neste aparelho</button></div>`:""}
-  <p class="note">Quando um prazo vence, também sai um e-mail para a lista de e-mails do cartão (1 vez por dia).</p></div>`,true)};
+  <p class="note">Quando um prazo vence, também sai um e-mail para os e-mails do cartão (1 vez por dia).</p></div>`,true)};
 
 /* ---------------- janela ---------------- */
-function dlg(html,small){$("dlg").className="dlg"+(small?" small":"");$("dlg").innerHTML=html;$("ov").classList.remove("hidden")}
-function fechar(){$("ov").classList.add("hidden");ABERTO=null;if(location.search)history.replaceState(null,"",location.pathname)}
+function dlg(html,small){$("dlg").className="dlg"+(small?" small":"");$("dlg").innerHTML=html;$("ov").classList.remove("hidden");$("ov").scrollTop=0}
+function fechar(){$("ov").classList.add("hidden");if(location.search)history.replaceState(null,"",location.pathname)}
 $("ov").onclick=e=>{if(e.target.id==="ov")fechar()};
 document.addEventListener("keydown",e=>{if(e.key==="Escape")fechar()});
+function msg(id,t,cl){const m=$(id);if(m){m.textContent=t;m.className="msg "+(cl||"")}}
 
-const CAMPOS=[ // [campo, rótulo, tipo, fornecedor pode editar]
+const CAMPOS=[ // [campo, rótulo, tipo, fornecedor pode editar, classe]
   ["fornecedor","Fornecedor","text",0],["responsavel","Responsável no fornecedor","text",1],
-  ["assunto","Assunto","text",0,"full"],["link","Link (e-mail/documento)","url",0,"full"],
+  ["assunto","Assunto (título do cartão)","text",0,"full"],["link","Link (documento, proposta)","url",0,"full"],
   ["enviado_em","Enviado em","date",0],["inicio_em","Começou em","date",1],
   ["prazo","Prazo de entrega","date",1],["entregue_em","Entregue em","date",1],
-  ["ultimo_contato","Último contato","date",0],["emails","E-mails para aviso (separe por vírgula)","text",0,"full"],
-  ["descricao","Observações","area",0,"full"]];
+  ["ultimo_contato","Último contato","date",0],["descricao","Observações","area",0,"full"]];
 
-function form(c,novo){
+function form(c){
   const forn=QUEM.tipo==="fornecedor",ed=QUEM.edita;
-  return `<div class="grid">${CAMPOS.filter(f=>!(forn&&f[0]==="emails")).map(([k,l,t,fp,cl])=>{
-    const dis=!ed||(forn&&!fp)?"disabled":"";let v=c[k]==null?"":c[k];if(k==="emails")v=(v||[]).join(", ");if(t==="date")v=String(v).slice(0,10);
-    const inp=t==="area"?`<textarea id="c_${k}" rows="3" ${dis}>${esc(v)}</textarea>`:`<input id="c_${k}" type="${t==="url"?"url":t}" value="${esc(v)}" ${dis}>`;
-    return `<label class="fl ${cl||""}">${l}${k==="prazo"&&c.prazo_original&&c.prazo_original!==c.prazo?` <span class="note">(1º prazo: ${dBR(c.prazo_original)})</span>`:""}${inp}</label>`}).join("")}</div>`;
+  return `<div class="grid">${CAMPOS.map(([k,l,t,fp,cl])=>{
+    const dis=!ed||(forn&&!fp)?"disabled":"";let v=c[k]==null?"":c[k];if(t==="date")v=String(v).slice(0,10);
+    const inp=t==="area"?`<textarea id="c_${k}" rows="3" ${dis}>${esc(v)}</textarea>`:`<input id="c_${k}" type="${t}" value="${esc(v)}" ${dis} ${k==="fornecedor"?'list="dlForn"':""}>`;
+    return `<label class="fl ${cl||""}">${l}${k==="prazo"&&c.prazo_original&&c.prazo_original!==c.prazo?` <span class="note">(1º prazo: ${dBR(c.prazo_original)})</span>`:""}${inp}</label>`}).join("")}
+    ${!forn?`<div class="fl full"><label class="fl" style="margin:0">E-mails que recebem os avisos de prazo</label>${destHTML("dAviso",c.emails||[])}</div>`:""}</div>
+    <datalist id="dlForn">${[...new Set(CARDS.map(x=>x.fornecedor))].map(f=>`<option value="${esc(f)}">`).join("")}</datalist>`;
 }
 function stBtns(c){const forn=QUEM.tipo==="fornecedor";
-  return `<div class="st" id="stb">${COLS.map(([s])=>`<button data-s="${s}" class="${c.status===s?"on":""}" ${!QUEM.edita||(forn&&!FORN_STATUS.includes(s))?"disabled":""}>${s}</button>`).join("")}</div>`}
+  return `<div class="st" id="stb">${COLS.map(([s,cor])=>`<button data-s="${s}" style="--c:${cor}" class="${c.status===s?"on":""}" ${!QUEM.edita||(forn&&!FORN_STATUS.includes(s))?"disabled":""}>${s}</button>`).join("")}</div>`}
+function ligaSt(){document.querySelectorAll("#stb button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#stb button").forEach(x=>x.classList.remove("on"));b.classList.add("on")})}
 function coletar(c){const d={},forn=QUEM.tipo==="fornecedor";
   CAMPOS.forEach(([k,,t,fp])=>{if(forn&&!fp)return;const el=$("c_"+k);if(!el)return;let v=el.value.trim();
-    if(k==="emails"){const novo=v.split(/[,;\s]+/).filter(Boolean);if(novo.join(",")!==(c.emails||[]).join(","))d.emails=novo;return}
     if(v==="")v=null;const ant=c[k]==null?null:(t==="date"?String(c[k]).slice(0,10):c[k]);if(v!==ant)d[k]=v});
+  if(!forn&&$("dAviso")){const novo=destLer("dAviso");if(novo.join(",")!==(c.emails||[]).join(","))d.emails=novo}
   const s=document.querySelector("#stb .on");if(s&&s.dataset.s!==c.status)d.status=s.dataset.s;return d}
 
+/* ---------- campo de destinatários com contatos salvos ---------- */
+function destHTML(id,lista){
+  return `<div class="dest" id="${id}" onclick="if(event.target===this)this.querySelector('input').focus()">${lista.map(tagHTML).join("")}
+  <input placeholder="digite o e-mail ou escolha abaixo" list="dl_${id}" onkeydown="destKey(event,'${id}')" onchange="destAdd('${id}',this.value);this.value=''" onblur="destAdd('${id}',this.value);this.value=''"></div>
+  <datalist id="dl_${id}">${CONTATOS.map(c=>`<option value="${esc(c.email)}">${esc(c.nome||"")}${c.fornecedor?" · "+esc(c.fornecedor):""}</option>`).join("")}</datalist>
+  <div class="sug" id="sg_${id}">${sugHTML(id,lista)}</div>`;
+}
+function tagHTML(e){const c=CONTATOS.find(x=>x.email===e);return `<span class="tag" data-e="${esc(e)}" title="${esc(e)}">${esc(c&&c.nome?c.nome:e)}<button type="button" onclick="this.parentNode.remove();destSug(this)">×</button></span>`}
+function sugHTML(id,lista){const forn=($("c_fornecedor")||{}).value||"";
+  const s=CONTATOS.filter(c=>!lista.includes(c.email)).sort((a,b)=>(b.fornecedor===forn)-(a.fornecedor===forn)||b.usos-a.usos).slice(0,10);
+  return s.map(c=>`<button type="button" onclick="destAdd('${id}','${esc(c.email)}')">+ ${esc(c.nome||c.email)}</button>`).join("")}
+function destLer(id){return [...$(id).querySelectorAll(".tag")].map(t=>t.dataset.e)}
+function destAdd(id,v){const box=$(id);if(!box)return;(v||"").split(/[,;\s]+/).map(x=>x.trim().toLowerCase()).filter(Boolean).forEach(e=>{
+  if(!okMail(e)){alert("E-mail inválido: "+e);return}if(destLer(id).includes(e))return;box.querySelector("input").insertAdjacentHTML("beforebegin",tagHTML(e))});
+  $("sg_"+id).innerHTML=sugHTML(id,destLer(id))}
+function destKey(ev,id){if(["Enter",",",";"," "].includes(ev.key)){ev.preventDefault();destAdd(id,ev.target.value);ev.target.value=""}
+  else if(ev.key==="Backspace"&&!ev.target.value){const t=$(id).querySelectorAll(".tag");if(t.length){t[t.length-1].remove();$("sg_"+id).innerHTML=sugHTML(id,destLer(id))}}}
+function destSug(btn){document.querySelectorAll(".dest").forEach(d=>{const s=$("sg_"+d.id);if(s)s.innerHTML=sugHTML(d.id,destLer(d.id))})}
+
+/* ---------------- abrir cartão ---------------- */
 async function abrir(id){
-  let r;try{r=await rpc("sol_cartao",{p_token:TOKEN,p_id:id})}catch(e){alert(e.message);return}
-  const c=r.cartao;ABERTO=c;
-  const tl=r.historico.map(h=>`<div class="ev ${h.tipo}"><div class="d">${dtBR(h.ts)}</div><div class="t"><b>${esc(h.quem||"")}</b> ${h.tipo==="comentario"?"<br>":"· "}${esc(h.texto||"")}${h.dados&&h.tipo!=="comentario"?detalhe(h.dados):""}</div></div>`).join("");
+  let r,mails=[];try{[r,mails]=await Promise.all([rpc("sol_cartao",{p_token:TOKEN,p_id:id}),rpc("sol_emails_cartao",{p_token:TOKEN,p_cartao:id})])}catch(e){alert(e.message);return}
+  const c=r.cartao,interno=QUEM.tipo==="interno";
+  const mailById=Object.fromEntries((mails||[]).map(m=>[m.id,m]));
+  const tl=r.historico.map(h=>evHTML(h,mailById)).join("");
+  const pub=location.origin+location.pathname+"?v="+c.chave_publica;
   dlg(`<div class="dh"><h3><span class="chip ${c.situacao}">${esc(sitTxt(c))}</span><br>${esc(c.assunto)}</h3><button class="x" onclick="fechar()">×</button></div>
   <div class="db">${stBtns(c)}${form(c)}
   ${c.link?`<p class="note">Documento: <a href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.link)}</a></p>`:""}
+  <p class="note">Link para acompanhar (só ver, sem senha): <a href="${esc(pub)}" target="_blank" rel="noopener">${esc(pub)}</a> <button class="btn" type="button" onclick="copiar('${esc(pub)}',this)">Copiar</button></p>
   <div class="acts">${QUEM.admin?'<button class="btn d" id="cDel">Apagar</button>':""}<span style="flex:1"></span>
+   ${interno&&QUEM.edita?'<button class="btn" id="cMail">✉ Enviar e-mail</button>':""}
    <button class="btn" onclick="fechar()">Fechar</button>${QUEM.edita?'<button class="btn p" id="cSalvar">Salvar</button>':""}</div>
   <div class="msg" id="cMsg"></div>
   <div class="tl"><h4>Andamento</h4>
-   <div class="cbox"><textarea id="cCom" rows="2" placeholder="Escreva uma atualização (ex.: começamos, previsão, dúvida)…"></textarea><button class="btn p" id="cEnviar">Enviar</button></div>
+   ${QUEM.edita?`<div class="cbox"><textarea id="cCom" rows="2" placeholder="Escreva uma atualização (ex.: começamos, previsão, dúvida)…"></textarea><button class="btn p" id="cEnviar">Enviar</button></div>`:""}
    ${tl||'<div class="note">Sem registros.</div>'}</div></div>`);
-  document.querySelectorAll("#stb button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#stb button").forEach(x=>x.classList.remove("on"));b.classList.add("on")});
+  ligaSt();
   if($("cSalvar"))$("cSalvar").onclick=async()=>{const d=coletar(c);if(!Object.keys(d).length){fechar();return}
     msg("cMsg","Salvando…");try{await rpc("sol_salvar",{p_token:TOKEN,p_id:c.id,p_dados:d});await carregar(false);abrir(c.id)}catch(e){msg("cMsg",e.message,"err")}};
-  $("cEnviar").onclick=async()=>{const t=$("cCom").value.trim();if(!t)return;
+  if($("cEnviar"))$("cEnviar").onclick=async()=>{const t=$("cCom").value.trim();if(!t)return;
     try{await rpc("sol_comentar",{p_token:TOKEN,p_id:c.id,p_texto:t});await carregar(false);abrir(c.id)}catch(e){msg("cMsg",e.message,"err")}};
+  if($("cMail"))$("cMail").onclick=()=>compor(c);
   if($("cDel"))$("cDel").onclick=async()=>{if(!confirm("Apagar este cartão e todo o histórico? Não dá para desfazer."))return;
     try{await rpc("sol_remover",{p_token:TOKEN,p_id:c.id});fechar();carregar(false)}catch(e){msg("cMsg",e.message,"err")}};
 }
+function copiar(t,b){try{navigator.clipboard.writeText(t);b.textContent="Copiado"}catch(e){prompt("Copie:",t)}}
+const ST_MAIL={pendente:"na fila (sai em até 1 min)",enviando:"enviando…",enviado:"enviado",erro:"NÃO enviado"};
+function evHTML(h,mailById){
+  let extra="";
+  if(h.tipo==="email"){const m=mailById&&h.dados&&mailById[h.dados.email_id];
+    if(m)extra=`<div class="note">${m.para?"Para: "+esc(m.para.concat(m.cc||[]).join(", "))+" · ":""}${esc(ST_MAIL[m.status]||m.status)}${m.erro?" — "+esc(m.erro):""}</div>
+      <details><summary class="note">ver texto</summary><div style="white-space:pre-wrap;font-size:13px;margin-top:4px">${esc(m.corpo)}</div></details>
+      ${m.anexos&&m.anexos.length?`<div class="anx">${m.anexos.map(a=>`<span>📎 <a onclick="baixar(${a.id})">${esc(a.nome)}</a> ${kb(a.tamanho)}</span>`).join("")}</div>`:""}`;
+    else if(h.dados&&h.dados.anexos&&h.dados.anexos.length)extra=`<div class="anx">${h.dados.anexos.map(a=>`<span>📎 ${esc(a)}</span>`).join("")}</div>`;}
+  else if(h.dados&&h.tipo!=="comentario")extra=detalhe(h.dados);
+  return `<div class="ev ${h.tipo}"><div class="d">${dtBR(h.ts)}</div><div class="t"><b>${esc(h.quem||"")}</b> ${h.tipo==="comentario"?"<br>":"· "}${esc(h.texto||"")}${extra}</div></div>`}
 const NOMES={status:"status",responsavel:"responsável",inicio_em:"começou em",prazo:"prazo",entregue_em:"entregue em",ultimo_contato:"último contato",
   fornecedor:"fornecedor",assunto:"assunto",descricao:"observações",link:"link",enviado_em:"enviado em",emails:"e-mails"};
-function detalhe(d){const p=Object.entries(d).filter(([k])=>k!=="status"&&k!=="ultimo_contato").map(([k,[a,b]])=>{
+function detalhe(d){const p=Object.entries(d).filter(([k,v])=>k!=="status"&&k!=="ultimo_contato"&&Array.isArray(v)).map(([k,[a,b]])=>{
   const f=v=>v==null||v===""?"vazio":Array.isArray(v)?v.join(", "):/^\d{4}-\d\d-\d\d/.test(v)?dBR(v):v;return `${NOMES[k]||k}: ${esc(f(a))} → ${esc(f(b))}`});
   return p.length?`<div class="note">${p.join("<br>")}</div>`:""}
-function msg(id,t,cl){const m=$(id);if(m){m.textContent=t;m.className="msg "+(cl||"")}}
+async function baixar(id){try{const a=await rpc("sol_anexo",{p_token:TOKEN,p_id:id});
+  const bin=atob(a.base64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+  const l=document.createElement("a");l.href=URL.createObjectURL(new Blob([u],{type:a.tipo||"application/octet-stream"}));l.download=a.nome;l.click();}catch(e){alert(e.message)}}
 
-$("bNovo").onclick=()=>{const c={fornecedor:"TFleet",status:"Enviado",enviado_em:hoje(),ultimo_contato:hoje()};
+/* ---------------- escrever e-mail ---------------- */
+let ANEXOS=[];
+function compor(c,nova){
+  ANEXOS=[];
+  const assunto=c.assunto||"";
+  dlg(`<div class="dh"><h3>Enviar e-mail · ${esc(c.fornecedor)}</h3><button class="x" onclick="${nova?"carregar(false);fechar()":"abrir("+c.id+")"}">×</button></div><div class="db">
+  <label class="fl">Para</label>${destHTML("dPara",c.emails||[])}
+  <details style="margin:8px 0"><summary class="note">Cópia (Cc)</summary>${destHTML("dCc",[])}</details>
+  <div class="grid"><label class="fl full">Assunto<input id="mAss" value="${esc(assunto)}"></label>
+  <label class="fl full">Texto do e-mail<textarea id="mCorpo" rows="10" placeholder="Prezados,&#10;&#10;…"></textarea></label></div>
+  <p class="note">No fim do e-mail vai automaticamente: <b>"Veja a gestão dessa demanda"</b> com o link para acompanhar o andamento (só ver). Para atualizar, a pessoa entra com a senha dela.</p>
+  <label class="btn" style="margin-top:4px">📎 Anexar arquivos<input type="file" id="mArq" multiple class="hidden"></label>
+  <div class="anx" id="mAnx"></div>
+  <div class="acts"><button class="btn" onclick="${nova?"carregar(false);fechar()":"abrir("+c.id+")"}">${nova?"Enviar depois":"Cancelar"}</button><button class="btn p" id="mEnviar">Enviar</button></div>
+  <div class="msg" id="mMsg"></div>
+  <p class="note">Sai pelo Gmail do Mizael em até 1 minuto. Quem está em Para e Cc passa a receber os avisos de prazo e fica salvo nos contatos.</p></div>`);
+  $("mArq").onchange=e=>{[...e.target.files].forEach(f=>ANEXOS.push(f));e.target.value="";mostraAnx()};
+  $("mEnviar").onclick=async()=>{
+    destAdd("dPara",$("dPara").querySelector("input").value);destAdd("dCc",$("dCc").querySelector("input").value);
+    const para=destLer("dPara"),cc=destLer("dCc"),ass=$("mAss").value.trim(),corpo=$("mCorpo").value;
+    if(!para.length){msg("mMsg","Coloque pelo menos um e-mail em Para.","err");return}
+    if(!ass||!corpo.trim()){msg("mMsg","Preencha assunto e texto.","err");return}
+    const tot=ANEXOS.reduce((s,f)=>s+f.size,0);if(tot>MAX_ANEXOS){msg("mMsg","Anexos passam de 15 MB. Coloque um link do Drive no texto.","err");return}
+    $("mEnviar").disabled=true;msg("mMsg","Preparando anexos…");
+    try{const anexos=await Promise.all(ANEXOS.map(f=>new Promise((ok,er)=>{const r=new FileReader();r.onload=()=>ok({nome:f.name,tipo:f.type||"application/octet-stream",base64:String(r.result).split(",")[1]||""});r.onerror=er;r.readAsDataURL(f)})));
+      msg("mMsg","Enviando…");
+      await rpc("sol_email_enviar",{p_token:TOKEN,p_cartao:c.id,p_para:para,p_cc:cc,p_assunto:ass,p_corpo:corpo,p_anexos:anexos});
+      CONTATOS=await rpc("sol_contatos_lista",{p_token:TOKEN})||CONTATOS;await carregar(false);abrir(c.id);
+    }catch(e){$("mEnviar").disabled=false;msg("mMsg",e.message,"err")}};
+}
+function mostraAnx(){const tot=ANEXOS.reduce((s,f)=>s+f.size,0);
+  $("mAnx").innerHTML=ANEXOS.map((f,i)=>`<span>📎 ${esc(f.name)} ${kb(f.size)} <a onclick="ANEXOS.splice(${i},1);mostraAnx()">×</a></span>`).join("")+(ANEXOS.length?`<span class="note" style="border:0;background:none">${kb(tot)} de 15 MB</span>`:"")}
+
+/* ---------------- nova solicitação ---------------- */
+$("bNovo").onclick=()=>{const c={fornecedor:"TFleet",status:"Enviado",enviado_em:hoje(),ultimo_contato:hoje(),emails:[]};
   dlg(`<div class="dh"><h3>Nova solicitação</h3><button class="x" onclick="fechar()">×</button></div><div class="db">${stBtns(c)}${form(c)}
-  <div class="acts"><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="nSalvar">Criar</button></div><div class="msg" id="nMsg"></div></div>`);
-  document.querySelectorAll("#stb button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#stb button").forEach(x=>x.classList.remove("on"));b.classList.add("on")});
-  $("nSalvar").onclick=async()=>{const d=coletar({});d.status=document.querySelector("#stb .on").dataset.s;
-    try{const r=await rpc("sol_salvar",{p_token:TOKEN,p_id:null,p_dados:d});await carregar(false);abrir(r.id)}catch(e){msg("nMsg",e.message,"err")}}};
+  <div class="acts"><button class="btn" onclick="fechar()">Cancelar</button><button class="btn" id="nSalvar">Só criar o cartão</button><button class="btn p" id="nMail">Criar e escrever o e-mail →</button></div><div class="msg" id="nMsg"></div></div>`);
+  ligaSt();
+  const criar=async(mail)=>{const d=coletar({});d.status=document.querySelector("#stb .on").dataset.s;
+    try{const r=await rpc("sol_salvar",{p_token:TOKEN,p_id:null,p_dados:d});if(mail){compor(r,true)}else{await carregar(false);abrir(r.id)}}catch(e){msg("nMsg",e.message,"err")}};
+  $("nSalvar").onclick=()=>criar(false);$("nMail").onclick=()=>criar(true)};
+
+/* ---------------- contatos ---------------- */
+$("bContatos").onclick=contatos;
+async function contatos(){try{CONTATOS=await rpc("sol_contatos_lista",{p_token:TOKEN})||[]}catch(e){alert(e.message);return}
+  dlg(`<div class="dh"><h3>Contatos salvos</h3><button class="x" onclick="fechar()">×</button></div><div class="db">
+  <p class="note">Quem recebe e-mail pelo quadro entra aqui sozinho. Coloque o nome para aparecer bonito na hora de escolher.</p>
+  <table class="tbl"><tr><th>Nome</th><th>E-mail</th><th>Fornecedor</th><th></th></tr>
+  ${CONTATOS.map(c=>`<tr><td><input id="cn${c.id}" value="${esc(c.nome||"")}" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:4px"></td><td>${esc(c.email)}</td>
+   <td><input id="cf${c.id}" value="${esc(c.fornecedor||"")}" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:4px"></td>
+   <td style="white-space:nowrap"><button class="btn" onclick="ctSalvar(${c.id},'${esc(c.email)}')">Salvar</button> <button class="btn d" onclick="ctDel(${c.id})">×</button></td></tr>`).join("")||'<tr><td colspan="4" class="note">Nenhum ainda.</td></tr>'}</table>
+  <h4 class="sec4" style="margin-top:16px">Adicionar</h4>
+  <div class="grid"><label class="fl">Nome<input id="ctN"></label><label class="fl">E-mail<input id="ctE" type="email"></label><label class="fl">Fornecedor<input id="ctF" value="TFleet"></label></div>
+  <div class="acts"><button class="btn p" onclick="ctSalvar(null)">Adicionar</button></div><div class="msg" id="ctMsg"></div></div>`)}
+async function ctSalvar(id,email){try{await rpc("sol_contato_salvar",{p_token:TOKEN,p_id:id,p_nome:id?$("cn"+id).value:$("ctN").value,p_email:id?email:$("ctE").value,p_fornecedor:id?$("cf"+id).value:$("ctF").value});contatos()}catch(e){msg("ctMsg",e.message,"err")}}
+async function ctDel(id){if(!confirm("Remover este contato?"))return;try{await rpc("sol_contato_remover",{p_token:TOKEN,p_id:id});contatos()}catch(e){msg("ctMsg",e.message,"err")}}
 
 /* ---------------- acessos (administrador) ---------------- */
 $("bAcessos").onclick=acessos;
 async function acessos(){
   let ps=[],cfg={};try{[ps,cfg]=await Promise.all([rpc("sol_pessoas_lista",{p_token:TOKEN}),rpc("sol_config_ver",{p_token:TOKEN})])}catch(e){alert(e.message);return}
-  dlg(`<div class="dh"><h3>Acessos e aviso por e-mail</h3><button class="x" onclick="fechar()">×</button></div><div class="db">
-  <h4 style="margin:0 0 6px">Senhas de fornecedor</h4>
-  <p class="note">Cada pessoa do fornecedor entra só com a senha e vê apenas os cartões do fornecedor dela. Pode mudar o status (Assumido, Em andamento, Entregue), responsável, datas e prazo, e escrever no andamento. Tudo fica registrado.</p>
+  dlg(`<div class="dh"><h3>Acessos e robô de e-mail</h3><button class="x" onclick="fechar()">×</button></div><div class="db">
+  <h4 class="sec4">Senhas para editar</h4>
+  <p class="note">Cada pessoa entra só com a senha dela. Com fornecedor preenchido (ex.: TFleet) ela vê e atualiza só os cartões desse fornecedor: status (Assumido, Em andamento, Entregue), responsável, datas, prazo e andamento. Com <b>*</b> no fornecedor é alguém da casa: vê e edita tudo e envia e-mail, mas não mexe em acessos. Tudo fica registrado.</p>
   <table class="tbl"><tr><th>Nome</th><th>Fornecedor</th><th>Último acesso</th><th></th></tr>
-  ${ps.map(p=>`<tr><td>${esc(p.nome)}${p.ativo?"":" <span class='note'>(desativado)</span>"}</td><td>${esc(p.fornecedor)}</td><td>${p.ultimo_acesso?dtBR(p.ultimo_acesso):"nunca"}</td>
+  ${ps.map(p=>`<tr><td>${esc(p.nome)}${p.ativo?"":" <span class='note'>(desativado)</span>"}</td><td>${p.fornecedor==="*"?"* (interno)":esc(p.fornecedor)}</td><td>${p.ultimo_acesso?dtBR(p.ultimo_acesso):"nunca"}</td>
    <td><button class="btn" onclick='pessoa(${JSON.stringify(p).replace(/'/g,"&#39;")})'>Editar</button></td></tr>`).join("")||'<tr><td colspan="4" class="note">Nenhuma ainda.</td></tr>'}</table>
-  <div class="acts" style="justify-content:flex-start"><button class="btn p" onclick="pessoa({fornecedor:'TFleet',ativo:true})">+ Senha de fornecedor</button></div>
-  <h4 style="margin:18px 0 6px">Aviso por e-mail (Apps Script)</h4>
-  <p class="note">Chave do robô (cole no script <b>solicitacoes-aviso.gs</b>). Não mande para o fornecedor.</p>
-  <code class="key" id="kRobo">${esc(cfg.chave_robo)}</code> <button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText($('kRobo').textContent)">Copiar</button>
+  <div class="acts" style="justify-content:flex-start"><button class="btn p" onclick="pessoa({fornecedor:'TFleet',ativo:true})">+ Nova senha</button></div>
+  <h4 class="sec4" style="margin-top:18px">Robô de e-mail (Apps Script)</h4>
+  <p class="note">Chave do robô: cole no script <b>solicitacoes-aviso.gs</b>. Não mande para ninguém.</p>
+  <code class="key" id="kRobo">${esc(cfg.chave_robo)}</code> <button class="btn" onclick="copiar($('kRobo').textContent,this)">Copiar</button>
   <div class="grid" style="margin-top:10px"><label class="fl">Avisar "sem resposta" após (dias)<input id="kDias" type="number" min="1" value="${cfg.dias_sem_resposta}"></label></div>
   <div class="acts" style="justify-content:flex-start"><button class="btn" id="kSalvar">Salvar dias</button><button class="btn d" id="kNova">Gerar chave nova</button></div>
   <div class="msg" id="kMsg"></div></div>`);
   $("kSalvar").onclick=async()=>{try{await rpc("sol_config_salvar",{p_token:TOKEN,p_dias:+$("kDias").value,p_nova_chave:false});msg("kMsg","Salvo.","ok");carregar(false)}catch(e){msg("kMsg",e.message,"err")}};
-  $("kNova").onclick=async()=>{if(!confirm("Gerar chave nova? O script antigo para de funcionar até você colar a nova."))return;
+  $("kNova").onclick=async()=>{if(!confirm("Gerar chave nova? O script para de funcionar até você colar a nova."))return;
     try{const c=await rpc("sol_config_salvar",{p_token:TOKEN,p_dias:+$("kDias").value,p_nova_chave:true});$("kRobo").textContent=c.chave_robo;msg("kMsg","Chave nova gerada.","ok")}catch(e){msg("kMsg",e.message,"err")}};
 }
 function pessoa(p){
-  dlg(`<div class="dh"><h3>${p.id?"Editar acesso":"Nova senha de fornecedor"}</h3><button class="x" onclick="acessos()">×</button></div><div class="db"><div class="grid">
-  <label class="fl">Nome<input id="pNome" value="${esc(p.nome||"")}"></label><label class="fl">Fornecedor (igual ao dos cartões)<input id="pForn" value="${esc(p.fornecedor||"")}"></label>
+  dlg(`<div class="dh"><h3>${p.id?"Editar acesso":"Nova senha"}</h3><button class="x" onclick="acessos()">×</button></div><div class="db"><div class="grid">
+  <label class="fl">Nome<input id="pNome" value="${esc(p.nome||"")}"></label><label class="fl">Fornecedor (igual ao dos cartões, ou *)<input id="pForn" value="${esc(p.fornecedor||"")}"></label>
   <label class="fl full">E-mail (opcional)<input id="pEmail" type="email" value="${esc(p.email||"")}"></label>
   <label class="fl">${p.id?"Nova senha (vazio = mantém)":"Senha (mín. 6)"}<input id="pSenha" type="text" autocomplete="off"></label>
   <label class="fl">Situação<select id="pAtivo"><option value="1">Ativo</option><option value="0" ${p.ativo===false?"selected":""}>Desativado</option></select></label></div>
@@ -320,6 +438,30 @@ function pessoa(p){
   $("pSalvar").onclick=async()=>{try{await rpc("sol_pessoa_salvar",{p_token:TOKEN,p_id:p.id||null,p_nome:$("pNome").value,p_fornecedor:$("pForn").value,
     p_email:$("pEmail").value,p_senha:$("pSenha").value||null,p_ativo:$("pAtivo").value==="1"});acessos()}catch(e){msg("pMsg",e.message,"err")}};
   if($("pDel"))$("pDel").onclick=async()=>{if(!confirm("Remover este acesso?"))return;try{await rpc("sol_pessoa_remover",{p_token:TOKEN,p_id:p.id});acessos()}catch(e){msg("pMsg",e.message,"err")}};
+}
+
+/* ---------------- link público (só ver) ---------------- */
+async function publico(chave){
+  const v=$("vPub");v.classList.remove("hidden");v.innerHTML='<p class="note">Carregando…</p>';
+  let r;try{r=await rpc("sol_publico",{p_chave:chave})}catch(e){v.innerHTML='<p class="msg err">Erro: '+esc(e.message)+'</p>';return}
+  if(r.erro){v.innerHTML='<div class="pubcard" style="--c:#94a3b8"><p>'+esc(r.erro)+'</p><button class="btn p" onclick="mostrarLogin()">Entrar</button></div>';return}
+  const c=r.cartao,cor=COR[c.status]||"#475569";
+  const em=(r.emails||[]).map(m=>`<div class="ev email"><div class="d">${dtBR(m.criado_em)}</div><div class="t"><b>${esc(m.assunto)}</b>
+    <details><summary class="note">ver texto</summary><div style="white-space:pre-wrap;font-size:13px;margin-top:4px">${esc(m.corpo)}</div></details>
+    ${m.anexos&&m.anexos.length?`<div class="anx">${m.anexos.map(a=>`<span>📎 ${esc(a)}</span>`).join("")}</div>`:""}</div></div>`).join("");
+  v.innerHTML=`<header class="top" style="padding:4px 0 12px"><div class="tt"><h1>Gestão da demanda</h1><p class="sub">Solicitações a fornecedores · só visualização</p></div>
+    <button class="btn p" onclick="mostrarLogin()">Entrar para atualizar</button></header>
+  <div class="pubcard" style="--c:${cor}">
+    <div class="f note" style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">${esc(c.fornecedor)}</div>
+    <h2 style="margin:2px 0 8px;font-size:20px">${esc(c.assunto)}</h2>
+    <div class="st"><span class="chip" style="background:${cor};color:#fff">${esc(c.status)}</span> <span class="chip ${c.situacao}">${esc(sitTxt(c))}</span></div>
+    <div class="kv"><div><b>Responsável</b>${esc(c.responsavel||"—")}</div><div><b>Enviado em</b>${dBR(c.enviado_em)}</div><div><b>Começou em</b>${dBR(c.inicio_em)}</div>
+      <div><b>Prazo</b>${dBR(c.prazo)}${c.prazo_original&&c.prazo_original!==c.prazo?` <span class="note">(1º: ${dBR(c.prazo_original)})</span>`:""}</div><div><b>Entregue em</b>${dBR(c.entregue_em)}</div><div><b>Último contato</b>${dBR(c.ultimo_contato)}</div></div>
+    ${c.descricao?`<p style="white-space:pre-wrap">${esc(c.descricao)}</p>`:""}
+    ${c.link?`<p class="note">Documento: <a href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.link)}</a></p>`:""}
+    ${em?`<div class="tl"><h4>E-mails</h4>${em}</div>`:""}
+    <div class="tl"><h4>Andamento</h4>${r.historico.filter(h=>h.tipo!=="email").map(h=>evHTML(h,null)).join("")||'<div class="note">Sem registros.</div>'}</div>
+  </div>`;
 }
 
 iniciar();
