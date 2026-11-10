@@ -89,7 +89,9 @@ function avisarPedidos_() {
   if (!r || !r.pedidos || !r.pedidos.length) return;
   const dono = Session.getEffectiveUser().getEmail();
   if (!dono) return;
-  const linhas = r.pedidos.map(p => '• ' + p.pedido_por + ' quer dar acesso a ' + p.nome + ' (' + p.email + ')' +
+  const linhas = r.pedidos.map(p => '• ' + (p.pedido_por === 'Pela tela de entrada'
+      ? p.nome + ' (' + p.email + ', ' + p.fornecedor + ') pediu acesso pela tela de entrada'
+      : p.pedido_por + ' quer dar acesso a ' + p.nome + ' (' + p.email + ')') +
     (p.assunto ? '\n  Demanda: ' + p.assunto : '') + (p.mensagem ? '\n  Recado: ' + p.mensagem : '')).join('\n\n');
   MailApp.sendEmail(dono, '[Quadro] Pedido de acesso: ' + r.pedidos.map(p => p.nome).join(', '),
     linhas + '\n\nAprove ou recuse em: ' + r.link + '\n(Quadro → Contatos e acessos → Pedidos de acesso)');

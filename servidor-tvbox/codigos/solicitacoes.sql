@@ -754,7 +754,9 @@ begin
     from sol_pedidos_acesso p left join sol_cartoes c on c.id = p.cartao_id where p.status = 'pendente'), '[]'::json);
 end $$;
 
-create or replace function public.sol_pedido_decidir(p_token text, p_id bigint, p_aprovar boolean) returns json
+drop function if exists public.sol_pedido_decidir(text, bigint, boolean);
+-- p_nivel: ver | comentar | editar (vazio = editar quando veio de repasse, ver quando a pessoa pediu sozinha)
+create or replace function public.sol_pedido_decidir(p_token text, p_id bigint, p_aprovar boolean, p_nivel text default null) returns json
 language plpgsql security definer set search_path = public, extensions as $$
 declare q jsonb := public._sol_exige(p_token, true); p sol_pedidos_acesso; senha text; h text; pid bigint; eid bigint; c sol_cartoes; i int := 0;
 begin
@@ -777,9 +779,10 @@ begin
   end loop;
   select id into pid from sol_pessoas where lower(email) = p.email and lower(fornecedor) = lower(p.fornecedor);
   if pid is null then
-    insert into sol_pessoas (nome, fornecedor, email, senha_hash) values (p.nome, p.fornecedor, p.email, h) returning id into pid;
+    insert into sol_pessoas (nome, fornecedor, email, senha_hash, nivel) values (p.nome, p.fornecedor, p.email, h,
+      coalesce(p_nivel, case when p.cartao_id is null then 'ver' else 'editar' end)) returning id into pid;
   else
-    update sol_pessoas set senha_hash = h, ativo = true, nome = p.nome where id = pid;
+    update sol_pessoas set senha_hash = h, ativo = true, nome = p.nome, nivel = coalesce(p_nivel, nivel) where id = pid;
     delete from sol_sessoes where pessoa_id = pid;
   end if;
   insert into sol_contatos (nome, email, fornecedor) values (p.nome, p.email, p.fornecedor)
@@ -798,6 +801,14 @@ begin
         q->>'nome', senha, true) returning id into eid;
     insert into sol_historico (cartao_id, quem, tipo, texto) values (c.id, q->>'nome', 'aviso',
       'Aprovou o acesso de ' || p.nome || ' (código enviado por e-mail)');
+  else   -- pediu pela tela de entrada (sem cartão): manda o código mesmo assim
+    insert into sol_emails (cartao_id, para, assunto, corpo, criado_por, segredo, interno)
+      values (null, array[p.email], 'Seu acesso ao quadro de demandas',
+        'Olá, ' || p.nome || '.' || E'\n\n' ||
+        'O seu acesso ao quadro de demandas foi aprovado. Abra o link abaixo e digite o seu código de acesso:' || E'\n\n' ||
+        '    Código: {{SENHA}}' || E'\n\n' ||
+        'O código é pessoal: não compartilhe. Você vê as demandas de ' || p.fornecedor || '.',
+        q->>'nome', senha, true) returning id into eid;
   end if;
   perform public._central_log(null, q->>'nome', 'cadastro', 'solicitacoes', 'Aprovou acesso de fornecedor: ' || p.nome);
   return json_build_object('status', 'aprovado', 'senha', senha, 'email_enviado', eid is not null);
@@ -842,7 +853,7 @@ drop trigger if exists sol_emails_segredo on public.sol_emails;
 create trigger sol_emails_segredo before update on public.sol_emails for each row execute function public._sol_apaga_segredo();
 
 grant execute on function public.sol_repassar(text, bigint, text, text, text), public.sol_pedidos_lista(text),
-  public.sol_pedido_decidir(text, bigint, boolean), public.sol_pedidos_avisar(text) to anon, authenticated;
+  public.sol_pedido_decidir(text, bigint, boolean, text), public.sol_pedidos_avisar(text) to anon, authenticated;
 
 -- ================================================================ v4: DOCUMENTOS DO CARTÃO, LINK COM NOME DO PROCESSO, OBSERVAÇÕES
 -- Documentos (PDF, Word, Excel…) ficam no cartão: dá para baixar pelo quadro e pelo link público,
@@ -1058,7 +1069,7 @@ begin
   update sol_emails set status = 'enviando', tentativas = tentativas + 1 where id = e.id;
   select * into c from sol_cartoes where id = e.cartao_id;
   return json_build_object('id', e.id, 'para', e.para, 'cc', e.cc, 'assunto', e.assunto,
-    'corpo', replace(e.corpo, '{{SENHA}}', coalesce(e.segredo, '')), 'link', public._sol_link(c), 'processo', c.assunto,
+    'corpo', replace(e.corpo, '{{SENHA}}', coalesce(e.segredo, '')), 'link', coalesce(public._sol_link(c), (select link_quadro from sol_config where id = 1)), 'processo', c.assunto,
     'anexos', (select coalesce(json_agg(json_build_object('nome', an.nome, 'tipo', an.tipo, 'base64', replace(encode(an.dados, 'base64'), E'\n', ''))
       order by an.id), '[]'::json) from sol_email_anexos ea join sol_anexos an on an.id = ea.anexo_id where ea.email_id = e.id));
 end $$;
@@ -1228,5 +1239,25 @@ where not exists (select 1 from public.sol_historico h where h.cartao_id = c.id)
 -- sem link do Claude nos cartões importados
 update public.sol_cartoes set link = null where criado_por like 'Importado%' and link like 'https://claude.ai/%';
 -- (os documentos dos pedidos importados ficam em solicitacoes-documentos.sql)
+
+-- ---------------------------------------------------------------- pedir acesso pela tela de entrada
+alter table public.sol_emails alter column cartao_id drop not null;
+create or replace function public.sol_pedir_acesso(p_nome text, p_email text, p_empresa text, p_mensagem text default null) returns text
+language plpgsql security definer set search_path = public as $$
+declare e text := lower(trim(coalesce(p_email, '')));
+begin
+  if coalesce(trim(p_nome), '') = '' or coalesce(trim(p_empresa), '') = '' then raise exception 'Preencha nome, e-mail e empresa.'; end if;
+  if e !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'E-mail inválido.'; end if;
+  if (select count(*) from sol_pedidos_acesso where criado_em > now() - interval '1 hour' and pedido_por = 'Pela tela de entrada') >= 20 then
+    raise exception 'Muitos pedidos agora. Tente de novo mais tarde.';
+  end if;
+  if exists (select 1 from sol_pedidos_acesso where lower(email) = e and status = 'pendente') then
+    return 'Seu pedido já está com o responsável. Quando for aprovado, o código chega no seu e-mail.';
+  end if;
+  insert into sol_pedidos_acesso (fornecedor, nome, email, mensagem, pedido_por)
+    values (left(trim(p_empresa), 80), left(trim(p_nome), 120), e, nullif(left(trim(coalesce(p_mensagem, '')), 500), ''), 'Pela tela de entrada');
+  return 'Pedido enviado. Quando for aprovado, o código de acesso chega no seu e-mail.';
+end $$;
+grant execute on function public.sol_pedir_acesso(text, text, text, text) to anon, authenticated;
 
 select 'Quadro de solicitações pronto' as resultado, (select count(*) from public.sol_cartoes) as cartoes;
