@@ -80,7 +80,7 @@ create table if not exists public.sol_config (
   id                int primary key default 1 check (id = 1),
   chave_robo        text not null default encode(extensions.gen_random_bytes(18), 'hex'),
   dias_sem_resposta int not null default 5,
-  link_quadro       text not null default 'https://zael20.github.io/painel-mes-tfleet-bdv/solicitacoes.html'
+  link_quadro       text not null default 'https://gestao-integrada.github.io/demandas/'
 );
 insert into public.sol_config (id) values (1) on conflict (id) do nothing;
 
@@ -859,7 +859,10 @@ end $$;
 drop trigger if exists sol_cartoes_slug on public.sol_cartoes;
 create trigger sol_cartoes_slug before insert on public.sol_cartoes for each row execute function public._sol_slug_trg();
 update public.sol_cartoes set slug = public._sol_slug(assunto) where slug is null;
-update public.sol_config set link_quadro = link_quadro where id = 1;
+-- endereço novo (organização Gestão Integrada no GitHub)
+alter table public.sol_config alter column link_quadro set default 'https://gestao-integrada.github.io/demandas/';
+update public.sol_config set link_quadro = 'https://gestao-integrada.github.io/demandas/'
+ where id = 1 and link_quadro like '%zael20.github.io%';
 
 create or replace function public._sol_link(c public.sol_cartoes) returns text
 language sql stable as $$ select (select link_quadro from public.sol_config where id = 1) || '?d=' || coalesce(c.slug, c.chave_publica) $$;
