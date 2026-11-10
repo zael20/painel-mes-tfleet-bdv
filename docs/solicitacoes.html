@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solicitações a fornecedores</title>
+<meta name="theme-color" content="#16324f">
+<style>
+:root{--bg:#eef1f5;--card:#fff;--ink:#1d2733;--mut:#5f6b7a;--line:#d8dee6;--pri:#16324f;--acc:#1f6feb;
+  --red:#c62828;--redbg:#fdecea;--ora:#d9480f;--orabg:#fff1e6;--yel:#9a6700;--yelbg:#fff8db;--grn:#1a7f37;--grnbg:#e6f6ea;--gry:#6e7781}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.hidden{display:none!important}
+/* topo */
+header{position:sticky;top:0;z-index:20;background:var(--pri);color:#fff;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+header h1{font-size:17px;margin:0;font-weight:650;margin-right:auto;display:flex;align-items:center;gap:8px}
+header h1 svg{flex:none}
+.tbtn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:8px;padding:6px 11px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.tbtn:hover{background:rgba(255,255,255,.22)}
+.tbtn.prim{background:#fff;color:var(--pri);border-color:#fff;font-weight:600}
+.bell{position:relative}
+.bell b{position:absolute;top:-6px;right:-6px;background:#ff5252;color:#fff;font-size:11px;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.who{font-size:13px;opacity:.85}
+.bar{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;align-items:center}
+.bar input,.bar select{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 10px;min-width:0}
+.bar input{flex:1 1 200px;max-width:340px}
+.alerta{margin:0 16px 4px;background:var(--redbg);color:var(--red);border:1px solid #f3b8b3;border-radius:10px;padding:9px 12px;font-weight:600;display:flex;gap:8px;align-items:center;cursor:pointer}
+/* quadro */
+.board{display:flex;gap:12px;padding:8px 16px 24px;overflow-x:auto;align-items:flex-start;min-height:calc(100vh - 140px)}
+.col{flex:1 0 205px;max-width:340px;background:#e2e7ee;border-radius:12px;display:flex;flex-direction:column;max-height:calc(100vh - 150px)}
+.col h2{font-size:14px;margin:0;padding:10px 12px;display:flex;align-items:center;gap:8px}
+.col h2 i{width:10px;height:10px;border-radius:50%;flex:none}
+.col h2 span{margin-left:auto;font-weight:500;color:var(--mut);font-size:13px}
+.list{padding:0 8px 10px;overflow-y:auto;flex:1;min-height:40px;display:flex;flex-direction:column;gap:8px}
+.col.over{outline:2px dashed var(--acc);outline-offset:-2px}
+.vazio{color:var(--mut);font-size:13px;text-align:center;padding:10px 0}
+.k{background:var(--card);border-radius:10px;padding:10px 11px;box-shadow:0 1px 2px rgba(16,24,40,.12);border-left:4px solid transparent;cursor:pointer}
+.k:hover{box-shadow:0 2px 6px rgba(16,24,40,.18)}
+.k.vencido{border-left-color:var(--red)}.k.sem_resposta{border-left-color:var(--ora)}
+.k.vence_hoje,.k.vence_amanha{border-left-color:#e0a800}
+.k .f{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--acc)}
+.k .a{font-weight:600;margin:2px 0 6px}
+.k .m{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--mut);align-items:center}
+.chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:600;white-space:nowrap}
+.chip.vencido{background:var(--redbg);color:var(--red)}.chip.sem_resposta{background:var(--orabg);color:var(--ora)}
+.chip.vence_hoje,.chip.vence_amanha{background:var(--yelbg);color:var(--yel)}
+.chip.no_prazo,.chip.entregue{background:var(--grnbg);color:var(--grn)}
+.chip.sem_prazo,.chip.cancelado{background:#eef0f3;color:var(--gry)}
+/* janelas */
+.ov{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto}
+.dlg{background:#fff;border-radius:14px;width:100%;max-width:760px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.dlg.small{max-width:420px}
+.dh{display:flex;align-items:flex-start;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.dh h3{margin:0;font-size:17px;flex:1}
+.x{border:0;background:none;font-size:22px;line-height:1;color:var(--mut);padding:0 4px}
+.db{padding:14px 16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.grid .full{grid-column:1/-1}
+label.fl{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mut);font-weight:600}
+label.fl input,label.fl select,label.fl textarea{border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-weight:400;font-size:14px;color:var(--ink);background:#fff;width:100%}
+label.fl input:disabled,label.fl textarea:disabled,label.fl select:disabled{background:#f4f6f8;color:#444}
+textarea{resize:vertical}
+.st{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.st button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;font-size:13px}
+.st button.on{background:var(--pri);border-color:var(--pri);color:#fff}
+.st button:disabled{opacity:.4;cursor:not-allowed}
+.acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 14px}
+.btn.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.btn.d{color:var(--red);border-color:#f3b8b3}
+.msg{font-size:13px;margin-top:8px}.msg.err{color:var(--red)}.msg.ok{color:var(--grn)}
+.tl{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+.tl h4{margin:0 0 8px;font-size:14px}
+.ev{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed #e6e9ee;font-size:13px}
+.ev .d{color:var(--mut);white-space:nowrap;min-width:92px}
+.ev.comentario .t{background:#f3f6fa;border-radius:8px;padding:6px 9px;white-space:pre-wrap;flex:1}
+.ev.aviso .t{color:var(--ora)}
+.cbox{display:flex;gap:8px;margin-bottom:8px}.cbox textarea{flex:1;border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+.note{font-size:12px;color:var(--mut)}
+.login{max-width:360px;margin:12vh auto 0;background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+.login h2{margin:0 0 4px;font-size:19px}
+.login input{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;margin:14px 0 10px;font-size:16px}
+.login .btn{width:100%}
+.ntf .it{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #eef0f3;background:#fff;padding:9px 2px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}.tbl td,.tbl th{border-bottom:1px solid #eef0f3;padding:6px 4px;text-align:left}
+code.key{background:#f3f6fa;border:1px solid var(--line);border-radius:6px;padding:4px 7px;word-break:break-all;display:inline-block}
+@media (max-width:640px){
+  header{padding:8px 12px}.bar{padding:8px 12px}.board{padding:8px 12px 20px}
+  .col{flex-basis:84vw}.grid{grid-template-columns:1fr}.who{display:none}
+  .ov{padding:0}.dlg{border-radius:0;min-height:100vh}
+}
+</style>
+</head>
+<body>
+
+<div id="vLogin" class="login hidden">
+  <h2>Solicitações a fornecedores</h2>
+  <div class="note">Entre com sua senha pessoal (a mesma da Central) ou com a senha de fornecedor que recebeu.</div>
+  <form id="fLogin"><input id="lSenha" type="password" autocomplete="current-password" placeholder="Senha" required>
+  <button class="btn p">Entrar</button></form>
+  <div id="lMsg" class="msg"></div>
+</div>
+
+<div id="vApp" class="hidden">
+  <header>
+    <h1><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/></svg>Solicitações a fornecedores</h1>
+    <span class="who" id="who"></span>
+    <button class="tbtn bell" id="bBell" title="Avisos"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg><b id="bellN" class="hidden">0</b></button>
+    <button class="tbtn prim hidden" id="bNovo">+ Nova</button>
+    <button class="tbtn hidden" id="bAcessos">Acessos</button>
+    <button class="tbtn" id="bSair">Sair</button>
+  </header>
+  <div class="bar">
+    <input id="fBusca" type="search" placeholder="Buscar assunto, responsável…">
+    <select id="fForn"><option value="">Todos os fornecedores</option></select>
+    <label class="note"><input type="checkbox" id="fFechados"> mostrar Entregue/Cancelado antigos</label>
+    <span class="note" id="atual"></span>
+  </div>
+  <div id="alerta" class="alerta hidden"></div>
+  <div class="board" id="board"></div>
+</div>
+
+<div id="ov" class="ov hidden"><div class="dlg" id="dlg"></div></div>
+
+<script>
+const SB_URL="https://orhuxmsrdnugpogvtnbg.supabase.co";
+const SB_KEY="sb_publishable_Hu4Ns0jDTesWzDmVseAl_Q_ubCJa5wL";
+const COLS=[["Enviado","#6e7781"],["Assumido","#1f6feb"],["Em andamento","#8250df"],["Entregue","#1a7f37"],["Sem resposta","#d9480f"],["Cancelado","#9aa4b2"]];
+const FORN_STATUS=["Assumido","Em andamento","Entregue"];   // o que o fornecedor pode escolher
+const K_SESS="tf_solicitacoes", K_CENTRAL="tf_sessao";
+let TOKEN=null, QUEM=null, CARDS=[], ABERTO=null;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ls={get:k=>{try{return JSON.parse(localStorage.getItem(k)||"null")}catch(e){return null}},
+  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
+const dBR=s=>s?s.slice(0,10).split("-").reverse().join("/"):"—";
+const dtBR=s=>{if(!s)return"";const d=new Date(s);return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})};
+const hoje=()=>{const d=new Date(Date.now()-3*3600e3);return d.toISOString().slice(0,10)};
+
+async function rpc(fn,body){
+  const r=await fetch(SB_URL+"/rest/v1/rpc/"+fn,{method:"POST",headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,"Content-Type":"application/json"},body:JSON.stringify(body||{})});
+  const t=await r.text();let j=null;try{j=t?JSON.parse(t):null}catch(e){}
+  if(!r.ok){const m=(j&&(j.message||j.hint))||t||("Erro "+r.status);if(/sessao/.test(m)){sairLocal();throw new Error("Sessão expirada, entre de novo.")}throw new Error(m)}
+  return j;
+}
+
+/* ---------------- entrar ---------------- */
+async function iniciar(){
+  const cand=[ls.get(K_SESS), ls.get(K_CENTRAL)].filter(s=>s&&s.token);
+  for(const s of cand){try{const q=await rpc("sol_sessao",{p_token:s.token});if(q&&!q.erro){entrar(s.token,q);return}}catch(e){}}
+  $("vLogin").classList.remove("hidden");$("lSenha").focus();
+}
+$("fLogin").onsubmit=async e=>{e.preventDefault();$("lMsg").textContent="Entrando…";$("lMsg").className="msg";
+  try{const r=await rpc("sol_entrar",{p_senha:$("lSenha").value});
+    if(r.erro){$("lMsg").textContent=r.erro;$("lMsg").className="msg err";return}
+    ls.set(K_SESS,{token:r.token,nome:r.nome});entrar(r.token,r);
+  }catch(err){$("lMsg").textContent="Erro: "+err.message;$("lMsg").className="msg err"}};
+function entrar(tk,q){TOKEN=tk;QUEM=q;$("vLogin").classList.add("hidden");$("vApp").classList.remove("hidden");
+  $("who").textContent=q.nome+(q.tipo==="fornecedor"?" · "+q.fornecedor:"");
+  const interno=q.tipo==="interno";$("bNovo").classList.toggle("hidden",!(interno&&q.edita));$("bAcessos").classList.toggle("hidden",!q.admin);
+  $("fForn").classList.toggle("hidden",!interno);carregar(true);setInterval(()=>carregar(false),120000);}
+function sairLocal(){ls.del(K_SESS);TOKEN=null;}
+$("bSair").onclick=async()=>{try{await rpc("sol_sair",{p_token:TOKEN})}catch(e){}sairLocal();
+  if(ls.get(K_CENTRAL)&&ls.get(K_CENTRAL).token===TOKEN){/* sessão da Central: continua lá */}location.href=location.pathname};
+
+/* ---------------- dados ---------------- */
+async function carregar(primeira){
+  try{CARDS=await rpc("sol_listar",{p_token:TOKEN})||[];}catch(e){$("atual").textContent="Erro ao carregar: "+e.message;return}
+  $("atual").textContent="Atualizado "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+  const fs=[...new Set(CARDS.map(c=>c.fornecedor))].sort(),sel=$("fForn"),v=sel.value;
+  sel.innerHTML='<option value="">Todos os fornecedores</option>'+fs.map(f=>`<option ${f===v?"selected":""}>${esc(f)}</option>`).join("");
+  desenhar();avisos(primeira);
+  if(primeira){const c=new URLSearchParams(location.search).get("c");if(c)abrir(+c);}
+}
+function sitTxt(c){switch(c.situacao){
+  case"vencido":return"Vencido há "+(-c.dias_para_prazo)+" dia"+(c.dias_para_prazo===-1?"":"s");
+  case"vence_hoje":return"Vence hoje";case"vence_amanha":return"Vence amanhã";
+  case"sem_resposta":return c.dias_sem_contato+" dias sem resposta";
+  case"no_prazo":return"Prazo "+dBR(c.prazo);case"entregue":return"Entregue "+dBR(c.entregue_em);
+  case"cancelado":return"Cancelado";default:return"Sem prazo"}}
+function filtrados(){const b=$("fBusca").value.trim().toLowerCase(),f=$("fForn").value,velhos=$("fFechados").checked;
+  return CARDS.filter(c=>(!f||c.fornecedor===f)&&(!b||[c.assunto,c.responsavel,c.fornecedor,c.descricao].join(" ").toLowerCase().includes(b))
+    &&(velhos||!["Entregue","Cancelado"].includes(c.status)||((Date.now()-new Date(c.atualizado_em))/864e5)<30));}
+function desenhar(){
+  const lst=filtrados(),bd=$("board");bd.innerHTML="";
+  const podeMover=QUEM.edita;
+  COLS.forEach(([st,cor])=>{
+    const cs=lst.filter(c=>c.status===st),col=document.createElement("section");col.className="col";col.dataset.st=st;
+    col.innerHTML=`<h2><i style="background:${cor}"></i>${st}<span>${cs.length}</span></h2><div class="list"></div>`;
+    const L=col.querySelector(".list");
+    if(!cs.length)L.innerHTML='<div class="vazio">—</div>';
+    cs.forEach(c=>{const k=document.createElement("article");k.className="k "+c.situacao;k.dataset.id=c.id;
+      k.innerHTML=`<div class="f">${esc(c.fornecedor)}</div><div class="a">${esc(c.assunto)}</div>
+      <div class="m"><span class="chip ${c.situacao}">${esc(sitTxt(c))}</span>${c.responsavel?`<span>👤 ${esc(c.responsavel)}</span>`:""}
+      ${c.comentarios?`<span>💬 ${c.comentarios}</span>`:""}<span title="Enviado em">✉ ${dBR(c.enviado_em)}</span></div>`;
+      k.onclick=()=>abrir(c.id);
+      if(podeMover){k.draggable=true;k.ondragstart=e=>{e.dataTransfer.setData("text/plain",c.id)}}
+      L.appendChild(k)});
+    if(podeMover){col.ondragover=e=>{e.preventDefault();col.classList.add("over")};col.ondragleave=()=>col.classList.remove("over");
+      col.ondrop=async e=>{e.preventDefault();col.classList.remove("over");const id=+e.dataTransfer.getData("text/plain");const c=CARDS.find(x=>x.id===id);
+        if(!c||c.status===st)return;if(QUEM.tipo==="fornecedor"&&!FORN_STATUS.includes(st)){alert("Esse status é só para quem pediu.");return}
+        try{await rpc("sol_salvar",{p_token:TOKEN,p_id:id,p_dados:{status:st}});carregar(false)}catch(err){alert(err.message)}}}
+    bd.appendChild(col)});
+}
+["fBusca","fForn","fFechados"].forEach(i=>$(i).addEventListener("input",desenhar));
+
+/* ---------------- avisos na página ---------------- */
+function atrasados(){return CARDS.filter(c=>["vencido","vence_hoje","vence_amanha","sem_resposta"].includes(c.situacao))}
+function avisos(primeira){
+  const a=atrasados(),v=a.filter(c=>c.situacao==="vencido").length,n=$("bellN");
+  n.textContent=a.length;n.classList.toggle("hidden",!a.length);
+  const al=$("alerta");
+  if(v){al.innerHTML=`⚠️ ${v} ${v>1?"solicitações":"solicitação"} com prazo vencido. Clique para ver.`;al.classList.remove("hidden")}else al.classList.add("hidden");
+  if(primeira&&a.length&&"Notification"in window&&Notification.permission==="granted"){
+    const kd="tf_sol_notif_"+hoje();if(!ls.get(kd)){ls.set(kd,1);
+      try{new Notification("Solicitações: "+a.length+" precisa"+(a.length>1?"m":"")+" de atenção",{body:a.slice(0,4).map(c=>c.fornecedor+": "+sitTxt(c)).join("\n")})}catch(e){}}}
+}
+$("alerta").onclick=$("bBell").onclick=()=>{
+  const a=atrasados();
+  dlg(`<div class="dh"><h3>Avisos</h3><button class="x" onclick="fechar()">×</button></div><div class="db ntf">
+  ${a.length?a.map(c=>`<button class="it" onclick="abrir(${c.id})"><span class="chip ${c.situacao}">${esc(sitTxt(c))}</span> <b>${esc(c.fornecedor)}</b> · ${esc(c.assunto)}</button>`).join(""):'<div class="note">Nada atrasado. 👍</div>'}
+  ${"Notification"in window&&Notification.permission!=="granted"?`<div class="acts" style="justify-content:flex-start"><button class="btn" onclick="Notification.requestPermission().then(()=>fechar())">Ativar notificação neste aparelho</button></div>`:""}
+  <p class="note">Quando um prazo vence, também sai um e-mail para a lista de e-mails do cartão (1 vez por dia).</p></div>`,true)};
+
+/* ---------------- janela ---------------- */
+function dlg(html,small){$("dlg").className="dlg"+(small?" small":"");$("dlg").innerHTML=html;$("ov").classList.remove("hidden")}
+function fechar(){$("ov").classList.add("hidden");ABERTO=null;if(location.search)history.replaceState(null,"",location.pathname)}
+$("ov").onclick=e=>{if(e.target.id==="ov")fechar()};
+document.addEventListener("keydown",e=>{if(e.key==="Escape")fechar()});
+
+const CAMPOS=[ // [campo, rótulo, tipo, fornecedor pode editar]
+  ["fornecedor","Fornecedor","text",0],["responsavel","Responsável no fornecedor","text",1],
+  ["assunto","Assunto","text",0,"full"],["link","Link (e-mail/documento)","url",0,"full"],
+  ["enviado_em","Enviado em","date",0],["inicio_em","Começou em","date",1],
+  ["prazo","Prazo de entrega","date",1],["entregue_em","Entregue em","date",1],
+  ["ultimo_contato","Último contato","date",0],["emails","E-mails para aviso (separe por vírgula)","text",0,"full"],
+  ["descricao","Observações","area",0,"full"]];
+
+function form(c,novo){
+  const forn=QUEM.tipo==="fornecedor",ed=QUEM.edita;
+  return `<div class="grid">${CAMPOS.filter(f=>!(forn&&f[0]==="emails")).map(([k,l,t,fp,cl])=>{
+    const dis=!ed||(forn&&!fp)?"disabled":"";let v=c[k]==null?"":c[k];if(k==="emails")v=(v||[]).join(", ");if(t==="date")v=String(v).slice(0,10);
+    const inp=t==="area"?`<textarea id="c_${k}" rows="3" ${dis}>${esc(v)}</textarea>`:`<input id="c_${k}" type="${t==="url"?"url":t}" value="${esc(v)}" ${dis}>`;
+    return `<label class="fl ${cl||""}">${l}${k==="prazo"&&c.prazo_original&&c.prazo_original!==c.prazo?` <span class="note">(1º prazo: ${dBR(c.prazo_original)})</span>`:""}${inp}</label>`}).join("")}</div>`;
+}
+function stBtns(c){const forn=QUEM.tipo==="fornecedor";
+  return `<div class="st" id="stb">${COLS.map(([s])=>`<button data-s="${s}" class="${c.status===s?"on":""}" ${!QUEM.edita||(forn&&!FORN_STATUS.includes(s))?"disabled":""}>${s}</button>`).join("")}</div>`}
+function coletar(c){const d={},forn=QUEM.tipo==="fornecedor";
+  CAMPOS.forEach(([k,,t,fp])=>{if(forn&&!fp)return;const el=$("c_"+k);if(!el)return;let v=el.value.trim();
+    if(k==="emails"){const novo=v.split(/[,;\s]+/).filter(Boolean);if(novo.join(",")!==(c.emails||[]).join(","))d.emails=novo;return}
+    if(v==="")v=null;const ant=c[k]==null?null:(t==="date"?String(c[k]).slice(0,10):c[k]);if(v!==ant)d[k]=v});
+  const s=document.querySelector("#stb .on");if(s&&s.dataset.s!==c.status)d.status=s.dataset.s;return d}
+
+async function abrir(id){
+  let r;try{r=await rpc("sol_cartao",{p_token:TOKEN,p_id:id})}catch(e){alert(e.message);return}
+  const c=r.cartao;ABERTO=c;
+  const tl=r.historico.map(h=>`<div class="ev ${h.tipo}"><div class="d">${dtBR(h.ts)}</div><div class="t"><b>${esc(h.quem||"")}</b> ${h.tipo==="comentario"?"<br>":"· "}${esc(h.texto||"")}${h.dados&&h.tipo!=="comentario"?detalhe(h.dados):""}</div></div>`).join("");
+  dlg(`<div class="dh"><h3><span class="chip ${c.situacao}">${esc(sitTxt(c))}</span><br>${esc(c.assunto)}</h3><button class="x" onclick="fechar()">×</button></div>
+  <div class="db">${stBtns(c)}${form(c)}
+  ${c.link?`<p class="note">Documento: <a href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.link)}</a></p>`:""}
+  <div class="acts">${QUEM.admin?'<button class="btn d" id="cDel">Apagar</button>':""}<span style="flex:1"></span>
+   <button class="btn" onclick="fechar()">Fechar</button>${QUEM.edita?'<button class="btn p" id="cSalvar">Salvar</button>':""}</div>
+  <div class="msg" id="cMsg"></div>
+  <div class="tl"><h4>Andamento</h4>
+   <div class="cbox"><textarea id="cCom" rows="2" placeholder="Escreva uma atualização (ex.: começamos, previsão, dúvida)…"></textarea><button class="btn p" id="cEnviar">Enviar</button></div>
+   ${tl||'<div class="note">Sem registros.</div>'}</div></div>`);
+  document.querySelectorAll("#stb button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#stb button").forEach(x=>x.classList.remove("on"));b.classList.add("on")});
+  if($("cSalvar"))$("cSalvar").onclick=async()=>{const d=coletar(c);if(!Object.keys(d).length){fechar();return}
+    msg("cMsg","Salvando…");try{await rpc("sol_salvar",{p_token:TOKEN,p_id:c.id,p_dados:d});await carregar(false);abrir(c.id)}catch(e){msg("cMsg",e.message,"err")}};
+  $("cEnviar").onclick=async()=>{const t=$("cCom").value.trim();if(!t)return;
+    try{await rpc("sol_comentar",{p_token:TOKEN,p_id:c.id,p_texto:t});await carregar(false);abrir(c.id)}catch(e){msg("cMsg",e.message,"err")}};
+  if($("cDel"))$("cDel").onclick=async()=>{if(!confirm("Apagar este cartão e todo o histórico? Não dá para desfazer."))return;
+    try{await rpc("sol_remover",{p_token:TOKEN,p_id:c.id});fechar();carregar(false)}catch(e){msg("cMsg",e.message,"err")}};
+}
+const NOMES={status:"status",responsavel:"responsável",inicio_em:"começou em",prazo:"prazo",entregue_em:"entregue em",ultimo_contato:"último contato",
+  fornecedor:"fornecedor",assunto:"assunto",descricao:"observações",link:"link",enviado_em:"enviado em",emails:"e-mails"};
+function detalhe(d){const p=Object.entries(d).filter(([k])=>k!=="status"&&k!=="ultimo_contato").map(([k,[a,b]])=>{
+  const f=v=>v==null||v===""?"vazio":Array.isArray(v)?v.join(", "):/^\d{4}-\d\d-\d\d/.test(v)?dBR(v):v;return `${NOMES[k]||k}: ${esc(f(a))} → ${esc(f(b))}`});
+  return p.length?`<div class="note">${p.join("<br>")}</div>`:""}
+function msg(id,t,cl){const m=$(id);if(m){m.textContent=t;m.className="msg "+(cl||"")}}
+
+$("bNovo").onclick=()=>{const c={fornecedor:"TFleet",status:"Enviado",enviado_em:hoje(),ultimo_contato:hoje()};
+  dlg(`<div class="dh"><h3>Nova solicitação</h3><button class="x" onclick="fechar()">×</button></div><div class="db">${stBtns(c)}${form(c)}
+  <div class="acts"><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="nSalvar">Criar</button></div><div class="msg" id="nMsg"></div></div>`);
+  document.querySelectorAll("#stb button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#stb button").forEach(x=>x.classList.remove("on"));b.classList.add("on")});
+  $("nSalvar").onclick=async()=>{const d=coletar({});d.status=document.querySelector("#stb .on").dataset.s;
+    try{const r=await rpc("sol_salvar",{p_token:TOKEN,p_id:null,p_dados:d});await carregar(false);abrir(r.id)}catch(e){msg("nMsg",e.message,"err")}}};
+
+/* ---------------- acessos (administrador) ---------------- */
+$("bAcessos").onclick=acessos;
+async function acessos(){
+  let ps=[],cfg={};try{[ps,cfg]=await Promise.all([rpc("sol_pessoas_lista",{p_token:TOKEN}),rpc("sol_config_ver",{p_token:TOKEN})])}catch(e){alert(e.message);return}
+  dlg(`<div class="dh"><h3>Acessos e aviso por e-mail</h3><button class="x" onclick="fechar()">×</button></div><div class="db">
+  <h4 style="margin:0 0 6px">Senhas de fornecedor</h4>
+  <p class="note">Cada pessoa do fornecedor entra só com a senha e vê apenas os cartões do fornecedor dela. Pode mudar o status (Assumido, Em andamento, Entregue), responsável, datas e prazo, e escrever no andamento. Tudo fica registrado.</p>
+  <table class="tbl"><tr><th>Nome</th><th>Fornecedor</th><th>Último acesso</th><th></th></tr>
+  ${ps.map(p=>`<tr><td>${esc(p.nome)}${p.ativo?"":" <span class='note'>(desativado)</span>"}</td><td>${esc(p.fornecedor)}</td><td>${p.ultimo_acesso?dtBR(p.ultimo_acesso):"nunca"}</td>
+   <td><button class="btn" onclick='pessoa(${JSON.stringify(p).replace(/'/g,"&#39;")})'>Editar</button></td></tr>`).join("")||'<tr><td colspan="4" class="note">Nenhuma ainda.</td></tr>'}</table>
+  <div class="acts" style="justify-content:flex-start"><button class="btn p" onclick="pessoa({fornecedor:'TFleet',ativo:true})">+ Senha de fornecedor</button></div>
+  <h4 style="margin:18px 0 6px">Aviso por e-mail (Apps Script)</h4>
+  <p class="note">Chave do robô (cole no script <b>solicitacoes-aviso.gs</b>). Não mande para o fornecedor.</p>
+  <code class="key" id="kRobo">${esc(cfg.chave_robo)}</code> <button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText($('kRobo').textContent)">Copiar</button>
+  <div class="grid" style="margin-top:10px"><label class="fl">Avisar "sem resposta" após (dias)<input id="kDias" type="number" min="1" value="${cfg.dias_sem_resposta}"></label></div>
+  <div class="acts" style="justify-content:flex-start"><button class="btn" id="kSalvar">Salvar dias</button><button class="btn d" id="kNova">Gerar chave nova</button></div>
+  <div class="msg" id="kMsg"></div></div>`);
+  $("kSalvar").onclick=async()=>{try{await rpc("sol_config_salvar",{p_token:TOKEN,p_dias:+$("kDias").value,p_nova_chave:false});msg("kMsg","Salvo.","ok");carregar(false)}catch(e){msg("kMsg",e.message,"err")}};
+  $("kNova").onclick=async()=>{if(!confirm("Gerar chave nova? O script antigo para de funcionar até você colar a nova."))return;
+    try{const c=await rpc("sol_config_salvar",{p_token:TOKEN,p_dias:+$("kDias").value,p_nova_chave:true});$("kRobo").textContent=c.chave_robo;msg("kMsg","Chave nova gerada.","ok")}catch(e){msg("kMsg",e.message,"err")}};
+}
+function pessoa(p){
+  dlg(`<div class="dh"><h3>${p.id?"Editar acesso":"Nova senha de fornecedor"}</h3><button class="x" onclick="acessos()">×</button></div><div class="db"><div class="grid">
+  <label class="fl">Nome<input id="pNome" value="${esc(p.nome||"")}"></label><label class="fl">Fornecedor (igual ao dos cartões)<input id="pForn" value="${esc(p.fornecedor||"")}"></label>
+  <label class="fl full">E-mail (opcional)<input id="pEmail" type="email" value="${esc(p.email||"")}"></label>
+  <label class="fl">${p.id?"Nova senha (vazio = mantém)":"Senha (mín. 6)"}<input id="pSenha" type="text" autocomplete="off"></label>
+  <label class="fl">Situação<select id="pAtivo"><option value="1">Ativo</option><option value="0" ${p.ativo===false?"selected":""}>Desativado</option></select></label></div>
+  <div class="acts">${p.id?'<button class="btn d" id="pDel">Remover</button><span style="flex:1"></span>':""}<button class="btn" onclick="acessos()">Voltar</button><button class="btn p" id="pSalvar">Salvar</button></div>
+  <div class="msg" id="pMsg"></div></div>`,true);
+  $("pSalvar").onclick=async()=>{try{await rpc("sol_pessoa_salvar",{p_token:TOKEN,p_id:p.id||null,p_nome:$("pNome").value,p_fornecedor:$("pForn").value,
+    p_email:$("pEmail").value,p_senha:$("pSenha").value||null,p_ativo:$("pAtivo").value==="1"});acessos()}catch(e){msg("pMsg",e.message,"err")}};
+  if($("pDel"))$("pDel").onclick=async()=>{if(!confirm("Remover este acesso?"))return;try{await rpc("sol_pessoa_remover",{p_token:TOKEN,p_id:p.id});acessos()}catch(e){msg("pMsg",e.message,"err")}};
+}
+
+iniciar();
+</script>
+</body>
+</html>
