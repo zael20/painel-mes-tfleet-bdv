@@ -96,6 +96,8 @@ code.key{background:var(--card2);border:1px solid var(--line);border-radius:6px;
 .anx{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .anx span{background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12px}
 .anx a{cursor:pointer;color:var(--brand)}
+.pedido{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;white-space:pre-wrap;font-size:14px;max-height:220px;overflow:auto}
+.anx label{cursor:pointer}
 .pub{max-width:820px;margin:0 auto;padding:16px}
 .pubcard{background:#fff;border:1px solid var(--line);border-top:4px solid var(--c);border-radius:14px;box-shadow:var(--shadow);padding:16px}
 .kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:12px 0}
@@ -174,7 +176,7 @@ async function rpc(fn,body){
 async function iniciar(){
   const cand=[ls.get(K_SESS), ls.get(K_CENTRAL)].filter(s=>s&&s.token);
   for(const s of cand){try{const q=await rpc("sol_sessao",{p_token:s.token});if(q&&!q.erro){entrar(s.token,q);return}}catch(e){}}
-  if(QS.get("v")){publico(QS.get("v"));return}
+  const pk=QS.get("d")||QS.get("v");if(pk){publico(pk);return}
   mostrarLogin();
 }
 function mostrarLogin(){$("vPub").classList.add("hidden");$("vLogin").classList.remove("hidden");$("lSenha").focus()}
@@ -201,8 +203,8 @@ async function carregar(primeira){
   if(QUEM.admin){try{PEDIDOS=await rpc("sol_pedidos_lista",{p_token:TOKEN})||[]}catch(e){}}
   desenhar();avisos(primeira);
   if(primeira&&QS.get("acessos")&&QUEM.admin){acessos();return}
-  if(primeira){const c=QS.get("c"),v=QS.get("v");
-    if(c)abrir(+c);else if(v){const k=CARDS.find(x=>x.chave_publica===v);if(k)abrir(k.id)}}
+  if(primeira){const c=QS.get("c"),v=QS.get("d")||QS.get("v");
+    if(c)abrir(+c);else if(v){const k=CARDS.find(x=>x.slug===v||x.chave_publica===v);if(k)abrir(k.id)}}
 }
 function sitTxt(c){switch(c.situacao){
   case"vencido":return"Vencido há "+(-c.dias_para_prazo)+" dia"+(c.dias_para_prazo===-1?"":"s");
@@ -266,10 +268,10 @@ function msg(id,t,cl){const m=$(id);if(m){m.textContent=t;m.className="msg "+(cl
 
 const CAMPOS=[ // [campo, rótulo, tipo, fornecedor pode editar, classe]
   ["fornecedor","Fornecedor","text",0],["responsavel","Responsável no fornecedor","text",1],
-  ["assunto","Assunto (título do cartão)","text",0,"full"],["link","Link (documento, proposta)","url",0,"full"],
+  ["assunto","Assunto (título do cartão)","text",0,"full"],
   ["enviado_em","Enviado em","date",0],["inicio_em","Começou em","date",1],
   ["prazo","Prazo de entrega","date",1],["entregue_em","Entregue em","date",1],
-  ["ultimo_contato","Último contato","date",0],["descricao","Observações","area",0,"full"]];
+  ["ultimo_contato","Último contato","date",0]];
 
 function form(c){
   const forn=QUEM.tipo==="fornecedor",ed=QUEM.edita;
@@ -277,6 +279,8 @@ function form(c){
     const dis=!ed||(forn&&!fp)?"disabled":"";let v=c[k]==null?"":c[k];if(t==="date")v=String(v).slice(0,10);
     const inp=t==="area"?`<textarea id="c_${k}" rows="3" ${dis}>${esc(v)}</textarea>`:`<input id="c_${k}" type="${t}" value="${esc(v)}" ${dis} ${k==="fornecedor"?'list="dlForn"':""}>`;
     return `<label class="fl ${cl||""}">${l}${k==="prazo"&&c.prazo_original&&c.prazo_original!==c.prazo?` <span class="note">(1º prazo: ${dBR(c.prazo_original)})</span>`:""}${inp}</label>`}).join("")}
+    ${c.descricao?`<div class="fl full"><label class="fl" style="margin:0">Pedido (texto enviado)</label><div class="pedido">${esc(c.descricao)}</div></div>`:""}
+    ${c.status!=="Enviado"||c.observacoes?`<label class="fl full">Observações / próximos passos<textarea id="c_observacoes" rows="3" ${ed?"":"disabled"} placeholder="ex.: o que falta, combinado na reunião, próximo passo">${esc(c.observacoes||"")}</textarea></label>`:""}
     ${!forn?`<div class="fl full"><label class="fl" style="margin:0">E-mails que recebem os avisos de prazo</label>${destHTML("dAviso",c.emails||[])}</div>`:""}</div>
     <datalist id="dlForn">${[...new Set(CARDS.map(x=>x.fornecedor))].map(f=>`<option value="${esc(f)}">`).join("")}</datalist>`;
 }
@@ -286,6 +290,7 @@ function ligaSt(){document.querySelectorAll("#stb button").forEach(b=>b.onclick=
 function coletar(c){const d={},forn=QUEM.tipo==="fornecedor";
   CAMPOS.forEach(([k,,t,fp])=>{if(forn&&!fp)return;const el=$("c_"+k);if(!el)return;let v=el.value.trim();
     if(v==="")v=null;const ant=c[k]==null?null:(t==="date"?String(c[k]).slice(0,10):c[k]);if(v!==ant)d[k]=v});
+  if($("c_observacoes")){const v=$("c_observacoes").value.trim()||null;if(v!==(c.observacoes||null))d.observacoes=v}
   if(!forn&&$("dAviso")){const novo=destLer("dAviso");if(novo.join(",")!==(c.emails||[]).join(","))d.emails=novo}
   const s=document.querySelector("#stb .on");if(s&&s.dataset.s!==c.status)d.status=s.dataset.s;return d}
 
@@ -314,10 +319,13 @@ async function abrir(id){
   const c=r.cartao,interno=QUEM.tipo==="interno";
   const mailById=Object.fromEntries((mails||[]).map(m=>[m.id,m]));
   const tl=r.historico.map(h=>evHTML(h,mailById)).join("");
-  const pub=location.origin+location.pathname+"?v="+c.chave_publica;
+  const pub=r.link||(location.origin+location.pathname+"?d="+c.slug);DOCS=r.docs||[];
   dlg(`<div class="dh"><h3><span class="chip ${c.situacao}">${esc(sitTxt(c))}</span><br>${esc(c.assunto)}</h3><button class="x" onclick="fechar()">×</button></div>
   <div class="db">${stBtns(c)}${form(c)}
-  ${c.link?`<p class="note">Documento: <a href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.link)}</a></p>`:""}
+  <div class="fl" style="margin-top:12px"><label class="fl">Documentos</label>
+   <div class="anx">${DOCS.map(a=>`<span>📎 <a onclick="baixar(${a.id})">${esc(a.nome)}</a> ${kb(a.tamanho)}${interno&&QUEM.edita?` <a title="remover" onclick="docDel(${a.id},${c.id})">×</a>`:""}</span>`).join("")||'<span class="note" style="border:0;background:none;padding:0">Nenhum documento ainda.</span>'}</div>
+   ${QUEM.edita?`<label class="btn" style="margin-top:6px;align-self:flex-start">📎 Anexar documento<input type="file" multiple class="hidden" onchange="docEnviar(this,${c.id})"></label>`:""}
+   <div class="msg" id="dMsg"></div></div>
   <p class="note">Link para acompanhar (só ver, sem senha): <a href="${esc(pub)}" target="_blank" rel="noopener">${esc(pub)}</a> <button class="btn" type="button" onclick="copiar('${esc(pub)}',this)">Copiar</button></p>
   <div class="acts">${QUEM.admin?'<button class="btn d" id="cDel">Apagar</button>':""}<span style="flex:1"></span>
    ${QUEM.edita?'<button class="btn" id="cRep">↪ Repassar</button>':""}
@@ -332,7 +340,7 @@ async function abrir(id){
     msg("cMsg","Salvando…");try{await rpc("sol_salvar",{p_token:TOKEN,p_id:c.id,p_dados:d});await carregar(false);abrir(c.id)}catch(e){msg("cMsg",e.message,"err")}};
   if($("cEnviar"))$("cEnviar").onclick=async()=>{const t=$("cCom").value.trim();if(!t)return;
     try{await rpc("sol_comentar",{p_token:TOKEN,p_id:c.id,p_texto:t});await carregar(false);abrir(c.id)}catch(e){msg("cMsg",e.message,"err")}};
-  if($("cMail"))$("cMail").onclick=()=>compor(c);
+  if($("cMail"))$("cMail").onclick=()=>compor(c,DOCS);
   if($("cRep"))$("cRep").onclick=()=>repassar(c);
   if($("cDel"))$("cDel").onclick=async()=>{if(!confirm("Apagar este cartão e todo o histórico? Não dá para desfazer."))return;
     try{await rpc("sol_remover",{p_token:TOKEN,p_id:c.id});fechar();carregar(false)}catch(e){msg("cMsg",e.message,"err")}};
@@ -353,6 +361,9 @@ const NOMES={status:"status",responsavel:"responsável",inicio_em:"começou em",
 function detalhe(d){const p=Object.entries(d).filter(([k,v])=>k!=="status"&&k!=="ultimo_contato"&&Array.isArray(v)).map(([k,[a,b]])=>{
   const f=v=>v==null||v===""?"vazio":Array.isArray(v)?v.join(", "):/^\d{4}-\d\d-\d\d/.test(v)?dBR(v):v;return `${NOMES[k]||k}: ${esc(f(a))} → ${esc(f(b))}`});
   return p.length?`<div class="note">${p.join("<br>")}</div>`:""}
+function salvarArq(a){const bin=atob(a.base64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+  const l=document.createElement("a");l.href=URL.createObjectURL(new Blob([u],{type:a.tipo||"application/octet-stream"}));l.download=a.nome;document.body.appendChild(l);l.click();l.remove()}
+async function baixarPub(k,id){try{salvarArq(await rpc("sol_anexo_publico",{p_chave:k,p_id:id}))}catch(e){alert(e.message)}}
 async function baixar(id){try{const a=await rpc("sol_anexo",{p_token:TOKEN,p_id:id});
   const bin=atob(a.base64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
   const l=document.createElement("a");l.href=URL.createObjectURL(new Blob([u],{type:a.tipo||"application/octet-stream"}));l.download=a.nome;l.click();}catch(e){alert(e.message)}}
@@ -378,47 +389,69 @@ async function decidir(id,ok){
     await acessos();if(ok)msg("kPed",`Aprovado. Senha: ${r.senha} — ${r.email_enviado?"vai por e-mail em até 1 minuto":"anote e passe para a pessoa"}.`,"ok");
   }catch(e){msg("kPed",e.message,"err")}}
 
-/* ---------------- escrever e-mail ---------------- */
+/* ---------------- documentos ---------------- */
+let DOCS=[];
+const lerB64=f=>new Promise((ok,er)=>{const r=new FileReader();r.onload=()=>ok({nome:f.name,tipo:f.type||"application/octet-stream",base64:String(r.result).split(",")[1]||""});r.onerror=er;r.readAsDataURL(f)});
+async function docEnviar(inp,id){const fs=[...inp.files];inp.value="";
+  for(const f of fs){if(f.size>MAX_ANEXOS){msg("dMsg",f.name+" passa de 15 MB.","err");return}
+    msg("dMsg","Enviando "+f.name+"…");try{const a=await lerB64(f);await rpc("sol_doc_enviar",{p_token:TOKEN,p_cartao:id,p_nome:a.nome,p_tipo:a.tipo,p_base64:a.base64})}catch(e){msg("dMsg",e.message,"err");return}}
+  await carregar(false);abrir(id)}
+async function docDel(aid,id){if(!confirm("Remover este documento do cartão?"))return;try{await rpc("sol_doc_remover",{p_token:TOKEN,p_id:aid});abrir(id)}catch(e){alert(e.message)}}
+
+/* ---------------- escrever e-mail (também é a "Nova solicitação") ---------------- */
 let ANEXOS=[];
-function compor(c,nova){
-  ANEXOS=[];
-  const assunto=c.assunto||"";
-  dlg(`<div class="dh"><h3>Enviar e-mail · ${esc(c.fornecedor)}</h3><button class="x" onclick="${nova?"carregar(false);fechar()":"abrir("+c.id+")"}">×</button></div><div class="db">
+function compor(c,docs){
+  ANEXOS=[];const nova=!c;c=c||{fornecedor:"TFleet",emails:[]};docs=docs||[];
+  const volta=nova?"fechar()":"abrir("+c.id+")";
+  dlg(`<div class="dh"><h3>${nova?"Nova solicitação":"Enviar e-mail · "+esc(c.fornecedor)}</h3><button class="x" onclick="${volta}">×</button></div><div class="db">
+  ${nova?`<div class="grid" style="margin-bottom:10px"><label class="fl">Fornecedor<input id="mForn" value="${esc(c.fornecedor)}" list="dlForn2"></label>
+    <label class="fl">Prazo de entrega (se já tiver)<input id="mPrazo" type="date"></label></div>
+    <datalist id="dlForn2">${[...new Set(CARDS.map(x=>x.fornecedor))].map(f=>`<option value="${esc(f)}">`).join("")}</datalist>`:""}
   <label class="fl">Para</label>${destHTML("dPara",c.emails||[])}
   <details style="margin:8px 0"><summary class="note">Cópia (Cc)</summary>${destHTML("dCc",[])}</details>
-  <div class="grid"><label class="fl full">Assunto<input id="mAss" value="${esc(assunto)}"></label>
+  <div class="grid"><label class="fl full">Assunto${nova?" (vira o título do cartão)":""}<input id="mAss" value="${esc(c.assunto||"")}"></label>
   <label class="fl full">Texto do e-mail<textarea id="mCorpo" rows="10" placeholder="Prezados,&#10;&#10;…"></textarea></label></div>
-  <p class="note">No fim do e-mail vai automaticamente: <b>"Veja a gestão dessa demanda"</b> com o link para acompanhar o andamento (só ver). Para atualizar, a pessoa entra com a senha dela.</p>
-  <label class="btn" style="margin-top:4px">📎 Anexar arquivos<input type="file" id="mArq" multiple class="hidden"></label>
+  <p class="note">No fim do e-mail vai automaticamente o botão <b>"Veja a gestão dessa demanda"</b>, com o link para acompanhar (só ver) e baixar os documentos. Para atualizar, a pessoa entra com a senha dela.</p>
+  <label class="fl" style="margin-top:6px">Anexos</label>
+  ${docs.length?`<div class="anx">${docs.map(a=>`<span><label><input type="checkbox" class="mDoc" value="${a.id}" data-t="${a.tamanho}" checked onchange="mostraAnx()"> 📎 ${esc(a.nome)} ${kb(a.tamanho)}</label></span>`).join("")}</div>`:""}
+  <label class="btn" style="margin-top:6px">📎 Anexar arquivos (PDF, Word, Excel…)<input type="file" id="mArq" multiple class="hidden"></label>
   <div class="anx" id="mAnx"></div>
-  <div class="acts"><button class="btn" onclick="${nova?"carregar(false);fechar()":"abrir("+c.id+")"}">${nova?"Enviar depois":"Cancelar"}</button><button class="btn p" id="mEnviar">Enviar</button></div>
+  <div class="acts"><button class="btn" onclick="${volta}">Cancelar</button>${nova?'<button class="btn" id="mReg" title="Cria o cartão com esse texto e os arquivos, sem mandar e-mail">Só registrar (já mandei por fora)</button>':""}<button class="btn p" id="mEnviar">Enviar e-mail</button></div>
   <div class="msg" id="mMsg"></div>
-  <p class="note">Sai pelo Gmail do Mizael em até 1 minuto. Quem está em Para e Cc passa a receber os avisos de prazo e fica salvo nos contatos.</p></div>`);
+  <p class="note">Sai pelo Gmail do Mizael em até 1 minuto. Quem está em Para e Cc passa a receber os avisos de prazo e fica salvo nos contatos. Os arquivos ficam guardados no cartão.</p></div>`);
   $("mArq").onchange=e=>{[...e.target.files].forEach(f=>ANEXOS.push(f));e.target.value="";mostraAnx()};
-  $("mEnviar").onclick=async()=>{
-    destAdd("dPara",$("dPara").querySelector("input").value);destAdd("dCc",$("dCc").querySelector("input").value);
-    const para=destLer("dPara"),cc=destLer("dCc"),ass=$("mAss").value.trim(),corpo=$("mCorpo").value;
-    if(!para.length){msg("mMsg","Coloque pelo menos um e-mail em Para.","err");return}
-    if(!ass||!corpo.trim()){msg("mMsg","Preencha assunto e texto.","err");return}
-    const tot=ANEXOS.reduce((s,f)=>s+f.size,0);if(tot>MAX_ANEXOS){msg("mMsg","Anexos passam de 15 MB. Coloque um link do Drive no texto.","err");return}
+  const ler=()=>{destAdd("dPara",$("dPara").querySelector("input").value);destAdd("dCc",$("dCc").querySelector("input").value);
+    return {para:destLer("dPara"),cc:destLer("dCc"),ass:$("mAss").value.trim(),corpo:$("mCorpo").value,
+      docs:[...document.querySelectorAll(".mDoc:checked")].map(x=>+x.value)}};
+  const criarCartao=async(f,descricao)=>{const forn=$("mForn").value.trim();if(!forn)throw new Error("Preencha o fornecedor.");
+    const d={fornecedor:forn,assunto:f.ass,status:"Enviado",enviado_em:hoje(),ultimo_contato:hoje(),emails:f.para.concat(f.cc)};
+    if($("mPrazo").value)d.prazo=$("mPrazo").value;if(descricao)d.descricao=descricao;
+    const r=await rpc("sol_salvar",{p_token:TOKEN,p_id:null,p_dados:d});c=r;return r};
+  $("mEnviar").onclick=async()=>{const f=ler();
+    if(!f.para.length){msg("mMsg","Coloque pelo menos um e-mail em Para.","err");return}
+    if(!f.ass||!f.corpo.trim()){msg("mMsg","Preencha assunto e texto.","err");return}
+    if(totalAnx()>MAX_ANEXOS){msg("mMsg","Anexos passam de 15 MB. Tire algum arquivo.","err");return}
     $("mEnviar").disabled=true;msg("mMsg","Preparando anexos…");
-    try{const anexos=await Promise.all(ANEXOS.map(f=>new Promise((ok,er)=>{const r=new FileReader();r.onload=()=>ok({nome:f.name,tipo:f.type||"application/octet-stream",base64:String(r.result).split(",")[1]||""});r.onerror=er;r.readAsDataURL(f)})));
+    try{const anexos=await Promise.all(ANEXOS.map(lerB64));
+      if(nova&&!c.id)await criarCartao(f);
       msg("mMsg","Enviando…");
-      await rpc("sol_email_enviar",{p_token:TOKEN,p_cartao:c.id,p_para:para,p_cc:cc,p_assunto:ass,p_corpo:corpo,p_anexos:anexos});
+      await rpc("sol_email_enviar",{p_token:TOKEN,p_cartao:c.id,p_para:f.para,p_cc:f.cc,p_assunto:f.ass,p_corpo:f.corpo,p_anexos:anexos,p_docs:f.docs});
       CONTATOS=await rpc("sol_contatos_lista",{p_token:TOKEN})||CONTATOS;await carregar(false);abrir(c.id);
     }catch(e){$("mEnviar").disabled=false;msg("mMsg",e.message,"err")}};
+  if($("mReg"))$("mReg").onclick=async()=>{const f=ler();
+    if(!f.ass){msg("mMsg","Preencha o assunto.","err");return}
+    $("mReg").disabled=true;msg("mMsg","Salvando…");
+    try{if(!c.id)await criarCartao(f,f.corpo.trim()||null);
+      for(const file of ANEXOS){const a=await lerB64(file);await rpc("sol_doc_enviar",{p_token:TOKEN,p_cartao:c.id,p_nome:a.nome,p_tipo:a.tipo,p_base64:a.base64})}
+      await carregar(false);abrir(c.id);
+    }catch(e){$("mReg").disabled=false;msg("mMsg",e.message,"err")}};
 }
-function mostraAnx(){const tot=ANEXOS.reduce((s,f)=>s+f.size,0);
-  $("mAnx").innerHTML=ANEXOS.map((f,i)=>`<span>📎 ${esc(f.name)} ${kb(f.size)} <a onclick="ANEXOS.splice(${i},1);mostraAnx()">×</a></span>`).join("")+(ANEXOS.length?`<span class="note" style="border:0;background:none">${kb(tot)} de 15 MB</span>`:"")}
+function totalAnx(){return ANEXOS.reduce((s,f)=>s+f.size,0)+[...document.querySelectorAll(".mDoc:checked")].reduce((s,x)=>s+(+x.dataset.t||0),0)}
+function mostraAnx(){const tot=totalAnx();
+  $("mAnx").innerHTML=ANEXOS.map((f,i)=>`<span>📎 ${esc(f.name)} ${kb(f.size)} <a onclick="ANEXOS.splice(${i},1);mostraAnx()">×</a></span>`).join("")+(tot?`<span class="note" style="border:0;background:none">${kb(tot)} de 15 MB</span>`:"")}
 
 /* ---------------- nova solicitação ---------------- */
-$("bNovo").onclick=()=>{const c={fornecedor:"TFleet",status:"Enviado",enviado_em:hoje(),ultimo_contato:hoje(),emails:[]};
-  dlg(`<div class="dh"><h3>Nova solicitação</h3><button class="x" onclick="fechar()">×</button></div><div class="db">${stBtns(c)}${form(c)}
-  <div class="acts"><button class="btn" onclick="fechar()">Cancelar</button><button class="btn" id="nSalvar">Só criar o cartão</button><button class="btn p" id="nMail">Criar e escrever o e-mail →</button></div><div class="msg" id="nMsg"></div></div>`);
-  ligaSt();
-  const criar=async(mail)=>{const d=coletar({});d.status=document.querySelector("#stb .on").dataset.s;
-    try{const r=await rpc("sol_salvar",{p_token:TOKEN,p_id:null,p_dados:d});if(mail){compor(r,true)}else{await carregar(false);abrir(r.id)}}catch(e){msg("nMsg",e.message,"err")}};
-  $("nSalvar").onclick=()=>criar(false);$("nMail").onclick=()=>criar(true)};
+$("bNovo").onclick=()=>compor(null);
 
 /* ---------------- contatos ---------------- */
 $("bContatos").onclick=contatos;
@@ -491,8 +524,9 @@ async function publico(chave){
     <div class="st"><span class="chip" style="background:${cor};color:#fff">${esc(c.status)}</span> <span class="chip ${c.situacao}">${esc(sitTxt(c))}</span></div>
     <div class="kv"><div><b>Responsável</b>${esc(c.responsavel||"—")}</div><div><b>Enviado em</b>${dBR(c.enviado_em)}</div><div><b>Começou em</b>${dBR(c.inicio_em)}</div>
       <div><b>Prazo</b>${dBR(c.prazo)}${c.prazo_original&&c.prazo_original!==c.prazo?` <span class="note">(1º: ${dBR(c.prazo_original)})</span>`:""}</div><div><b>Entregue em</b>${dBR(c.entregue_em)}</div><div><b>Último contato</b>${dBR(c.ultimo_contato)}</div></div>
-    ${c.descricao?`<p style="white-space:pre-wrap">${esc(c.descricao)}</p>`:""}
-    ${c.link?`<p class="note">Documento: <a href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.link)}</a></p>`:""}
+    ${c.descricao?`<div class="pedido">${esc(c.descricao)}</div>`:""}
+    ${c.observacoes?`<div class="tl"><h4>Observações / próximos passos</h4><p style="white-space:pre-wrap;margin:0">${esc(c.observacoes)}</p></div>`:""}
+    ${(r.docs||[]).length?`<div class="tl"><h4>Documentos</h4><div class="anx">${r.docs.map(a=>`<span>📎 <a onclick="baixarPub('${esc(chave)}',${a.id})">${esc(a.nome)}</a> ${kb(a.tamanho)}</span>`).join("")}</div></div>`:""}
     ${em?`<div class="tl"><h4>E-mails</h4>${em}</div>`:""}
     <div class="tl"><h4>Andamento</h4>${r.historico.filter(h=>h.tipo!=="email").map(h=>evHTML(h,null)).join("")||'<div class="note">Sem registros.</div>'}</div>
   </div>`;
