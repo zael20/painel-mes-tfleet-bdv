@@ -14,10 +14,19 @@ curl -fsSL "$RAW/fluxo-visitas-whatsapp.json" | sed "s/__INSTANCIA__/$INST/g" > 
 chmod a+r "$TMP/visitas.json"
 $DC cp "$TMP/visitas.json" n8n:/tmp/visitas.json >/dev/null
 $DC exec -T n8n n8n import:workflow --input=/tmp/visitas.json
-$DC exec -T n8n sh -c "n8n publish:workflow --id=visitasWhats0001 2>/dev/null || n8n update:workflow --id=visitasWhats0001 --active=true"
+if $DC exec -T n8n sh -c "n8n publish:workflow --id=visitasWhats0001 || n8n update:workflow --id=visitasWhats0001 --active=true"; then
+  LIGOU=1
+else
+  LIGOU=0
+  echo "!! Não consegui ligar o fluxo pela linha de comando (veja a mensagem acima)."
+fi
 rm -rf "$TMP"
 echo "Reiniciando o n8n..."
 $DC restart n8n >/dev/null
 echo
-echo "PRONTO. Fluxo 'Visitas — WhatsApp para o Mizael' ligado (roda a cada 1 minuto)."
+if [ "$LIGOU" = 1 ]; then
+  echo "PRONTO. Fluxo 'Visitas — WhatsApp para o Mizael' ligado (roda a cada 1 minuto)."
+else
+  echo "Fluxo importado, mas DESLIGADO: abra o n8n, entre em 'Visitas — WhatsApp para o Mizael' e ligue (Publish / Active)."
+fi
 echo "Confira se o seu número está em Visitas aos carros -> Ajustes -> Seu WhatsApp."
