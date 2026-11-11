@@ -61,7 +61,7 @@ alter table public.ocorrencias
   add column if not exists procedimento_dica   text;      -- o que o Monitor achou (Bluetooth desligado / outro aparelho pareado)
 alter table public.ocorrencias drop constraint if exists ocorrencias_origem_check;
 alter table public.ocorrencias add constraint ocorrencias_origem_check
-  check (origem in ('whatsapp','manual','retroativo'));
+  check (origem in ('whatsapp','manual','retroativo','monitor'));   -- monitor = aberta sozinha pelo Monitor Frota (11/11)
 create index if not exists ocorrencias_tag     on public.ocorrencias (tag, criado_em desc);
 create index if not exists ocorrencias_status  on public.ocorrencias (status, ultima_msg_em desc);
 -- Nao deixa existir duas ocorrencias ABERTAS do mesmo onibus e mesma categoria (anti-duplicata).
@@ -1628,3 +1628,64 @@ grant execute on function public.procedimento_marcar(bigint, boolean, text, text
 
 -- passada unica: o que a API ja mostra que voltou a registrar (inclui as categorias novas de 11/11)
 select public.resolver_contagem_pela_api() as fechadas_agora_pela_api;
+
+
+-- ================================================================ CARGA LENTA COM O CARRO ANDANDO -> OCORRENCIA AUTOMATICA (11/11)
+-- O Monitor Frota guarda 1 amostra por minuto (samples: plugged, current_ma, speed_kmh). Num dia em que o carro ficou
+-- 10+ minutos ANDANDO na tomada e 60%+ desse tempo carregou abaixo de 300 mA, o carregador DO CARRO esta fraco
+-- (carga lenta parado = carregador da garagem, nao conta). Abre 1 ocorrencia 'carregamento' (origem 'monitor',
+-- responsavel Mizael) se o carro ainda nao tem uma aberta de carregamento, e nao abre de novo para o mesmo dia.
+-- Roda sozinho a cada 30 min (pg_cron). Na mao:  select public.abrir_ocorrencias_carga_lenta();
+alter table public.ocorrencias add column if not exists responsavel text check (length(responsavel) <= 80);
+
+create or replace function public.abrir_ocorrencias_carga_lenta(p_dias integer default 2, p_min_ma numeric default 300,
+                                                               p_min_andando integer default 10, p_frac numeric default 0.6)
+returns integer language plpgsql security definer set search_path = public as $$
+declare r record; n integer := 0; v_id bigint;
+begin
+  if to_regclass('public.samples') is null or to_regclass('public.v_last_sample') is null
+     or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'samples'
+                     and column_name = 'speed_kmh') then
+    return 0;
+  end if;
+  for r in execute $q$
+    with d as (
+      select s.device_id, (s.ts at time zone 'America/Belem')::date as dia,
+             count(*) filter (where s.speed_kmh > 0) as andando,
+             count(*) filter (where s.speed_kmh > 0 and s.current_ma is not null and s.current_ma < $2) as fraca,
+             min(s.ts) filter (where s.speed_kmh > 0 and s.current_ma is not null and s.current_ma < $2) as desde
+        from public.samples s
+       where s.plugged and s.ts > now() - make_interval(days => greatest($1, 1))
+       group by 1, 2)
+    select public.normaliza_tag(l.device_name) as tag, d.dia, d.andando, d.fraca, d.desde
+      from d join public.v_last_sample l on l.device_id = d.device_id
+     where d.andando >= $3 and d.fraca >= d.andando * $4 and public.normaliza_tag(l.device_name) is not null
+     order by d.dia $q$ using p_dias, p_min_ma, p_min_andando, p_frac
+  loop
+    -- ja tem carregamento aberto nesse carro, ou ja abriu pelo monitor nesse dia (ou depois): nao duplica
+    continue when exists (select 1 from ocorrencias o where o.tag = r.tag and o.categoria = 'carregamento'
+                            and o.status in ('aberta','em_andamento','aguardando_teste'));
+    continue when exists (select 1 from ocorrencias o where o.tag = r.tag and o.origem = 'monitor' and o.categoria = 'carregamento'
+                            and (coalesce(o.primeira_msg_em, o.criado_em) at time zone 'America/Belem')::date >= r.dia);
+    insert into ocorrencias (tag, categoria, problema, urgencia, origem, relatado_por, responsavel, primeira_msg_em, ultima_msg_em, confianca)
+    values (r.tag, 'carregamento',
+            left('Ocorrência gerada automaticamente para verificar o carregador do carro: carga lenta com o carro andando em ' ||
+                 to_char(r.dia, 'DD/MM') || ' (' || r.fraca || ' de ' || r.andando || ' min abaixo de ' || p_min_ma::int || ' mA)', 300),
+            'media', 'monitor', 'Monitor Frota', 'Mizael', r.desde, r.desde, 1)
+    returning id into v_id;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke all on function public.abrir_ocorrencias_carga_lenta(integer, numeric, integer, numeric) from public, anon, authenticated;
+
+-- agenda a cada 30 min (pg_cron do Supabase). Se o pg_cron nao estiver disponivel, so avisa; da para rodar na mao.
+do $$
+begin
+  create extension if not exists pg_cron;
+  perform cron.unschedule(jobid) from cron.job where jobname = 'ocorrencias-carga-lenta';
+  perform cron.schedule('ocorrencias-carga-lenta', '*/30 * * * *', 'select public.abrir_ocorrencias_carga_lenta()');
+exception when others then
+  raise notice 'pg_cron indisponivel (%). Rode na mao: select public.abrir_ocorrencias_carga_lenta();', sqlerrm;
+end $$;
+select public.abrir_ocorrencias_carga_lenta() as ocorrencias_de_carga_lenta_abertas_agora;
