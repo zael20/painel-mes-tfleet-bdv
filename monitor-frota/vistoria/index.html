@@ -486,7 +486,7 @@ body.tf-cv::before { content: ""; position: fixed; z-index: 4; left: 0; right: 0
       <div class="seg small" id="ocFilt">
         <button type="button" data-f="open" aria-pressed="true">Abertas</button>
         <button type="button" data-f="res" aria-pressed="false">Resolvidas</button>
-        <button type="button" data-f="semcarro" aria-pressed="false">Sem carro <span class="tabcount" id="ocSemN" hidden></span></button>
+        <button type="button" data-f="semcarro" aria-pressed="false">Aguardando <span class="tabcount" id="ocSemN" hidden></span></button>
         <button type="button" data-f="all" aria-pressed="false">Todas</button>
       </div>
       <input class="text" id="ocQ" inputmode="numeric" placeholder="Filtrar por carro (ex.: 65)" maxlength="4" aria-label="Filtrar por carro">
@@ -1356,7 +1356,8 @@ function refreshAll() {
 // padrao 07:30 as 17:00 (Belem), segunda a sexta, sem feriado. Resolvidas usam horas_uteis da view; abertas sao contadas aqui.
 var OC_CAT = { carregamento: "Carregamento", abrir_viagem: "Abrir viagem", contagem_passageiros: "Contagem de passageiros",
   internet_chip: "Internet / chip", celular_defeito: "Celular com defeito", suporte: "Suporte", som_musica: "Som / música", outro: "Outro" };
-var OC_ST = { aberta: ["Aberta", "nok"], em_andamento: ["Em andamento", "warn"], resolvida: ["Resolvida", "res"], descartada: ["Descartada", ""], historico: ["Sem desfecho", ""], aguardando_carro: ["Aguardando nº do carro", "warn"] };
+var OC_ST = { aberta: ["Aberta", "nok"], em_andamento: ["Em andamento", "warn"], resolvida: ["Resolvida", "res"], descartada: ["Descartada", ""], historico: ["Sem desfecho", ""], aguardando_carro: ["Aguardando nº do carro", "warn"], aguardando_teste: ["Aguardando teste", "warn"] };
+function isWaitOc(o) { return o.status === "aguardando_carro" || o.status === "aguardando_teste"; }   // ainda nao e chamado aberto
 var EXP = { ini: 8, fim: 17, sab: false, dom: false, fer: false, feriados: {}, desde: "2026-10-29T03:00:00Z" };
 try { var ex0 = JSON.parse(ls("vb_exped") || "null"); if (ex0) EXP = ex0; } catch (e) {}
 function bhDia() { return Math.round((EXP.fim - EXP.ini) * 60); }   // 570 min = 1 dia util no padrao
@@ -1398,6 +1399,7 @@ function fromOc(r) {
     por: r.resolvido_por, sol: r.solucao, phone: ph, perfil: r.relatado_por || "", reinc: r.reincidencias || 0, origem: r.origem,
     vistId: r.vistoria_id, bt: r.bt_causa, monSinal: r.mon_ultimo_sinal, demo: !!r.demo,
     relNome: r.reporter_nome || null, relMat: r.reporter_matricula || null,
+    procSt: r.procedimento_status || null, procEm: r.procedimento_em || null,
     pergSt: r.pergunta_status || null, pergEm: r.pergunta_em || null, pergN: r.pergunta_qtd || 0,
     ct: r.conta_no_tempo != null ? !!r.conta_no_tempo : null, obsMon: r.observacao_monitor || null,
     relExibir: r.relator_exibir || null, relFonte: r.relator_fonte || null, tagFonte: r.tag_fonte || null, motViagem: r.motorista_viagem || null, linha: r.viagem_linha || null, bhSrv: r.status === "resolvida" && r.horas_uteis != null ? +r.horas_uteis : null };
@@ -1422,7 +1424,7 @@ function ocOpenMin(o) { return bhMin(o.ini, o.fim || new Date().toISOString()); 
 function ocCt(o) { return o.ct != null ? o.ct : o.origem !== "retroativo" && (!EXP.desde || new Date(o.ini) >= new Date(EXP.desde)); }
 function ocTimeMin(o) { return ocCt(o) ? ocResMin(o) : null; }
 function ocResMin(o) { return o.fim ? (o.bhSrv != null ? Math.round(o.bhSrv * 60) : bhMin(o.ini, o.fim)) : null; }
-function porTxt(p) { return !p ? "—" : p === "vistoria" ? "Vistoria (CHECK BDV)" : p === "api" ? "API TFleet (automático)" : p === "painel" ? "Painel" : p; }
+function porTxt(p) { return !p ? "—" : p === "vistoria" ? "Vistoria (CHECK BDV)" : p === "api" ? "API TFleet (automático)" : p === "motorista" ? "Motorista (passo a passo)" : p === "painel" ? "Painel" : p; }
 function demoOc() { // so na previa: exemplos para ver a tela; nunca vao para o servidor
   var tags = Object.keys(latest).sort().slice(0, 40), cats = Object.keys(OC_CAT), out = [], seed = 7;
   function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
@@ -1440,6 +1442,8 @@ function demoOc() { // so na previa: exemplos para ver a tela; nunca vao para o 
       solucao: fim ? "Cabo trocado na vistoria" : null, conta_no_tempo: i % 5 !== 0, origem: i % 7 === 3 ? "retroativo" : i % 9 === 4 ? "manual" : "whatsapp",
       observacao_monitor: cat === "contagem_passageiros" && i % 2 ? "Monitor Frota: provavelmente o Bluetooth do celular estava desligado (exemplo da prévia), por isso o leitor não registrou." : null, demo: true });
   }
+  out.push({ id: -95, tag: tags[0] || "80", categoria: "contagem_passageiros", problema: "Não registra passageiro", status: "aguardando_teste", urgencia: "media", relatado_por: "Rose", reporter_phone: "559199990004",
+    primeira_msg_em: new Date(Date.now() - 600000).toISOString(), criado_em: new Date(Date.now() - 600000).toISOString(), origem: "whatsapp", procedimento_status: "enviado", procedimento_em: new Date(Date.now() - 540000).toISOString(), demo: true });
   [["Celular não liga", "celular_defeito", 2, 1], ["Leitor não conta", "contagem_passageiros", 1, 0]].forEach(function (x, j) {
     var ini = new Date(Date.now() - (j + 1) * 3 * 3600000).toISOString();
     out.push({ id: -90 - j, tag: null, categoria: x[1], problema: x[0], status: "aguardando_carro", urgencia: "media", relatado_por: "Carlos", reporter_phone: "559199990002",
@@ -1502,7 +1506,7 @@ function ocRow(o) {
   var st = OC_ST[o.status] || [o.status, ""];
   var side = isOpenOc(o) ? agoShort(o.ini) + " · " + fmtBhShort(ocOpenMin(o)) : o.fim ? (ocCt(o) ? "em " + fmtBhShort(ocResMin(o)) : "resolv. " + fmtDate(todayBelemOf(o.fim))) : fmtDate(todayBelemOf(o.ini));
   return { tag: o.tag || "?", side: side, go: function () { openOc(o.id); },
-    main: [el("span", { class: "badge " + st[1], text: o.status === "resolvida" && o.por === "api" ? "Resolvida pela API" : o.status === "resolvida" && o.por === "vistoria" ? "Resolvida na vistoria" : st[0] }), " ", origBadge(o), o.tagFonte === "viagem" ? " " : null, o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null, " ", o.problema, el("span", { class: "hint", text: " · " + relTxt(o) }),
+    main: [el("span", { class: "badge " + st[1], text: o.status === "resolvida" && o.por === "api" ? "Resolvida pela API" : o.status === "resolvida" && o.por === "motorista" ? "Resolvida pelo motorista" : o.status === "resolvida" && o.por === "vistoria" ? "Resolvida na vistoria" : st[0] }), " ", origBadge(o), o.tagFonte === "viagem" ? " " : null, o.tagFonte === "viagem" ? el("span", { class: "badge", text: "carro pela viagem" }) : null, " ", o.problema, el("span", { class: "hint", text: " · " + relTxt(o) }),
       o.obsMon ? el("span", { class: "monobs", text: o.obsMon.length > 110 ? o.obsMon.slice(0, 107) + "…" : o.obsMon }) : null] };
 }
 function byOld(a, b) { return a.ini < b.ini ? -1 : 1; }
@@ -1512,7 +1516,7 @@ function paintOcBadge() { var n = ocList().filter(isOpenOc).length, b = $("tabOc
 // ---- tela
 function paintOc() {
   var all = ocList(), open = all.filter(isOpenOc);
-  var resP = all.filter(function (o) { return o.fim && ocInPer(o.fim); }), abP = all.filter(function (o) { return ocInPer(o.ini) && o.status !== "aguardando_carro"; });   // sem carro ainda nao e chamado
+  var resP = all.filter(function (o) { return o.fim && ocInPer(o.fim); }), abP = all.filter(function (o) { return ocInPer(o.ini) && !isWaitOc(o); });   // sem carro ainda nao e chamado
   var perTxt = ocDays ? "Últimos " + ocDays + " dias" : "Todo o histórico";
   $("ocSrc").textContent = ocRows ? "Servidor, atualizado " + fmtDT(ocAt) + "." : IS_PREVIEW ? "Prévia: ocorrências de EXEMPLO, só para ver a tela." : "Ainda sem dados do servidor (precisa de internet uma vez).";
   var mins = resP.map(ocTimeMin).filter(function (m) { return m != null; }).sort(function (a, b) { return a - b; });
@@ -1525,21 +1529,21 @@ function paintOc() {
    [mins.length ? fmtBhShort(avg) : "sem dados", mins.length ? "tempo médio de resolução (mediana " + fmtBhShort(med) + ", " + plural(mins.length, "caso", "casos") + ")" : "tempo médio: ainda sem relatos novos resolvidos", false, function () { openList("Tempo de resolução", perTxt + ", só relatos novos, mais demoradas primeiro", function () { return resP.filter(function (o) { return ocTimeMin(o) != null; }).sort(function (a, b) { return ocTimeMin(b) - ocTimeMin(a); }).map(ocRow); }, "ocorrência"); }],
    [mins.length ? Math.round(in1 * 100 / mins.length) + "%" : "sem dados", "resolvidas em até 1 dia útil", false, function () { openList("Resolvidas em até 1 dia útil", perTxt + ", só relatos novos", function () { return resP.filter(function (o) { var m = ocTimeMin(o); return m != null && m <= bhDia(); }).sort(byNew).map(ocRow); }, "ocorrência"); }]
   ].forEach(function (x) { var bt = el("button", { type: "button", class: "kpi" + (x[2] ? " alert" : "") }, [el("b", { text: x[0] }), el("span", { text: x[1] })]); bt.addEventListener("click", x[3]); k.appendChild(bt); });
-  var nsc = all.filter(function (o) { return o.status === "aguardando_carro"; }).length;
-  if (nsc) { var sw = el("button", { type: "button", class: "notice", style: "display:block;width:100%;text-align:left;margin-top:10px;font:inherit;cursor:pointer;grid-column:1/-1" },
-      [plural(nsc, "relato esperando", "relatos esperando") + " o número do carro (ainda não contam como abertos). Toque para ver e corrigir."]);
+  var nsc = all.filter(function (o) { return o.status === "aguardando_carro"; }).length, nts = all.filter(function (o) { return o.status === "aguardando_teste"; }).length;
+  if (nsc || nts) { var sw = el("button", { type: "button", class: "notice", style: "display:block;width:100%;text-align:left;margin-top:10px;font:inherit;cursor:pointer;grid-column:1/-1" },
+      [[nsc ? plural(nsc, "relato esperando", "relatos esperando") + " o número do carro" : "", nts ? nts + (nsc ? "" : (nts === 1 ? " relato" : " relatos")) + " esperando o teste do motorista com o passo a passo" : ""].filter(Boolean).join(" e ") + " (ainda não contam como abertos). Toque para ver."]);
     sw.addEventListener("click", function () { ocFilt = "semcarro"; ls("vb_oc_filt", ocFilt); document.querySelectorAll("#ocFilt button").forEach(function (x) { x.setAttribute("aria-pressed", String(x.dataset.f === ocFilt)); }); paintOc(); $("ocList").scrollIntoView({ block: "start" }); });
     k.appendChild(sw); }
   function hm(h) { return String(Math.floor(h)).padStart(2, "0") + ":" + String(Math.round(h % 1 * 60)).padStart(2, "0"); }
   var dias = EXP.sab && EXP.dom ? "todos os dias" : EXP.sab ? "segunda a sábado" : EXP.dom ? "domingo a sexta" : "segunda a sexta";
   $("ocBh").textContent = "Horas úteis: " + hm(EXP.ini) + " às " + hm(EXP.fim) + ", " + dias + (EXP.fer ? "" : ", sem feriados") + ". 1 dia útil = " + fmtBhShort(bhDia()) + "." + (EXP.desde ? " Tempo médio e % só contam relatos a partir de " + fmtDT(EXP.desde).slice(0, 8) + "; os antigos entram só na quantidade." : "") + (EXP.srv ? "" : " (Regra padrão; o servidor ainda não respondeu.)");
   // lista
-  var semc = all.filter(function (o) { return o.status === "aguardando_carro"; });
+  var semc = all.filter(isWaitOc);
   $("ocSemN").hidden = !semc.length; $("ocSemN").textContent = semc.length;
   var q = normTag(ocQ), L = (ocFilt === "open" ? open : ocFilt === "semcarro" ? semc : ocFilt === "res" ? all.filter(function (o) { return o.fim; }) : all)
     .filter(function (o) { return !q || o.tag === q; }).sort(ocFilt === "open" || ocFilt === "semcarro" ? byOld : byNew);
   var box = $("ocList"); box.textContent = "";
-  if (!L.length) box.appendChild(el("div", { class: "empty", text: ocFilt === "open" ? "Nenhuma ocorrência aberta." : ocFilt === "semcarro" ? "Nenhum relato esperando o número do carro." : "Nada aqui." }));
+  if (!L.length) box.appendChild(el("div", { class: "empty", text: ocFilt === "open" ? "Nenhuma ocorrência aberta." : ocFilt === "semcarro" ? "Nenhum relato esperando número do carro ou teste do motorista." : "Nada aqui." }));
   L.slice(0, 200).forEach(function (o) {
     var r = ocRow(o), bt = el("button", { type: "button", class: isOpenOc(o) && ocOpenMin(o) > 2 * bhDia() ? "late" : "" }, [el("span", { class: "n", text: r.tag }), el("span", { class: "w" }, r.main), el("span", { class: "a", text: r.side })]);
     bt.addEventListener("click", r.go); box.appendChild(bt);
@@ -1668,6 +1672,11 @@ function paintOcSheet(id) {
     o.tagFonte === "viagem" ? el("span", { class: "hint", text: "O relato não dizia o carro: ele foi achado pela viagem que o motorista abriu" + (o.linha ? " (linha " + o.linha + ")" : "") + ". Confira." }) : null,
     o.reinc ? el("span", { class: "hint", text: "Relatado de novo " + plural(o.reinc, "vez", "vezes") + " enquanto estava aberta." }) : null,
     o.status === "aguardando_carro" ? el("span", { class: "hint warn", text: "Relato sem número de carro válido: ainda não é chamado aberto." + (o.pergSt === "enviada" ? " O sistema perguntou o número no grupo" + (o.pergEm ? " às " + fmtDT(o.pergEm).slice(-5) + " de " + fmtDT(o.pergEm).slice(0, 5) : "") + (o.pergN > 1 ? " (" + o.pergN + " vezes)" : "") + "." : o.pergSt === "erro" ? " A pergunta no grupo falhou." : "") + " Se você souber o carro, corrija abaixo." }) : null]));
+  if (o.procSt) {
+    var PROC = { pendente: "Passo a passo ainda vai ser enviado no grupo", enviado: "Passo a passo (fechar e abrir o app BDV) enviado no grupo", deu_certo: "O motorista testou o passo a passo: deu certo",
+      nao_deu: "O motorista testou o passo a passo: não deu certo", sem_resposta: "Passo a passo enviado, sem resposta em 30 min", erro: "Não consegui enviar o passo a passo no grupo" };
+    b.appendChild(el("div", { class: "notice" + (o.procSt === "deu_certo" ? " mon" : ""), text: (PROC[o.procSt] || o.procSt) + (o.procEm ? " · " + fmtDT(o.procEm).slice(0, 5) + " às " + fmtDT(o.procEm).slice(-5) : "") + (o.status === "aguardando_teste" ? ". Se ninguém responder em 30 min, vira chamado aberto." : ".") }));
+  }
   b.appendChild(carEditBox(o));
   b.appendChild(el("div", { class: "facts" }, [
     el("div", { class: "fact" }, [el("b", { text: fmtDT(o.ini).slice(0, 8) }), el("span", { text: "aberta às " + fmtDT(o.ini).slice(-5) + " · " + agoTxt(o.ini) })]),
