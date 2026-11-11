@@ -281,6 +281,7 @@ body.tf-cv .sheet { top: var(--cvh); }
 body.tf-cv::before { content: ""; position: fixed; z-index: 4; left: 0; right: 0; top: 0; height: var(--cvh); background: var(--accent); }
 .badge.orig-whatsapp { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
 .badge.orig-retroativo { background: var(--idle-bg); color: var(--idle); }
+.badge.orig-monitor { background: var(--warn-bg); color: var(--warn); }
 .badge.orig-manual { background: color-mix(in srgb, var(--bar) 16%, transparent); color: var(--bar); }
 .monobs { display: block; margin-top: 3px; font-size: 13px; color: var(--bar); }
 .notice.mon { background: color-mix(in srgb, var(--bar) 12%, var(--surface)); color: var(--fg); border-left: 4px solid var(--bar); }
@@ -1399,12 +1400,13 @@ function fromOc(r) {
     por: r.resolvido_por, sol: r.solucao, phone: ph, perfil: r.relatado_por || "", reinc: r.reincidencias || 0, origem: r.origem,
     vistId: r.vistoria_id, bt: r.bt_causa, monSinal: r.mon_ultimo_sinal, demo: !!r.demo,
     relNome: r.reporter_nome || null, relMat: r.reporter_matricula || null,
+    resp: r.responsavel || null,
     procSt: r.procedimento_status || null, procEm: r.procedimento_em || null, procEtapa: r.procedimento_etapa || null, procDica: r.procedimento_dica || null,
     pergSt: r.pergunta_status || null, pergEm: r.pergunta_em || null, pergN: r.pergunta_qtd || 0,
     ct: r.conta_no_tempo != null ? !!r.conta_no_tempo : null, obsMon: r.observacao_monitor || null,
     relExibir: r.relator_exibir || null, relFonte: r.relator_fonte || null, tagFonte: r.tag_fonte || null, motViagem: r.motorista_viagem || null, linha: r.viagem_linha || null, bhSrv: r.status === "resolvida" && r.horas_uteis != null ? +r.horas_uteis : null };
 }
-var OC_ORIG = { whatsapp: "WhatsApp · motorista", retroativo: "Histórico do grupo", manual: "Aberta por você" };
+var OC_ORIG = { whatsapp: "WhatsApp · motorista", retroativo: "Histórico do grupo", manual: "Aberta por você", monitor: "Automática (Monitor)" };
 function origBadge(o) { return OC_ORIG[o.origem] ? el("span", { class: "badge orig-" + o.origem, text: OC_ORIG[o.origem] }) : null; }
 function isOpenOc(o) { return o.status === "aberta" || o.status === "em_andamento"; }
 function ocList() { return (ocRows || (IS_PREVIEW ? demoOc() : [])).map(fromOc).filter(function (o) { return o.status !== "descartada"; }); }
@@ -1679,6 +1681,11 @@ function paintOcSheet(id) {
       (o.procDica ? " Dica do Monitor: " + o.procDica + "." : "") }));
   }
   b.appendChild(carEditBox(o));
+  // responsavel por resolver (as automaticas do Monitor ja vem com um nome)
+  var rIn = el("input", { class: "text", maxlength: "80", placeholder: "Quem vai resolver", value: o.resp || "", "aria-label": "Responsável" });
+  var rBt = el("button", { type: "button", class: "btn", text: "Salvar" });
+  rBt.addEventListener("click", function () { var v = rIn.value.trim(); if (v === (o.resp || "")) { toast("Nada mudou."); return; } patchOc(o, { responsavel: v || null }, "Responsável salvo."); });
+  b.appendChild(el("div", { class: "card" }, [el("h3", { text: "Responsável" + (o.resp ? ": " + o.resp : "") }), el("div", { class: "addrow" }, [rIn, rBt])]));
   b.appendChild(el("div", { class: "facts" }, [
     el("div", { class: "fact" }, [el("b", { text: fmtDT(o.ini).slice(0, 8) }), el("span", { text: "aberta às " + fmtDT(o.ini).slice(-5) + " · " + agoTxt(o.ini) })]),
     o.fim ? el("div", { class: "fact" }, [el("b", { text: fmtBhShort(ocResMin(o)) }), el("span", { text: "para resolver (horas úteis)" + (ocCt(o) ? "" : " · fora das métricas: caso antigo") })])
