@@ -1260,4 +1260,62 @@ begin
 end $$;
 grant execute on function public.sol_pedir_acesso(text, text, text, text) to anon, authenticated;
 
+-- ---------------------------------------------------------------- celular nos contatos + convite com o código
+alter table public.sol_contatos add column if not exists celular text;
+
+drop function if exists public.sol_contato_salvar(text, bigint, text, text, text);
+create or replace function public.sol_contato_salvar(p_token text, p_id bigint, p_nome text, p_email text, p_fornecedor text,
+  p_celular text default null) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token); e text := lower(trim(p_email)); novo bigint;
+  cel text := nullif(regexp_replace(coalesce(p_celular, ''), '\D', '', 'g'), '');
+begin
+  if q->>'tipo' <> 'interno' or not (q->>'edita')::boolean then raise exception 'Sem permissão.'; end if;
+  if e !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'E-mail inválido.'; end if;
+  if cel is not null and length(cel) not between 10 and 13 then raise exception 'Celular com DDD, ex.: 91 98888-7777.'; end if;
+  if p_id is null then
+    insert into sol_contatos (nome, email, fornecedor, celular) values (nullif(trim(p_nome), ''), e, nullif(trim(p_fornecedor), ''), cel)
+    on conflict (email) do update set nome = coalesce(excluded.nome, sol_contatos.nome),
+      fornecedor = coalesce(excluded.fornecedor, sol_contatos.fornecedor), celular = coalesce(excluded.celular, sol_contatos.celular)
+    returning id into novo;
+  else
+    update sol_contatos set nome = nullif(trim(p_nome), ''), email = e, fornecedor = nullif(trim(p_fornecedor), ''), celular = cel
+    where id = p_id returning id into novo;
+  end if;
+  return novo;
+end $$;
+grant execute on function public.sol_contato_salvar(text, bigint, text, text, text, text) to anon, authenticated;
+
+create or replace function public.sol_contatos_lista(p_token text) returns json
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token); adm boolean := (q->>'admin')::boolean;
+begin
+  if q->>'tipo' <> 'interno' then raise exception 'Só para quem pediu.'; end if;
+  return coalesce((select json_agg(x order by x.tem_acesso desc, x.usos desc, x.nome nulls last, x.email) from (
+    select coalesce(c.id, -p.id) as id, c.id as contato_id, coalesce(c.nome, p.nome) as nome, coalesce(c.email, p.email) as email,
+           coalesce(p.fornecedor, c.fornecedor) as fornecedor, c.celular, coalesce(c.usos, 0) as usos, p.id is not null as tem_acesso,
+           case when adm and p.id is not null then json_build_object('id', p.id, 'ativo', p.ativo, 'ultimo_acesso', p.ultimo_acesso,
+             'fornecedor', p.fornecedor, 'nivel', p.nivel, 'travado', p.travado_ate > now()) end as acesso
+    from sol_contatos c full join sol_pessoas p on lower(p.email) = c.email
+    where coalesce(c.email, p.email) is not null) x), '[]'::json);
+end $$;
+
+-- convite por e-mail com o código (o administrador acabou de definir o código; ele confere antes de mandar)
+create or replace function public.sol_convite_email(p_token text, p_pessoa bigint, p_codigo text) returns text
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token, true); p sol_pessoas;
+begin
+  select * into p from sol_pessoas where id = p_pessoa and ativo;
+  if p.id is null or p.email is null then raise exception 'Acesso não encontrado.'; end if;
+  if p.senha_hash <> public._central_hash('solpin:' || trim(p_codigo)) then raise exception 'Esse não é o código atual dessa pessoa.'; end if;
+  insert into sol_emails (cartao_id, para, assunto, corpo, criado_por, segredo, interno)
+  values (null, array[p.email], 'Convite: quadro de demandas',
+    'Olá, ' || p.nome || '.' || E'\n\n' ||
+    'Você foi convidado para acompanhar as demandas no quadro de demandas. Abra o link abaixo e digite o seu código de acesso:' || E'\n\n' ||
+    '    Código: {{SENHA}}' || E'\n\n' ||
+    'O código é pessoal: não compartilhe.', q->>'nome', trim(p_codigo), true);
+  return 'ok';
+end $$;
+grant execute on function public.sol_convite_email(text, bigint, text) to anon, authenticated;
+
 select 'Quadro de solicitações pronto' as resultado, (select count(*) from public.sol_cartoes) as cartoes;
