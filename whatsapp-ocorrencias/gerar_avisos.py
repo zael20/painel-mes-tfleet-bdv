@@ -5,6 +5,8 @@
 # linkPreview false: o link da avaliacao vai como texto simples, sem o cartao grande de previa.
 # 2a corrente (06/11): relato sem numero do carro -> pergunta o numero EM CIMA da mensagem do motorista
 # (perguntas_carro_pendentes / pergunta_marcar; liga/desliga em whatsapp_avisos.perguntar_carro).
+# 3a corrente (11/11): "nao registra passageiro" -> manda o video/texto do passo a passo EM CIMA do relato e pergunta
+# se deu certo (procedimentos_pendentes / procedimento_marcar; liga/desliga em whatsapp_avisos.procedimento_ligado).
 import json, sys
 
 CRED_EVO  = {"httpHeaderAuth": {"id": "credEvolution001", "name": "Evolution API"}}
@@ -34,6 +36,27 @@ const r = $json || {};
 const ok = !!(r.key && r.key.id);
 const erro = ok ? null : String(r.error?.message || r.message || r.error || JSON.stringify(r)).slice(0, 500);
 return { json: { p_id: a.id, p_ok: ok, p_erro: erro } };
+"""
+
+MONTAR_PROC = r"""// Um envio por relato: com video (sendMedia, texto vai na legenda) ou so texto (sendText).
+const r = $input.first().json || {};
+return (r.procedimentos || []).map(a => {
+  const quoted = { key: { id: a.quoted_id, remoteJid: a.grupo_jid, fromMe: false, participant: a.autor_jid },
+                   message: { conversation: a.quoted_texto } };
+  const corpo = a.video_url
+    ? { number: a.grupo_jid, mediatype: 'video', mimetype: 'video/mp4', media: a.video_url, fileName: 'passo-a-passo.mp4',
+        caption: a.texto, delay: 1500, quoted }
+    : { number: a.grupo_jid, text: a.texto, delay: 1500, linkPreview: false, quoted };
+  return { json: { id: a.id, endpoint: a.video_url ? 'sendMedia' : 'sendText', corpo } };
+});
+"""
+
+RESULTADO_PROC = r"""// Guarda o id da mensagem do passo a passo: a resposta "deu certo"/"nao deu" citando ela vai para a ocorrencia certa.
+const a = $('Montar procedimento').item.json;
+const r = $json || {};
+const ok = !!(r.key && r.key.id);
+const erro = ok ? null : String(r.error?.message || r.message || r.error || JSON.stringify(r)).slice(0, 500);
+return { json: { p_id: a.id, p_ok: ok, p_erro: erro, p_msg_id: ok ? r.key.id : null } };
 """
 
 def http(name, pos, url, body, cred, on_error=False):
@@ -66,14 +89,23 @@ nodes = [
   http("Perguntar no grupo", [660, 520], "__EVOLUTION_URL__/message/sendText/__INSTANCIA__", ENVIO, CRED_EVO, on_error=True),
   code("Resultado pergunta", RESULTADO_P, [880, 520], each=True),
   http("Marcar perguntada", [1100, 520], "__SUPABASE_URL__/rest/v1/rpc/pergunta_marcar", "={{ JSON.stringify($json) }}", CRED_SUPA),
+  http("Procedimentos pendentes", [220, 740], "__SUPABASE_URL__/rest/v1/rpc/procedimentos_pendentes", '={"p_limite": 1}', CRED_SUPA),
+  code("Montar procedimento", MONTAR_PROC, [440, 740]),
+  http("Mandar passo a passo", [660, 740], "=__EVOLUTION_URL__/message/{{ $json.endpoint }}/__INSTANCIA__",
+       "={{ JSON.stringify($json.corpo) }}", CRED_EVO, on_error=True),
+  code("Resultado procedimento", RESULTADO_PROC, [880, 740], each=True),
+  http("Marcar procedimento", [1100, 740], "__SUPABASE_URL__/rest/v1/rpc/procedimento_marcar", "={{ JSON.stringify($json) }}", CRED_SUPA),
 ]
 def c(t): return {"main": [[{"node": t, "type": "main", "index": 0}]]}
 connections = {"A cada 2 minutos": {"main": [[{"node": "Avisos pendentes", "type": "main", "index": 0},
-                                              {"node": "Perguntas pendentes", "type": "main", "index": 0}]]},
+                                              {"node": "Perguntas pendentes", "type": "main", "index": 0},
+                                              {"node": "Procedimentos pendentes", "type": "main", "index": 0}]]},
                "Avisos pendentes": c("Separar avisos"),
                "Separar avisos": c("Responder no grupo"), "Responder no grupo": c("Resultado"), "Resultado": c("Marcar avisada"),
                "Perguntas pendentes": c("Separar perguntas"), "Separar perguntas": c("Perguntar no grupo"),
-               "Perguntar no grupo": c("Resultado pergunta"), "Resultado pergunta": c("Marcar perguntada")}
+               "Perguntar no grupo": c("Resultado pergunta"), "Resultado pergunta": c("Marcar perguntada"),
+               "Procedimentos pendentes": c("Montar procedimento"), "Montar procedimento": c("Mandar passo a passo"),
+               "Mandar passo a passo": c("Resultado procedimento"), "Resultado procedimento": c("Marcar procedimento")}
 wf = {"id": "ocorrAvisos00001", "name": "Avisos de resolucao no WhatsApp", "nodes": nodes, "connections": connections,
       "active": False, "settings": {"executionOrder": "v1", "saveDataSuccessExecution": "none", "saveDataErrorExecution": "all"},
       "pinData": {}}

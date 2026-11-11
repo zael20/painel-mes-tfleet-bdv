@@ -106,7 +106,7 @@ SYS = ("Voce analisa mensagens de um grupo de WhatsApp onde motoristas e a equip
 "quantidade de passageiros ou versao de app. A lista FROTA traz os numeros de carro que existem: numero fora dela "
 "esta errado, deixe vazio. Imagem em que nao da para ler o numero com certeza: deixe vazio (o sistema pergunta ao motorista).\n"
 "categoria: carregamento (nao carrega, carrega devagar, cabo, carregador, tomada, bateria descarregando) | "
-"abrir_viagem (app BDV nao abre/inicia/encerra viagem, login, app travado) | contagem_passageiros (nao conta passageiro, "
+"abrir_viagem (app BDV nao abre/inicia/encerra viagem, login, app travado) | contagem_passageiros (nao conta ou nao registra passageiro, viagem que nao registrou passageiros, "
 "leitor RFID, cartao nao le, Bluetooth do leitor) | internet_chip (sem internet, sem sinal, chip, dados) | celular_defeito "
 "(tela quebrada, travando, desligando, nao liga, sumiu) | suporte (suporte solto ou quebrado) | som_musica (som, musica, "
 "volume, radio) | outro.\n"

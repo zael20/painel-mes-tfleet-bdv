@@ -234,6 +234,113 @@
      "name": "Supabase (chave secreta)"
     }
    }
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__SUPABASE_URL__/rest/v1/rpc/procedimentos_pendentes",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\"p_limite\": 1}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Procedimentos pendentes",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    220,
+    740
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Um envio por relato: com video (sendMedia, texto vai na legenda) ou so texto (sendText).\nconst r = $input.first().json || {};\nreturn (r.procedimentos || []).map(a => {\n  const quoted = { key: { id: a.quoted_id, remoteJid: a.grupo_jid, fromMe: false, participant: a.autor_jid },\n                   message: { conversation: a.quoted_texto } };\n  const corpo = a.video_url\n    ? { number: a.grupo_jid, mediatype: 'video', mimetype: 'video/mp4', media: a.video_url, fileName: 'passo-a-passo.mp4',\n        caption: a.texto, delay: 1500, quoted }\n    : { number: a.grupo_jid, text: a.texto, delay: 1500, linkPreview: false, quoted };\n  return { json: { id: a.id, endpoint: a.video_url ? 'sendMedia' : 'sendText', corpo } };\n});\n"
+   },
+   "name": "Montar procedimento",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    740
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "=__EVOLUTION_URL__/message/{{ $json.endpoint }}/__INSTANCIA__",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.corpo) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Mandar passo a passo",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    740
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credEvolution001",
+     "name": "Evolution API"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Guarda o id da mensagem do passo a passo: a resposta \"deu certo\"/\"nao deu\" citando ela vai para a ocorrencia certa.\nconst a = $('Montar procedimento').item.json;\nconst r = $json || {};\nconst ok = !!(r.key && r.key.id);\nconst erro = ok ? null : String(r.error?.message || r.message || r.error || JSON.stringify(r)).slice(0, 500);\nreturn { json: { p_id: a.id, p_ok: ok, p_erro: erro, p_msg_id: ok ? r.key.id : null } };\n",
+    "mode": "runOnceForEachItem"
+   },
+   "name": "Resultado procedimento",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    740
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "__SUPABASE_URL__/rest/v1/rpc/procedimento_marcar",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "name": "Marcar procedimento",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1100,
+    740
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "credSupabase0001",
+     "name": "Supabase (chave secreta)"
+    }
+   }
   }
  ],
  "connections": {
@@ -247,6 +354,11 @@
      },
      {
       "node": "Perguntas pendentes",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Procedimentos pendentes",
       "type": "main",
       "index": 0
      }
@@ -335,6 +447,50 @@
     [
      {
       "node": "Marcar perguntada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Procedimentos pendentes": {
+   "main": [
+    [
+     {
+      "node": "Montar procedimento",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Montar procedimento": {
+   "main": [
+    [
+     {
+      "node": "Mandar passo a passo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Mandar passo a passo": {
+   "main": [
+    [
+     {
+      "node": "Resultado procedimento",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Resultado procedimento": {
+   "main": [
+    [
+     {
+      "node": "Marcar procedimento",
       "type": "main",
       "index": 0
      }

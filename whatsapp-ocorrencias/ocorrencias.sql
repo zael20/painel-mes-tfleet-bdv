@@ -32,7 +32,7 @@ create table if not exists public.ocorrencias (
                    'outro')),
   problema       text not null check (length(problema) <= 300),   -- descricao curta feita pela IA
   urgencia       text not null default 'media' check (urgencia in ('baixa','media','alta')),
-  status         text not null default 'aberta' check (status in ('aberta','em_andamento','resolvida','descartada','aguardando_carro')),
+  status         text not null default 'aberta' check (status in ('aberta','em_andamento','resolvida','descartada','aguardando_carro','aguardando_teste')),
   relatado_por   text check (length(relatado_por) <= 80),
   primeira_msg_em timestamptz,
   ultima_msg_em  timestamptz,
@@ -47,17 +47,25 @@ create table if not exists public.ocorrencias (
 -- = status 'historico' (aconteceu, mas nao se sabe se foi resolvido; nao conta como aberta).
 -- 'aguardando_carro' (06/11): relato do WhatsApp sem numero de carro valido. Nao e chamado aberto ainda: o fluxo pergunta
 -- o numero ao motorista e, quando o numero chega (ou e corrigido no painel), passa sozinha para 'aberta'.
+-- 'aguardando_teste' (11/11): "nao registra passageiro": o sistema mandou o passo a passo (fechar e abrir o app BDV) e
+-- espera o motorista dizer se deu certo. "Nao deu" ou sem resposta = vira 'aberta'. "Deu certo" = resolvida.
 alter table public.ocorrencias drop constraint if exists ocorrencias_status_check;
 alter table public.ocorrencias add constraint ocorrencias_status_check
-  check (status in ('aberta','em_andamento','resolvida','descartada','historico','aguardando_carro'));
+  check (status in ('aberta','em_andamento','resolvida','descartada','historico','aguardando_carro','aguardando_teste'));
+alter table public.ocorrencias
+  add column if not exists procedimento_status text,      -- pendente | enviado | deu_certo | nao_deu | sem_resposta | erro
+  add column if not exists procedimento_em     timestamptz,
+  add column if not exists procedimento_msg_id text,      -- id da mensagem do passo a passo no WhatsApp
+  add column if not exists procedimento_erro   text;
 alter table public.ocorrencias drop constraint if exists ocorrencias_origem_check;
 alter table public.ocorrencias add constraint ocorrencias_origem_check
   check (origem in ('whatsapp','manual','retroativo'));
 create index if not exists ocorrencias_tag     on public.ocorrencias (tag, criado_em desc);
 create index if not exists ocorrencias_status  on public.ocorrencias (status, ultima_msg_em desc);
 -- Nao deixa existir duas ocorrencias ABERTAS do mesmo onibus e mesma categoria (anti-duplicata).
-create unique index if not exists ocorrencias_uma_aberta
-  on public.ocorrencias (tag, categoria) where status in ('aberta','em_andamento') and tag is not null;
+drop index if exists public.ocorrencias_uma_aberta;
+create unique index ocorrencias_uma_aberta
+  on public.ocorrencias (tag, categoria) where status in ('aberta','em_andamento','aguardando_teste') and tag is not null;
 
 -- ---------------------------------------------------------------- mensagens do grupo (registro bruto, nada se perde)
 create table if not exists public.whatsapp_msgs (
@@ -97,13 +105,14 @@ begin
   new.atualizado_em := now();
   -- chegou o numero do carro: o chamado abre de verdade (bateria/tela ja nasce em andamento, como na entrada)
   if new.status = 'aguardando_carro' and new.tag is not null then
-    new.status := case when new.categoria = 'celular_defeito'
+    new.status := case when new.procedimento_status in ('pendente','enviado') then 'aguardando_teste'
+                       when new.categoria = 'celular_defeito'
                         and new.problema ~* '(bateria inchad|inchad|tela trincad|tela quebrad|trincad|carca[cç]a)'
                        then 'em_andamento' else 'aberta' end;
   end if;
   if new.status is distinct from old.status then
     if new.status = 'resolvida' and new.resolvido_em is null then new.resolvido_em := now(); end if;
-    if new.status in ('aberta','em_andamento','aguardando_carro') then new.resolvido_em := null; end if;
+    if new.status in ('aberta','em_andamento','aguardando_carro','aguardando_teste') then new.resolvido_em := null; end if;
     insert into public.ocorrencia_status_log (ocorrencia_id, de, para, por)
     values (new.id, old.status, new.status, coalesce(new.resolvido_por, 'painel'));
   end if;
@@ -248,10 +257,10 @@ language plpgsql security definer set search_path = public as $$
 declare v_cat text; v_old text; v_dest bigint;
 begin
   select categoria, tag into v_cat, v_old from ocorrencias where id = p_oc and (tag is null or p_corrigir)
-     and status in ('aberta','em_andamento','aguardando_carro','historico','resolvida');
+     and status in ('aberta','em_andamento','aguardando_carro','aguardando_teste','historico','resolvida');
   if not found or public.normaliza_tag(p_tag) is null then return p_oc; end if;
   if v_old = public.normaliza_tag(p_tag) then return p_oc; end if;
-  select id into v_dest from ocorrencias where status in ('aberta','em_andamento') and tag = public.normaliza_tag(p_tag)
+  select id into v_dest from ocorrencias where status in ('aberta','em_andamento','aguardando_teste') and tag = public.normaliza_tag(p_tag)
      and categoria = v_cat and id <> p_oc order by ultima_msg_em desc limit 1;
   if v_dest is null then
     -- numero trocado: o motorista da viagem era do carro errado, procura de novo
@@ -322,6 +331,7 @@ declare
   v_num   text;
   v_quoted text := nullif(split_part(coalesce(p->>'quoted_id',''), '#', 1), '');
   v_sem   bigint;
+  v_resp  text;
 begin
   if v_cat not in ('carregamento','abrir_viagem','contagem_passageiros','internet_chip','celular_defeito','suporte','som_musica','outro') then v_cat := 'outro'; end if;
   if v_urg not in ('baixa','media','alta') then v_urg := 'media'; end if;
@@ -338,12 +348,44 @@ begin
   if v_tag is not null and not public.frota_conhecida(v_tag) then v_tag := null; end if;
   if v_num is not null and not public.frota_conhecida(v_num) then v_num := null; end if;
 
+  -- resposta ao PASSO A PASSO ("deu certo" / "nao deu"): citando a mensagem do sistema, ou texto curto do mesmo autor ate 3 h depois
+  v_resp := public.resposta_procedimento(p->>'texto');
+  if v_resp is not null then
+    select o.id into v_id from ocorrencias o
+     where o.procedimento_status in ('enviado','sem_resposta') and o.status in ('aguardando_teste','aguardando_carro','aberta')
+       and (o.procedimento_msg_id = v_quoted
+            or (v_quoted is null and length(p->>'texto') <= 40 and o.procedimento_em between v_ts - interval '3 hours' and v_ts
+                and exists (select 1 from whatsapp_msgs m where m.ocorrencia_id = o.id
+                             and coalesce(nullif(m.autor_jid,''), m.autor_nome) = v_autor)))
+     order by (o.procedimento_msg_id = v_quoted) desc nulls last, o.procedimento_em desc limit 1;
+    if v_id is not null then
+      if v_resp = 'sim' then
+        update ocorrencias set status = 'resolvida', resolvido_por = 'motorista', procedimento_status = 'deu_certo',
+               solucao = coalesce(nullif(solucao,''), 'Resolvido pelo motorista com o passo a passo (fechou e abriu o app BDV).'),
+               ultima_msg_em = greatest(ultima_msg_em, v_ts)
+         where id = v_id;
+      else
+        update ocorrencias set procedimento_status = 'nao_deu', ultima_msg_em = greatest(ultima_msg_em, v_ts),
+               status = case when status = 'aguardando_teste' then 'aberta' else status end
+         where id = v_id;
+      end if;
+      update whatsapp_msgs set ocorrencia_id = v_id where msg_id = p->>'msg_id';
+      -- "nao deu, carro 84": aproveita o numero
+      v_num := coalesce(v_num, public.numero_carro_texto(p->>'texto', false));
+      if v_num is not null and public.frota_conhecida(v_num) and (select tag from ocorrencias where id = v_id) is null then
+        v_id := public.vincular_carro(v_id, v_num);
+      end if;
+      return jsonb_build_object('ok', true, 'acao', 'procedimento_' || v_resp, 'ocorrencia_id', v_id);
+    end if;
+    v_id := null;
+  end if;
+
   -- "Carro 84" mandado EM CIMA (citando) da mensagem do relato ou da pergunta do sistema: vale para aquela ocorrencia,
   -- mesmo que ela ja tenha um numero (corrige o numero errado)
   if v_acao <> 'resolve' and v_quoted is not null then
     select o.id into v_id from ocorrencias o
-     where o.status in ('aguardando_carro','aberta','em_andamento')
-       and (o.pergunta_msg_id = v_quoted
+     where o.status in ('aguardando_carro','aberta','em_andamento','aguardando_teste')
+       and (o.pergunta_msg_id = v_quoted or o.procedimento_msg_id = v_quoted
             or exists (select 1 from whatsapp_msgs w where w.ocorrencia_id = o.id and split_part(w.msg_id, '#', 1) = v_quoted))
      order by o.ultima_msg_em desc limit 1;
     -- resposta a pergunta do sistema aceita frase ("e o carro 84"); citando o relato, so o numero
@@ -378,7 +420,7 @@ begin
   -- mensagem dele (a IA errou, ou veio da viagem): troca o numero
   if v_acao <> 'resolve' and v_num is not null then
     select o.id into v_id from ocorrencias o
-     where o.status in ('aberta','em_andamento') and o.tag is not null and o.tag <> v_num
+     where o.status in ('aberta','em_andamento','aguardando_teste') and o.tag is not null and o.tag <> v_num
        and coalesce(o.tag_fonte, '') <> 'painel'
        and exists (select 1 from whatsapp_msgs m where m.ocorrencia_id = o.id
                     and coalesce(nullif(m.autor_jid,''), m.autor_nome) = v_autor
@@ -412,7 +454,7 @@ begin
   -- autor que esta aguardando o numero, do mesmo problema (foto nova ilegivel nao abre outra)
   if v_tag is null then v_sem := public.ocorrencia_sem_carro_do_autor(v_autor, v_ts); end if;
   select id into v_id from ocorrencias
-   where status in ('aberta','em_andamento','aguardando_carro')
+   where status in ('aberta','em_andamento','aguardando_carro','aguardando_teste')
      and (id = nullif(ia->>'ocorrencia_id','')::bigint or (v_tag is not null and tag = v_tag and categoria = v_cat)
           or (id = v_sem and categoria = v_cat))
    order by (id = nullif(ia->>'ocorrencia_id','')::bigint) desc nulls last, ultima_msg_em desc
@@ -509,7 +551,7 @@ language sql stable security definer set search_path = public as $$
         order by ts desc limit 12) m), '[]'::jsonb),
     'abertas', coalesce((select jsonb_agg(o order by o.ultima_msg_em desc) from (
         select id, tag, categoria, problema, relatado_por, status, ultima_msg_em
-        from ocorrencias where status in ('aberta','em_andamento','aguardando_carro')
+        from ocorrencias where status in ('aberta','em_andamento','aguardando_carro','aguardando_teste')
         order by ultima_msg_em desc nulls last limit 60) o), '[]'::jsonb),
     'frota', to_jsonb(public.frota_lista()));   -- numeros de carro que existem (a IA nao chuta numero fora da lista)
 $$;
@@ -571,7 +613,7 @@ begin
              case public.vistoria_item_da_categoria(o.categoria)
                when 'cabo' then 'cabo/carregador' when 'app' then 'aplicativo' when 'leitor' then 'leitor'
                when 'chip' then 'chip' when 'celular' then 'celular' when 'suporte' then 'suporte' end as rotulo) x
-    where o.status in ('aberta','em_andamento','historico') and o.tag is not null
+    where o.status in ('aberta','em_andamento','aguardando_teste','historico') and o.tag is not null
       and (p_tag is null or o.tag = public.normaliza_tag(p_tag))
       and (p_id is null or o.id = p_id))
   update ocorrencias o set status = 'resolvida', resolvido_por = 'vistoria', resolvido_em = a.vts,
@@ -592,7 +634,7 @@ begin
 end $$;
 drop trigger if exists ocorrencias_baixa_vistoria on public.ocorrencias;
 create trigger ocorrencias_baixa_vistoria after insert on public.ocorrencias
-  for each row when (new.status in ('aberta','em_andamento','historico') and new.tag is not null)
+  for each row when (new.status in ('aberta','em_andamento','aguardando_teste','historico') and new.tag is not null)
   execute function public.ocorrencias_vistoria_gatilho();
 do $$ begin
   if to_regclass('public.vistorias') is not null then
@@ -638,7 +680,7 @@ language plpgsql security definer set search_path = public as $$
 declare o record; v_ts timestamptz; v_dia date; v_tag text; n int; v record; v_orig bigint := p_oc;
 begin
   if to_regclass('public.viagens') is null then return; end if;
-  select * into o from ocorrencias where id = p_oc and status in ('aberta','em_andamento','aguardando_carro','historico','resolvida');
+  select * into o from ocorrencias where id = p_oc and status in ('aberta','em_andamento','aguardando_carro','aguardando_teste','historico','resolvida');
   if not found then return; end if;
   v_ts := coalesce(o.primeira_msg_em, o.criado_em);
   v_dia := (v_ts at time zone 'America/Belem')::date;
@@ -711,6 +753,13 @@ end $$;
 -- 1) Bateria inchada / tela trincada: ja nasce "em andamento" (nao se resolve na hora; prioridade baixa na view).
 create or replace function public.ocorrencias_regras_entrada() returns trigger language plpgsql as $$
 begin
+  -- 0a) "Nao registra passageiro" (11/11): antes de abrir, o sistema manda o passo a passo e espera a resposta
+  if new.status = 'aberta' and new.origem = 'whatsapp' and public.procedimento_aplica(new.categoria, new.problema)
+     and coalesce((select a.procedimento_ligado from public.whatsapp_avisos a where a.id = 1), false) then
+    new.procedimento_status := 'pendente';
+    new.status := case when new.tag is null then 'aguardando_carro' else 'aguardando_teste' end;
+    return new;
+  end if;
   -- 0) Relato do WhatsApp sem numero do carro: nao abre o chamado; fica aguardando o numero (06/11)
   if new.status = 'aberta' and new.tag is null and new.origem = 'whatsapp' then
     new.status := 'aguardando_carro';
@@ -729,6 +778,16 @@ create trigger ocorrencias_regras_entrada before insert on public.ocorrencias
 -- 2) "Nao esta lendo / contando passageiro": se a API TFleet mostra uma viagem do carro que SAIU DEPOIS do relato
 --    com pelo menos 3 passageiros registrados, o leitor voltou a funcionar (ex.: ligaram o Bluetooth) -> resolvida.
 --    Leitor LENTO (lento/devagar/demora) nao fecha assim: continua aberta, prioridade media.
+-- Quais relatos a API pode fechar (11/11): contagem de passageiros (menos leitor LENTO), app que nao abre/registra
+-- viagem, e celular/outro que fala de registrar/passageiro/cracha. Bateria inchada / tela trincada nunca.
+create or replace function public.api_fecha_categoria(p_cat text, p_problema text) returns boolean
+language sql immutable as $$
+  select coalesce(p_problema, '') !~* '(bateria inchad|inchad|tela trincad|tela quebrad|trincad|carca[cç]a)'
+     and case when p_cat = 'contagem_passageiros' then coalesce(p_problema, '') !~* '(lent|devagar|demor)'
+              when p_cat = 'abrir_viagem' then true
+              when p_cat in ('celular_defeito','outro') then coalesce(p_problema, '') ~* '(registr|passageir|crach|leitor|cart[aã]o)'
+              else false end;
+$$;
 create or replace function public.resolver_contagem_pela_api(p_tag text default null, p_id bigint default null)
 returns integer language plpgsql security definer set search_path = public as $$
 declare n integer;
@@ -745,13 +804,17 @@ begin
         and x.saida_ts > coalesce((select max(l.em) from ocorrencia_status_log l where l.ocorrencia_id = o.id
                                     and l.de = 'resolvida' and l.para in ('aberta','em_andamento')), '-infinity')
       order by x.saida_ts limit 1) v
-    where o.categoria = 'contagem_passageiros' and o.status in ('aberta','em_andamento','historico') and o.tag is not null
-      and o.problema !~* '(lent|devagar|demor)'
+    where o.status in ('aberta','em_andamento','aguardando_teste','historico') and o.tag is not null
+      and public.api_fecha_categoria(o.categoria, o.problema)
       and (p_tag is null or o.tag = public.normaliza_tag(p_tag)) and (p_id is null or o.id = p_id))
   update ocorrencias o set status = 'resolvida', resolvido_por = 'api', resolvido_em = a.saida_ts,
-         solucao = coalesce(nullif(o.solucao,''), left('API TFleet: o carro voltou a registrar passageiros (' || a.ocupacao ||
-                   ' na viagem de ' || to_char(a.saida_ts at time zone 'America/Belem', 'DD/MM HH24:MI') ||
-                   coalesce(', ' || a.linha, '') || ').', 1000))
+         procedimento_status = case when o.procedimento_status in ('pendente','enviado') then 'sem_resposta' else o.procedimento_status end,
+         solucao = coalesce(nullif(o.solucao,''), left('Fechada automaticamente: o relato era que ' ||
+                   case when o.categoria = 'abrir_viagem' and o.problema !~* '(registr|passageir|crach|leitor|cart[aã]o)'
+                        then 'o app não abria ou não registrava a viagem' else 'o carro não registrava passageiros' end ||
+                   ', e a API TFleet mostra que ele voltou a registrar em ' ||
+                   to_char(a.saida_ts at time zone 'America/Belem', 'DD/MM "às" HH24:MI') ||
+                   ' (' || a.ocupacao || ' passageiros' || coalesce(', ' || a.linha, '') || ').', 1000))
     from alvo a where o.id = a.id;
   get diagnostics n = row_count;
   return n;
@@ -766,8 +829,9 @@ begin
   return null;
 end $$;
 drop trigger if exists ocorrencias_contagem_api on public.ocorrencias;
-create trigger ocorrencias_contagem_api after insert on public.ocorrencias
-  for each row when (new.categoria = 'contagem_passageiros' and new.tag is not null)
+-- tambem quando o carro chega depois (aguardando_carro -> aberta) ou o painel corrige o carro/categoria
+create trigger ocorrencias_contagem_api after insert or update of tag, status, categoria on public.ocorrencias
+  for each row when (new.tag is not null and new.status in ('aberta','em_andamento','aguardando_teste','historico'))
   execute function public.contagem_api_gatilho();
 do $$ begin
   if to_regclass('public.viagens') is not null then
@@ -998,7 +1062,7 @@ begin
     left join vistorias v on v.id = o.vistoria_id
     cross join lateral (select nullif(c.avaliacao_url, '') || case when c.avaliacao_url like '%.html' then '?t=' else '?' end ||
                                public.avaliacao_token_de(o.id) as link) lk
-    where o.status = 'resolvida' and o.aviso_status is null and o.origem = 'whatsapp' and coalesce(o.resolvido_por,'') <> 'api'
+    where o.status = 'resolvida' and o.aviso_status is null and o.origem = 'whatsapp' and coalesce(o.resolvido_por,'') not in ('api','motorista')
       and coalesce(o.primeira_msg_em, o.criado_em) >= c.desde and o.resolvido_em >= c.desde
       and not exists (select 1 from whatsapp_msgs w where w.ocorrencia_id = o.id and w.acao_ia = 'resolve')  -- ja avisaram no grupo
     order by o.resolvido_em
@@ -1353,6 +1417,7 @@ begin
     left join relatores r on r.phone = o.reporter_phone
     where o.status = 'aguardando_carro' and o.tag is null and o.origem = 'whatsapp'
       and coalesce(o.pergunta_status, '') <> 'erro'
+      and coalesce(o.procedimento_status, '') not in ('pendente','enviado')   -- o passo a passo ja pede o numero
       and coalesce(o.primeira_msg_em, o.criado_em) >= c.perguntar_desde
       and coalesce(o.primeira_msg_em, o.criado_em) > now() - interval '12 hours'
       and coalesce(o.primeira_msg_em, o.criado_em) < now() - interval '3 minutes'
@@ -1384,3 +1449,103 @@ update public.ocorrencias set status = 'aguardando_carro'
 select count(*) filter (where status = 'aguardando_carro') as aguardando_numero_do_carro,
        count(*) filter (where status in ('aberta','em_andamento')) as abertas
   from public.ocorrencias;
+
+-- ================================================================ PASSO A PASSO "NAO REGISTRA PASSAGEIRO" (11/11)
+-- Relato de "nao registra / nao le passageiro": em vez de abrir o chamado, o fluxo "Avisos de resolucao" responde EM CIMA
+-- do relato com o video (ou so o texto, se nao houver video) do passo a passo e pergunta se deu certo:
+--   "Deu certo" -> resolvida (resolvido_por = 'motorista').  "Nao deu" ou nada em procedimento_espera_min -> aberta.
+-- Se depois a API mostrar o carro registrando de novo, fecha sozinha (resolver_contagem_pela_api).
+-- COMECA DESLIGADO. Ligar:  update public.whatsapp_avisos set procedimento_ligado = true;
+-- Video:  update public.whatsapp_avisos set procedimento_video_url = 'https://.../passo-a-passo.mp4';  (link publico, mp4 ate 16 MB)
+alter table public.whatsapp_avisos
+  add column if not exists procedimento_ligado     boolean not null default false,
+  add column if not exists procedimento_video_url  text,
+  add column if not exists procedimento_espera_min integer not null default 30 check (procedimento_espera_min between 5 and 720),
+  add column if not exists procedimento_desde      timestamptz not null default now();
+grant update (ligado, max_por_hora, perguntar_carro, procedimento_ligado) on public.whatsapp_avisos to anon, authenticated;
+create index if not exists ocorrencias_procedimento_msg on public.ocorrencias (procedimento_msg_id) where procedimento_msg_id is not null;
+
+-- o relato e do tipo que o passo a passo resolve?
+create or replace function public.procedimento_aplica(p_cat text, p_problema text) returns boolean
+language sql immutable as $$
+  select coalesce(p_problema, '') !~* '(bateria inchad|inchad|tela trincad|tela quebrad|trincad|carca[cç]a|lent|devagar|demor)'
+     and (p_cat = 'contagem_passageiros'
+          or (p_cat in ('abrir_viagem','celular_defeito','outro') and coalesce(p_problema, '') ~* '(registr|passageir|crach|leitor|cart[aã]o)'));
+$$;
+
+-- resposta do motorista: 'sim' (deu certo), 'nao' (nao deu) ou null (nao e resposta). Qualquer "nao" na frase = nao.
+create or replace function public.resposta_procedimento(t text) returns text
+language sql immutable as $$
+  select case
+    when t is null or length(trim(t)) = 0 or length(t) > 120 then null
+    when t ~* '(^|[^[:alpha:]])(n[aã]o|nao|n|negativo|continua|nada)([^[:alpha:]]|$)' or t ~* 'mesma coisa|ainda n' then 'nao'
+    when t ~* '(^|[^[:alpha:]])(sim|s|deu|positivo|funcionou|resolveu|resolvido|voltou|subiu|subindo|lendo|registrando|registrou|normalizou|certinho|beleza|blz|show)([^[:alpha:]]|$)'
+      then 'sim'
+  end;
+$$;
+
+create or replace function public.procedimentos_pendentes(p_limite integer default 1) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare c whatsapp_avisos; n integer; v_tem boolean;
+begin
+  select * into c from whatsapp_avisos where id = 1;
+  v_tem := found;
+  -- sem resposta no prazo (ou o envio falhou): abre o chamado
+  update ocorrencias set procedimento_status = case when procedimento_status = 'enviado' then 'sem_resposta' else procedimento_status end,
+         status = case when status = 'aguardando_teste' then 'aberta' else status end
+   where status in ('aguardando_teste','aguardando_carro')
+     and (procedimento_status = 'erro'
+          or (procedimento_status = 'enviado' and procedimento_em < now() - make_interval(mins => coalesce(c.procedimento_espera_min, 30)))
+          -- desligado (ou ficou pendente por mais de 2 h): nao segura o chamado
+          or (procedimento_status = 'pendente' and (not coalesce(c.procedimento_ligado, false)
+                                                    or coalesce(primeira_msg_em, criado_em) < now() - interval '2 hours')));
+  update ocorrencias set procedimento_status = null where procedimento_status = 'pendente' and status = 'aberta';
+  if not v_tem or not coalesce(c.procedimento_ligado, false) then
+    return jsonb_build_object('procedimentos', '[]'::jsonb, 'motivo', 'desligado');
+  end if;
+  select count(*) into n from ocorrencias
+   where (aviso_status = 'enviado' and aviso_enviado_em > now() - interval '1 hour')
+      or (pergunta_status = 'enviada' and pergunta_em > now() - interval '1 hour')
+      or (procedimento_status <> 'pendente' and procedimento_msg_id is not null and procedimento_em > now() - interval '1 hour');
+  if n >= c.max_por_hora then return jsonb_build_object('procedimentos', '[]'::jsonb, 'motivo', 'limite por hora'); end if;
+  return jsonb_build_object('procedimentos', coalesce((select jsonb_agg(x) from (
+    select o.id, m.grupo_jid, split_part(m.msg_id, '#', 1) as quoted_id, m.autor_jid,
+           left(coalesce(nullif(m.texto,''), nullif(m.transcricao,''), '[' || m.tipo || ']'), 200) as quoted_texto,
+           nullif(trim(c.procedimento_video_url), '') as video_url,
+           '🔧 ' || coalesce(
+              initcap(lower(split_part(public.nome_chave(coalesce(nullif(trim(r.nome),''),
+                     case when public.nome_valido(o.relatado_por) then o.relatado_por end)), ' ', 1))) || ', t', 'T') ||
+           'ente este passo a passo' || case when nullif(trim(c.procedimento_video_url), '') is not null then ' do vídeo' else '' end || E':\n' ||
+           E'1) Com a viagem aberta, feche o app BDV (deslize para cima).\n' ||
+           E'2) Abra o app de novo e entre com login, senha e matrícula.\n' ||
+           E'3) Peça para os passageiros passarem o crachá de novo.\n' ||
+           E'4) Se ainda não subir, confira se o Bluetooth do celular está ligado.\n\n' ||
+           'Depois responda esta mensagem: *DEU CERTO* ou *NÃO DEU*' ||
+           case when o.tag is null then E'\nE mande também o número do carro (ex.: *Carro 84*).' else '.' end as texto
+    from ocorrencias o
+    cross join lateral (select w.* from whatsapp_msgs w where w.ocorrencia_id = o.id and w.grupo_jid like '%@g.us'
+                         order by w.ts limit 1) m
+    left join relatores r on r.phone = o.reporter_phone
+    where o.procedimento_status = 'pendente' and o.status in ('aguardando_teste','aguardando_carro') and o.origem = 'whatsapp'
+      and coalesce(o.primeira_msg_em, o.criado_em) >= c.procedimento_desde
+      and coalesce(o.primeira_msg_em, o.criado_em) < now() - interval '1 minute'
+      and not exists (select 1 from whatsapp_msgs w where w.ocorrencia_id = o.id and w.ts > now() - interval '1 minute')
+    order by coalesce(o.primeira_msg_em, o.criado_em)
+    limit least(greatest(p_limite, 1), c.max_por_hora - n)) x), '[]'::jsonb), 'motivo', 'ok');
+end $$;
+revoke all on function public.procedimentos_pendentes(integer) from public, anon, authenticated;
+grant execute on function public.procedimentos_pendentes(integer) to service_role;
+
+-- o n8n marca depois de enviar; erro = abre o chamado na proxima rodada
+create or replace function public.procedimento_marcar(p_id bigint, p_ok boolean, p_erro text default null, p_msg_id text default null) returns void
+language sql security definer set search_path = public as $$
+  update ocorrencias set procedimento_em = now(), procedimento_status = case when p_ok then 'enviado' else 'erro' end,
+         procedimento_msg_id = case when p_ok then nullif(p_msg_id, '') else procedimento_msg_id end,
+         procedimento_erro = case when p_ok then null else left(p_erro, 500) end
+   where id = p_id and procedimento_status = 'pendente';
+$$;
+revoke all on function public.procedimento_marcar(bigint, boolean, text, text) from public, anon, authenticated;
+grant execute on function public.procedimento_marcar(bigint, boolean, text, text) to service_role;
+
+-- passada unica: o que a API ja mostra que voltou a registrar (inclui as categorias novas de 11/11)
+select public.resolver_contagem_pela_api() as fechadas_agora_pela_api;
