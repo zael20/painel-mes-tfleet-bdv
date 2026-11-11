@@ -1478,7 +1478,9 @@ create or replace function public.resposta_procedimento(t text) returns text
 language sql immutable as $$
   select case
     when t is null or length(trim(t)) = 0 or length(t) > 120 then null
-    when t ~* '(^|[^[:alpha:]])(n[aã]o|nao|n|negativo|continua|nada)([^[:alpha:]]|$)' or t ~* 'mesma coisa|ainda n' then 'nao'
+    -- qualquer negativa: "nao", "N", "num/nem funcionou", "deu errado", "nao prestou", "continua", "falhou", "sem sucesso"...
+    when t ~* '(^|[^[:alpha:]])(n[aã]o|nao|n|num|nem|nop|nops|negativo|continua|continuou|nada|nunca|falhou|falha|errado|erro|ruim|piorou|sem sucesso|sem resultado)([^[:alpha:]]|$)'
+      or t ~* 'mesm[oa] (coisa|problema|jeito)|ainda n|n[aã]o presta|parado|travad|zerad|❌|👎' then 'nao'
     when t ~* '(^|[^[:alpha:]])(sim|s|deu|positivo|funcionou|resolveu|resolvido|voltou|subiu|subindo|lendo|registrando|registrou|normalizou|certinho|beleza|blz|show)([^[:alpha:]]|$)'
       then 'sim'
   end;
