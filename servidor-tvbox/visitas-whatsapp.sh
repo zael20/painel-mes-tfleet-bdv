@@ -12,9 +12,9 @@ echo "Instância do WhatsApp: $INST"
 TMP=$(mktemp -d)
 curl -fsSL "$RAW/fluxo-visitas-whatsapp.json" | sed "s/__INSTANCIA__/$INST/g" > "$TMP/visitas.json"
 chmod a+r "$TMP/visitas.json"
-$DC cp "$TMP/visitas.json" n8n:/tmp/visitas.json >/dev/null
-$DC exec -T n8n n8n import:workflow --input=/tmp/visitas.json
-if $DC exec -T n8n sh -c "n8n publish:workflow --id=visitasWhats0001 || n8n update:workflow --id=visitasWhats0001 --active=true"; then
+$DC cp "$TMP/visitas.json" n8n:/tmp/visitas.json >/dev/null </dev/null
+$DC exec -T n8n n8n import:workflow --input=/tmp/visitas.json </dev/null
+if $DC exec -T n8n sh -c "n8n publish:workflow --id=visitasWhats0001 || n8n update:workflow --id=visitasWhats0001 --active=true" </dev/null; then
   LIGOU=1
 else
   LIGOU=0
@@ -22,7 +22,7 @@ else
 fi
 rm -rf "$TMP"
 echo "Reiniciando o n8n..."
-$DC restart n8n >/dev/null
+$DC restart n8n >/dev/null </dev/null
 echo
 if [ "$LIGOU" = 1 ]; then
   echo "PRONTO. Fluxo 'Visitas — WhatsApp para o Mizael' ligado (roda a cada 1 minuto)."
