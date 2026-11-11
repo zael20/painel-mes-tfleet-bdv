@@ -17,6 +17,12 @@ CANDIDATOS=(
   "Tanix (pinos -1, tipo 0)|0,75,0|0,74,0|1,4,0|4,0,1,2,3|0,1,2,3,4,5,6|0x00,0x00,0x00,0x00"
   "T95m S905X v1|1,5,0|1,4,0|1,3,0|0,1,2,3,4|0,1,2,3,4,5,6|0x01,0x00,0x00,0x00"
   "T95m S905X v2|1,4,0|1,3,0|1,2,0|0,1,2,3,4|0,1,2,3,4,5,6|0x01,0x00,0x00,0x00"
+  # chip de 16 pernas (FD650/TM1650): controlador 0x03, so usa clk e dat
+  "FD650 Tanix (pinos -1)|0,75,0|0,74,0|0,0,255|4,0,1,2,3|0,1,2,3,4,5,6|0x01,0x00,0x00,0x03"
+  "FD650 Tanix|0,76,0|0,75,0|0,0,255|4,0,1,2,3|0,1,2,3,4,5,6|0x01,0x00,0x00,0x03"
+  "FD650 AO 5/4|1,5,0|1,4,0|0,0,255|0,1,2,3,4|0,1,2,3,4,5,6|0x01,0x00,0x00,0x03"
+  "FD650 AO 4/3|1,4,0|1,3,0|0,0,255|0,1,2,3,4|0,1,2,3,4,5,6|0x01,0x00,0x00,0x03"
+  "FD650 AO 3/2|1,3,0|1,2,0|0,0,255|0,1,2,3,4|0,1,2,3,4,5,6|0x01,0x00,0x00,0x03"
 )
 
 escrever() {  # $1 = linha do candidato
@@ -38,8 +44,9 @@ for c in "${CANDIDATOS[@]}"; do
   n=$((n + 1))
   escrever "$c"
   armbian-openvfd 0 >/dev/null 2>&1; sleep 1
-  armbian-openvfd 99 >/dev/null 2>&1 &
+  armbian-openvfd 99 >/tmp/telinha.log 2>&1 &
   sleep 5
+  lsmod | grep -q openvfd || { echo "  (driver nao carregou:"; sudo dmesg | grep -i vfd | tail -2; tail -2 /tmp/telinha.log; echo "  )"; }
   echo
   echo "Teste $n de ${#CANDIDATOS[@]}: ${c%%|*}"
   echo "  OLHE A TELINHA.  s = mostra a hora certinho   e = acende, mas embaralhado/de ponta-cabeca   n = nada"
