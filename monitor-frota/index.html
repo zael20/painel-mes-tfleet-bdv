@@ -261,7 +261,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Monitor Frota <span class="buildtag">painel v0.6.7</span></h1>
+      <h1>Monitor Frota <span class="buildtag">painel v0.6.8</span></h1>
       <div class="meta" id="meta">Carregando…</div>
     </div>
     <div class="actions">
@@ -1369,6 +1369,10 @@ function analyze(id, name, samples, D) {
     const noCharge = hadData && gain <= 2;
     return { date, plugMin, weakMin, weakFrac, gain, hadData, slow, noCharge };
   });
+  return finishDiag(id, name, days, D);
+}
+
+function finishDiag(id, name, days, D) {
   const slowCount = days.filter(d => d.slow).length;
   let streak = 0, best = 0;
   for (const d of days) { if (d.noCharge) { streak++; best = Math.max(best, streak); } else streak = 0; }
@@ -1380,6 +1384,30 @@ function analyze(id, name, samples, D) {
   else if (slowCount >= 1) { level = "ok"; reason = `Carga lenta em ${slowCount} dia. Dentro do normal por enquanto.`; }
   else reason = `Carregamento ok nos últimos ${D.windowDays} dias.`;
   return { id, name, days, slowCount, noChargeStreak: best, level, reason };
+}
+
+// Versão rápida: o banco já devolve, por carro e dia, os minutos (andando x parado).
+// Carga lenta conta SÓ quando o carro está andando (é problema do carro, não da garagem).
+// Parado na tomada com corrente fraca fica como informação (carregador da garagem).
+function analyzeAgg(id, name, rows, D) {
+  const byDia = {};
+  for (const r of rows) byDia[r.dia] = r;
+  const dates = [];
+  for (let i = D.windowDays - 1; i >= 0; i--) dates.push(dayKey(Date.now() - i * 864e5));
+  const days = dates.map(date => {
+    const r = byDia[date];
+    const plugMin = r ? Number(r.plug_min) : 0;
+    const movMin = r ? Number(r.moving_min) : 0;
+    const weakMin = r ? Number(r.weak_move_min) : 0;
+    const parkedWeak = r ? Number(r.weak_parked_min) : 0;
+    const gain = r && r.gain != null ? Math.max(0, Math.round(Number(r.gain))) : 0;
+    const hadData = plugMin >= D.minPlugMin;
+    const weakFrac = movMin ? weakMin / movMin : 0;
+    const slow = hadData && movMin >= 10 && weakFrac >= D.weakFrac;   // pelo menos 10 min andando na tomada
+    const noCharge = hadData && gain <= 2;
+    return { date, plugMin, movMin, weakMin, parkedWeak, weakFrac, gain, hadData, slow, noCharge, movimento: true };
+  });
+  return finishDiag(id, name, days, D);
 }
 
 async function fetchPlugged(id, D) {
@@ -1405,10 +1433,22 @@ async function loadDiag() {
     if (mode === "live") {
       const alvos = fleet.filter(s => !isTablet(s.device_id));   // tablets ficam fora do diagnóstico de carga
       tabletsFora = fleet.length - alvos.length;
-      results = await Promise.all(alvos.map(async s => {
-        const samples = await fetchPlugged(s.device_id, D);
-        return analyze(s.device_id, s.device_name || s.device_id, samples, D);
-      }));
+      let rows = null;
+      try {
+        const r = await sb.rpc("diag_dias", { p_dias: D.windowDays, p_min_ma: D.minCur });
+        if (r.error) throw r.error;
+        rows = r.data;
+      } catch (e) { rows = null; }   // função ainda não criada no banco: usa o cálculo antigo
+      if (rows) {
+        const porCarro = {};
+        for (const row of rows) (porCarro[row.device_id] = porCarro[row.device_id] || []).push(row);
+        results = alvos.map(s => analyzeAgg(s.device_id, s.device_name || s.device_id, porCarro[s.device_id] || [], D));
+      } else {
+        results = await Promise.all(alvos.map(async s => {
+          const samples = await fetchPlugged(s.device_id, D);
+          return analyze(s.device_id, s.device_name || s.device_id, samples, D);
+        }));
+      }
     } else {
       results = demo.diag(D);
     }
@@ -1459,7 +1499,9 @@ function diagCard(r, D) {
   const detail = probDays.length ? `<ul class="diag-detail">${probDays.map(d => {
     const mins = Math.round(d.plugMin);
     const pctWeak = Math.round(d.weakFrac * 100);
-    return `<li>${fmtDay(d.date)}: ${mins} min na tomada, ${pctWeak}% do tempo abaixo de ${D.minCur} mA, bateria subiu ${d.gain}%${d.noCharge ? " (praticamente não carregou)" : ""}.</li>`;
+    const alvo = d.movimento ? `andando (${d.movMin} min)` : "no total";
+    const garagem = d.parkedWeak ? ` Parado na tomada, ${d.parkedWeak} min fracos (carregador da garagem).` : "";
+    return `<li>${fmtDay(d.date)}: ${mins} min na tomada, ${pctWeak}% ${alvo} abaixo de ${D.minCur} mA, bateria subiu ${d.gain}%${d.noCharge ? " (praticamente não carregou)" : ""}.${garagem}</li>`;
   }).join("")}</ul>` : "";
   return `<div class="diagcard ${r.level}">
     <div class="dhead"><span class="dname">${esc(r.name)}</span>${pill}</div>
