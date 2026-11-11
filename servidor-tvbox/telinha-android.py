@@ -126,3 +126,22 @@ for disco in emmc + [d + "boot0" for d in emmc if os.path.exists(f"/dev/{d}boot0
 print("\nDTBs da telinha encontrados:", achados)
 if not achados:
     print("Nao achei. Mande print e eu sigo por outro caminho.")
+
+# --- 2a passada: textos sobre a telinha no Android inteiro (modulo/servico do fabricante, u-boot) ---
+import re
+RX = re.compile(rb"[ -~]{0,40}(?:fd6[0-9]{2}|FD6[0-9]{2}|tm16[0-9]{2}|TM16[0-9]{2}|aip16|openvfd|vfd_|_vfd|led_dig|panel_led|aml_led)[ -~]{0,80}")
+textos = {}
+for disco in emmc + [d + "boot0" for d in emmc if os.path.exists(f"/dev/{d}boot0")]:
+    print(f"\nProcurando textos da telinha em /dev/{disco} (memoria toda, 3-8 min)...", flush=True)
+    with open("/dev/" + disco, "rb") as f:
+        sobra = b""
+        while True:
+            dados = f.read(32 * 1048576)
+            if not dados: break
+            for m in RX.finditer(sobra + dados):
+                t = m.group(0).strip()
+                textos[t] = textos.get(t, 0) + 1
+            sobra = dados[-200:]
+print("\nTEXTOS encontrados (mais repetidos primeiro):")
+for t, n in sorted(textos.items(), key=lambda x: -x[1])[:60]:
+    print(f"  {n:4d}x  {t.decode(errors='replace')[:120]}")
