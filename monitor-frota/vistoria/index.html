@@ -1399,7 +1399,7 @@ function fromOc(r) {
     por: r.resolvido_por, sol: r.solucao, phone: ph, perfil: r.relatado_por || "", reinc: r.reincidencias || 0, origem: r.origem,
     vistId: r.vistoria_id, bt: r.bt_causa, monSinal: r.mon_ultimo_sinal, demo: !!r.demo,
     relNome: r.reporter_nome || null, relMat: r.reporter_matricula || null,
-    procSt: r.procedimento_status || null, procEm: r.procedimento_em || null,
+    procSt: r.procedimento_status || null, procEm: r.procedimento_em || null, procEtapa: r.procedimento_etapa || null, procDica: r.procedimento_dica || null,
     pergSt: r.pergunta_status || null, pergEm: r.pergunta_em || null, pergN: r.pergunta_qtd || 0,
     ct: r.conta_no_tempo != null ? !!r.conta_no_tempo : null, obsMon: r.observacao_monitor || null,
     relExibir: r.relator_exibir || null, relFonte: r.relator_fonte || null, tagFonte: r.tag_fonte || null, motViagem: r.motorista_viagem || null, linha: r.viagem_linha || null, bhSrv: r.status === "resolvida" && r.horas_uteis != null ? +r.horas_uteis : null };
@@ -1443,7 +1443,7 @@ function demoOc() { // so na previa: exemplos para ver a tela; nunca vao para o 
       observacao_monitor: cat === "contagem_passageiros" && i % 2 ? "Monitor Frota: provavelmente o Bluetooth do celular estava desligado (exemplo da prévia), por isso o leitor não registrou." : null, demo: true });
   }
   out.push({ id: -95, tag: tags[0] || "80", categoria: "contagem_passageiros", problema: "Não registra passageiro", status: "aguardando_teste", urgencia: "media", relatado_por: "Rose", reporter_phone: "559199990004",
-    primeira_msg_em: new Date(Date.now() - 600000).toISOString(), criado_em: new Date(Date.now() - 600000).toISOString(), origem: "whatsapp", procedimento_status: "enviado", procedimento_em: new Date(Date.now() - 540000).toISOString(), demo: true });
+    primeira_msg_em: new Date(Date.now() - 600000).toISOString(), criado_em: new Date(Date.now() - 600000).toISOString(), origem: "whatsapp", procedimento_status: "enviado", procedimento_etapa: "monitor", procedimento_dica: "Bluetooth desligado desde 11/11 às 13:16 (exemplo)", procedimento_em: new Date(Date.now() - 540000).toISOString(), demo: true });
   [["Celular não liga", "celular_defeito", 2, 1], ["Leitor não conta", "contagem_passageiros", 1, 0]].forEach(function (x, j) {
     var ini = new Date(Date.now() - (j + 1) * 3 * 3600000).toISOString();
     out.push({ id: -90 - j, tag: null, categoria: x[1], problema: x[0], status: "aguardando_carro", urgencia: "media", relatado_por: "Carlos", reporter_phone: "559199990002",
@@ -1673,9 +1673,10 @@ function paintOcSheet(id) {
     o.reinc ? el("span", { class: "hint", text: "Relatado de novo " + plural(o.reinc, "vez", "vezes") + " enquanto estava aberta." }) : null,
     o.status === "aguardando_carro" ? el("span", { class: "hint warn", text: "Relato sem número de carro válido: ainda não é chamado aberto." + (o.pergSt === "enviada" ? " O sistema perguntou o número no grupo" + (o.pergEm ? " às " + fmtDT(o.pergEm).slice(-5) + " de " + fmtDT(o.pergEm).slice(0, 5) : "") + (o.pergN > 1 ? " (" + o.pergN + " vezes)" : "") + "." : o.pergSt === "erro" ? " A pergunta no grupo falhou." : "") + " Se você souber o carro, corrija abaixo." }) : null]));
   if (o.procSt) {
-    var PROC = { pendente: "Passo a passo ainda vai ser enviado no grupo", enviado: "Passo a passo (fechar e abrir o app BDV) enviado no grupo", deu_certo: "O motorista testou o passo a passo: deu certo",
+    var PROC = { pendente: "Passo a passo ainda vai ser enviado no grupo", enviado: o.procEtapa === "monitor" ? "Dica do Monitor Frota enviada no grupo" : o.procEtapa === "video" ? "Vídeo do passo a passo enviado no grupo" : "Passo a passo (fechar e abrir o app BDV) enviado no grupo", deu_certo: "O motorista testou o passo a passo: deu certo",
       nao_deu: "O motorista testou o passo a passo: não deu certo", sem_resposta: "Passo a passo enviado, sem resposta em 30 min", erro: "Não consegui enviar o passo a passo no grupo" };
-    b.appendChild(el("div", { class: "notice" + (o.procSt === "deu_certo" ? " mon" : ""), text: (PROC[o.procSt] || o.procSt) + (o.procEm ? " · " + fmtDT(o.procEm).slice(0, 5) + " às " + fmtDT(o.procEm).slice(-5) : "") + (o.status === "aguardando_teste" ? ". Se ninguém responder em 30 min, vira chamado aberto." : ".") }));
+    b.appendChild(el("div", { class: "notice" + (o.procSt === "deu_certo" ? " mon" : ""), text: (PROC[o.procSt] || o.procSt) + (o.procEm ? " · " + fmtDT(o.procEm).slice(0, 5) + " às " + fmtDT(o.procEm).slice(-5) : "") + (o.status === "aguardando_teste" ? ". Se ninguém responder em 30 min, vira chamado aberto." : ".") +
+      (o.procDica ? " Dica do Monitor: " + o.procDica + "." : "") }));
   }
   b.appendChild(carEditBox(o));
   b.appendChild(el("div", { class: "facts" }, [
