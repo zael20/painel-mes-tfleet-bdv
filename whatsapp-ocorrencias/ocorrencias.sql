@@ -56,7 +56,9 @@ alter table public.ocorrencias
   add column if not exists procedimento_status text,      -- pendente | enviado | deu_certo | nao_deu | sem_resposta | erro
   add column if not exists procedimento_em     timestamptz,
   add column if not exists procedimento_msg_id text,      -- id da mensagem do passo a passo no WhatsApp
-  add column if not exists procedimento_erro   text;
+  add column if not exists procedimento_erro   text,
+  add column if not exists procedimento_etapa  text,      -- monitor (dica do Monitor Frota) | video (passo a passo)
+  add column if not exists procedimento_dica   text;      -- o que o Monitor achou (Bluetooth desligado / outro aparelho pareado)
 alter table public.ocorrencias drop constraint if exists ocorrencias_origem_check;
 alter table public.ocorrencias add constraint ocorrencias_origem_check
   check (origem in ('whatsapp','manual','retroativo'));
@@ -361,7 +363,15 @@ begin
     if v_id is not null then
       if v_resp = 'sim' then
         update ocorrencias set status = 'resolvida', resolvido_por = 'motorista', procedimento_status = 'deu_certo',
-               solucao = coalesce(nullif(solucao,''), 'Resolvido pelo motorista com o passo a passo (fechou e abriu o app BDV).'),
+               solucao = coalesce(nullif(solucao,''), case when procedimento_etapa = 'monitor'
+                          then left('Resolvido pelo motorista com a dica do Monitor: ' || coalesce(procedimento_dica, 'Bluetooth'), 1000)
+                          else 'Resolvido pelo motorista com o passo a passo (fechou e abriu o app BDV).' end),
+               ultima_msg_em = greatest(ultima_msg_em, v_ts)
+         where id = v_id;
+      elsif (select procedimento_etapa from ocorrencias where id = v_id) = 'monitor'
+            and (select nullif(trim(procedimento_video_url), '') from whatsapp_avisos where id = 1) is not null then
+        -- a dica do Monitor nao resolveu: manda agora o video do passo a passo (ainda nao abre o chamado)
+        update ocorrencias set procedimento_status = 'pendente', procedimento_etapa = 'video', procedimento_em = v_ts,
                ultima_msg_em = greatest(ultima_msg_em, v_ts)
          where id = v_id;
       else
@@ -1500,7 +1510,7 @@ begin
           or (procedimento_status = 'enviado' and procedimento_em < now() - make_interval(mins => coalesce(c.procedimento_espera_min, 30)))
           -- desligado (ou ficou pendente por mais de 2 h): nao segura o chamado
           or (procedimento_status = 'pendente' and (not coalesce(c.procedimento_ligado, false)
-                                                    or coalesce(primeira_msg_em, criado_em) < now() - interval '2 hours')));
+                                                    or coalesce(procedimento_em, primeira_msg_em, criado_em) < now() - interval '2 hours')));
   update ocorrencias set procedimento_status = null where procedimento_status = 'pendente' and status = 'aberta';
   if not v_tem or not coalesce(c.procedimento_ligado, false) then
     return jsonb_build_object('procedimentos', '[]'::jsonb, 'motivo', 'desligado');
@@ -1510,10 +1520,27 @@ begin
       or (pergunta_status = 'enviada' and pergunta_em > now() - interval '1 hour')
       or (procedimento_status <> 'pendente' and procedimento_msg_id is not null and procedimento_em > now() - interval '1 hour');
   if n >= c.max_por_hora then return jsonb_build_object('procedimentos', '[]'::jsonb, 'motivo', 'limite por hora'); end if;
+  -- 1a etapa: se o Monitor Frota ja mostra a causa (Bluetooth desligado / outro aparelho pareado), manda so isso, sem video
+  update ocorrencias o set procedimento_dica = d.dica, procedimento_etapa = case when d.dica is not null then 'monitor' else 'video' end
+    from (select x.id, public.monitor_dica(x.id) as dica from ocorrencias x
+           where x.procedimento_status = 'pendente' and x.procedimento_etapa is null
+             and x.status in ('aguardando_teste','aguardando_carro') and x.origem = 'whatsapp') d
+   where o.id = d.id;
   return jsonb_build_object('procedimentos', coalesce((select jsonb_agg(x) from (
     select o.id, m.grupo_jid, split_part(m.msg_id, '#', 1) as quoted_id, m.autor_jid,
            left(coalesce(nullif(m.texto,''), nullif(m.transcricao,''), '[' || m.tipo || ']'), 200) as quoted_texto,
-           nullif(trim(c.procedimento_video_url), '') as video_url,
+           case when o.procedimento_etapa = 'video' then nullif(trim(c.procedimento_video_url), '') end as video_url,
+           case when o.procedimento_etapa = 'monitor' then
+             '🔎 ' || coalesce(
+                initcap(lower(split_part(public.nome_chave(coalesce(nullif(trim(r.nome),''),
+                       case when public.nome_valido(o.relatado_por) then o.relatado_por end)), ' ', 1))) || ', o', 'O') ||
+             ' Monitor do celular do carro ' || o.tag || E' mostra:
+' || o.procedimento_dica ||
+             E'
+
+Depois passe o crachá de novo e responda esta mensagem: *DEU CERTO* ou *NÃO DEU*.'
+           else
+           (case when o.procedimento_etapa = 'video' and o.procedimento_dica is not null then 'Vamos tentar outra coisa. ' else '' end) ||
            '🔧 ' || coalesce(
               initcap(lower(split_part(public.nome_chave(coalesce(nullif(trim(r.nome),''),
                      case when public.nome_valido(o.relatado_por) then o.relatado_por end)), ' ', 1))) || ', t', 'T') ||
@@ -1523,7 +1550,8 @@ begin
            E'3) Peça para os passageiros passarem o crachá de novo.\n' ||
            E'4) Se ainda não subir, confira se o Bluetooth do celular está ligado.\n\n' ||
            'Depois responda esta mensagem: *DEU CERTO* ou *NÃO DEU*' ||
-           case when o.tag is null then E'\nE mande também o número do carro (ex.: *Carro 84*).' else '.' end as texto
+           case when o.tag is null then E'\nE mande também o número do carro (ex.: *Carro 84*).' else '.' end
+           end as texto
     from ocorrencias o
     cross join lateral (select w.* from whatsapp_msgs w where w.ocorrencia_id = o.id and w.grupo_jid like '%@g.us'
                          order by w.ts limit 1) m
@@ -1532,11 +1560,60 @@ begin
       and coalesce(o.primeira_msg_em, o.criado_em) >= c.procedimento_desde
       and coalesce(o.primeira_msg_em, o.criado_em) < now() - interval '1 minute'
       and not exists (select 1 from whatsapp_msgs w where w.ocorrencia_id = o.id and w.ts > now() - interval '1 minute')
+      and o.procedimento_etapa is not null
     order by coalesce(o.primeira_msg_em, o.criado_em)
     limit least(greatest(p_limite, 1), c.max_por_hora - n)) x), '[]'::jsonb), 'motivo', 'ok');
 end $$;
 revoke all on function public.procedimentos_pendentes(integer) from public, anon, authenticated;
 grant execute on function public.procedimentos_pendentes(integer) to service_role;
+
+-- O que o Monitor Frota sabe do Bluetooth do celular do carro (18 h antes do relato ate agora). Null = nada a dizer.
+--   * Bluetooth desligado (3+ minutos seguidos): "desligado desde DD/MM as HH:MM" (ou "foi desligado ... e religado")
+--   * Mais de 1 aparelho pareado (o certo e so o leitor): nome do(s) aparelho(s) que nao parece(m) leitor
+create or replace function public.monitor_dica(p_oc bigint) returns text
+language plpgsql stable security definer set search_path = public as $$
+declare o record; v_dev text; v_ini timestamptz; s record; v_off_ini timestamptz; v_off_fim timestamptz; v_n int;
+        v_extra text; dicas text[] := '{}';
+begin
+  if to_regclass('public.samples') is null or to_regclass('public.v_last_sample') is null then return null; end if;
+  select * into o from ocorrencias where id = p_oc;
+  if not found or o.tag is null then return null; end if;
+  v_ini := coalesce(o.primeira_msg_em, o.criado_em) - interval '18 hours';
+  execute 'select device_id from public.v_last_sample where public.normaliza_tag(device_name) = $1 order by ts desc limit 1'
+     into v_dev using o.tag;
+  if v_dev is null then return null; end if;
+  execute 'select ts, bt_on, bt_bonded, bt_bonded_count from public.samples where device_id = $1 order by ts desc limit 1'
+     into s using v_dev;
+  if s.ts is null or s.ts < v_ini then return null; end if;
+  -- ultimo trecho com Bluetooth desligado
+  execute 'select max(ts) from public.samples where device_id = $1 and ts >= $2 and bt_on is false' into v_off_fim using v_dev, v_ini;
+  if v_off_fim is not null then
+    execute 'select coalesce(min(ts), $3) from public.samples where device_id = $1 and ts >= $2 and ts <= $3 and bt_on is false
+               and ts > coalesce((select max(ts) from public.samples where device_id = $1 and ts >= $2 and ts < $3 and bt_on), ''-infinity'')'
+       into v_off_ini using v_dev, v_ini, v_off_fim;
+    execute 'select count(*) from public.samples where device_id = $1 and ts between $2 and $3 and bt_on is false'
+       into v_n using v_dev, v_off_ini, v_off_fim;
+    if v_n >= 3 then
+      dicas := dicas || case when s.bt_on is false
+        then '• O Bluetooth está DESLIGADO desde ' || to_char(v_off_ini at time zone 'America/Belem', 'DD/MM "às" HH24:MI') ||
+             '. Ligue o Bluetooth (puxe a tela de cima para baixo e toque no ícone).'
+        else '• O Bluetooth foi desligado em ' || to_char(v_off_ini at time zone 'America/Belem', 'DD/MM "às" HH24:MI') ||
+             ' e ficou assim até ' || to_char(v_off_fim at time zone 'America/Belem', 'HH24:MI') ||
+             '. Confira se ele está ligado agora.' end;
+    end if;
+  end if;
+  -- outro aparelho pareado alem do leitor
+  if coalesce(s.bt_bonded_count, 0) > 1 and coalesce(trim(s.bt_bonded), '') <> '' then
+    select string_agg('"' || trim(x) || '"', ', ') into v_extra
+      from unnest(string_to_array(s.bt_bonded, ',')) x
+     where trim(x) <> '' and trim(x) !~* '(SGBT|RFID|leitor|reader|UHF|NFC|R20)';
+    dicas := dicas || ('• Tem outro aparelho pareado no Bluetooth além do leitor: ' ||
+             coalesce(v_extra, '"' || s.bt_bonded || '"') ||
+             '. Em Configurações > Bluetooth, toque na engrenagem ao lado dele, escolha Desemparelhar e tente de novo.');
+  end if;
+  return nullif(array_to_string(dicas, E'\n'), '');
+end $$;
+revoke all on function public.monitor_dica(bigint) from public, anon, authenticated;
 
 -- o n8n marca depois de enviar; erro = abre o chamado na proxima rodada
 create or replace function public.procedimento_marcar(p_id bigint, p_ok boolean, p_erro text default null, p_msg_id text default null) returns void
