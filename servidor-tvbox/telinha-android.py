@@ -100,7 +100,7 @@ def blobs_simples(d):
         i += 4
 
 vistos, achados = set(), 0
-for disco in emmc + [d + "boot0" for d in emmc if os.path.exists(f"/dev/{d}boot0")]:
+for disco in [] if "--textos" in sys.argv else emmc + [d + "boot0" for d in emmc if os.path.exists(f"/dev/{d}boot0")]:
     caminho = "/dev/" + disco
     print("\nLendo", caminho, "(primeiros 1,5 GB, pode levar 1-2 min)...")
     BLOCO, LIMITE, pos = 64 * 1048576, 1536 * 1048576, 0
@@ -123,25 +123,37 @@ for disco in emmc + [d + "boot0" for d in emmc if os.path.exists(f"/dev/{d}boot0
         pos += len(dados)
     f.close()
 
-print("\nDTBs da telinha encontrados:", achados)
-if not achados:
+if "--textos" not in sys.argv:
+  print("\nDTBs da telinha encontrados:", achados)
+if not achados and "--textos" not in sys.argv:
     print("Nao achei. Mande print e eu sigo por outro caminho.")
 
 # --- 2a passada: textos sobre a telinha no Android inteiro (modulo/servico do fabricante, u-boot) ---
 import re
-RX = re.compile(rb"[ -~]{0,40}(?:fd6[0-9]{2}|FD6[0-9]{2}|tm16[0-9]{2}|TM16[0-9]{2}|aip16|openvfd|vfd_|_vfd|led_dig|panel_led|aml_led)[ -~]{0,80}")
+KWS = [b"fd628", b"fd650", b"FD628", b"FD650", b"tm1628", b"TM1628", b"openvfd", b"vfd_", b"_vfd", b"aml_led", b"led_dig"]
+LIMPO = re.compile(rb"[ -~]+")
 textos = {}
 for disco in emmc + [d + "boot0" for d in emmc if os.path.exists(f"/dev/{d}boot0")]:
-    print(f"\nProcurando textos da telinha em /dev/{disco} (memoria toda, 3-8 min)...", flush=True)
+    print(f"\nProcurando textos da telinha em /dev/{disco}...", flush=True)
+    tam = int(open(f"/sys/block/{disco}/size").read()) * 512 if os.path.exists(f"/sys/block/{disco}/size") else 0
     with open("/dev/" + disco, "rb") as f:
-        sobra = b""
+        sobra, lido = b"", 0
         while True:
             dados = f.read(32 * 1048576)
             if not dados: break
-            for m in RX.finditer(sobra + dados):
-                t = m.group(0).strip()
-                textos[t] = textos.get(t, 0) + 1
+            lido += len(dados)
+            bloco = sobra + dados
+            for kw in KWS:                      # busca literal (rapida), depois pega o texto em volta
+                i = bloco.find(kw)
+                while i >= 0:
+                    trecho = bloco[max(0, i - 40):i + 80]
+                    for m in LIMPO.finditer(trecho):
+                        if kw in m.group(0):
+                            t = m.group(0).strip()
+                            textos[t] = textos.get(t, 0) + 1
+                    i = bloco.find(kw, i + len(kw))
             sobra = dados[-200:]
+            if tam: print(f"\r  {100 * lido // tam}%", end="", flush=True)
 print("\nTEXTOS encontrados (mais repetidos primeiro):")
 for t, n in sorted(textos.items(), key=lambda x: -x[1])[:60]:
     print(f"  {n:4d}x  {t.decode(errors='replace')[:120]}")
