@@ -70,7 +70,12 @@
     "specifyBody": "json",
     "jsonBody": "={{ JSON.stringify({ number: $json.numero, text: $json.texto, delay: 1200, linkPreview: false }) }}",
     "options": {
-     "timeout": 30000
+     "timeout": 30000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
     }
    },
    "name": "Mandar no WhatsApp",
