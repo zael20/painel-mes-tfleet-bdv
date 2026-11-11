@@ -58,7 +58,8 @@ alter table public.ocorrencias
   add column if not exists procedimento_msg_id text,      -- id da mensagem do passo a passo no WhatsApp
   add column if not exists procedimento_erro   text,
   add column if not exists procedimento_etapa  text,      -- monitor (dica do Monitor Frota) | video (passo a passo)
-  add column if not exists procedimento_dica   text;      -- o que o Monitor achou (Bluetooth desligado / outro aparelho pareado)
+  add column if not exists procedimento_dica   text,      -- o que o Monitor achou (Bluetooth desligado / outro aparelho pareado)
+  add column if not exists procedimento_com_video boolean; -- false = lembrete curto em texto (motorista ja recebeu o video / teto do dia)
 alter table public.ocorrencias drop constraint if exists ocorrencias_origem_check;
 alter table public.ocorrencias add constraint ocorrencias_origem_check
   check (origem in ('whatsapp','manual','retroativo','monitor'));   -- monitor = aberta sozinha pelo Monitor Frota (11/11)
@@ -1472,6 +1473,11 @@ alter table public.whatsapp_avisos
   add column if not exists procedimento_video_url  text,
   add column if not exists procedimento_espera_min integer not null default 30 check (procedimento_espera_min between 5 and 720),
   add column if not exists procedimento_desde      timestamptz not null default now();
+-- para nao encher o grupo de video (11/11): o mesmo motorista so recebe o video de novo depois de N dias, e o grupo
+-- recebe no maximo M videos por dia; fora disso vai um lembrete curto em texto
+alter table public.whatsapp_avisos
+  add column if not exists procedimento_video_mesmo_dias integer not null default 7 check (procedimento_video_mesmo_dias between 0 and 90),
+  add column if not exists procedimento_videos_por_dia   integer not null default 3 check (procedimento_videos_por_dia between 0 and 50);
 grant update (ligado, max_por_hora, perguntar_carro, procedimento_ligado) on public.whatsapp_avisos to anon, authenticated;
 create index if not exists ocorrencias_procedimento_msg on public.ocorrencias (procedimento_msg_id) where procedimento_msg_id is not null;
 
@@ -1526,11 +1532,29 @@ begin
            where x.procedimento_status = 'pendente' and x.procedimento_etapa is null
              and x.status in ('aguardando_teste','aguardando_carro') and x.origem = 'whatsapp') d
    where o.id = d.id;
+  -- video ou lembrete curto: mesmo motorista ja recebeu o video ha pouco, ou o grupo ja recebeu o teto de videos hoje
+  update ocorrencias o set procedimento_com_video = nullif(trim(c.procedimento_video_url), '') is not null
+         and not exists (select 1 from ocorrencias x
+                          where x.id <> o.id and x.procedimento_com_video and x.procedimento_msg_id is not null
+                            and x.procedimento_em > now() - make_interval(days => c.procedimento_video_mesmo_dias)
+                            and ((o.reporter_phone is not null and x.reporter_phone = o.reporter_phone)
+                                 or (o.reporter_phone is null and public.nome_valido(o.relatado_por) and x.relatado_por = o.relatado_por)))
+         and (select count(*) from ocorrencias x where x.procedimento_com_video and x.procedimento_msg_id is not null
+               and (x.procedimento_em at time zone 'America/Belem')::date = (now() at time zone 'America/Belem')::date)
+             < c.procedimento_videos_por_dia
+   where o.procedimento_status = 'pendente' and o.procedimento_etapa = 'video' and o.procedimento_com_video is null;
   return jsonb_build_object('procedimentos', coalesce((select jsonb_agg(x) from (
     select o.id, m.grupo_jid, split_part(m.msg_id, '#', 1) as quoted_id, m.autor_jid,
            left(coalesce(nullif(m.texto,''), nullif(m.transcricao,''), '[' || m.tipo || ']'), 200) as quoted_texto,
-           case when o.procedimento_etapa = 'video' then nullif(trim(c.procedimento_video_url), '') end as video_url,
-           case when o.procedimento_etapa = 'monitor' then
+           case when o.procedimento_etapa = 'video' and o.procedimento_com_video then nullif(trim(c.procedimento_video_url), '') end as video_url,
+           case when o.procedimento_etapa = 'video' and not coalesce(o.procedimento_com_video, false) then
+             '🔧 ' || coalesce(
+                initcap(lower(split_part(public.nome_chave(coalesce(nullif(trim(r.nome),''),
+                       case when public.nome_valido(o.relatado_por) then o.relatado_por end)), ' ', 1))) || ', f', 'F') ||
+             'aça o passo a passo: feche o app BDV (deslize para cima), abra de novo com matrícula e senha e passe o crachá. ' ||
+             'Confira também se o Bluetooth está ligado. Depois responda: *DEU CERTO* ou *NÃO DEU*' ||
+             case when o.tag is null then ' e o número do carro.' else '.' end
+           when o.procedimento_etapa = 'monitor' then
              '🔎 ' || coalesce(
                 initcap(lower(split_part(public.nome_chave(coalesce(nullif(trim(r.nome),''),
                        case when public.nome_valido(o.relatado_por) then o.relatado_por end)), ' ', 1))) || ', o', 'O') ||
