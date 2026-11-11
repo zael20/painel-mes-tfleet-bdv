@@ -1,0 +1,204 @@
+{
+  "id": "demandasWhats01",
+  "name": "Demandas — WhatsApp automático",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "name": "A cada 1 minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "id": null
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://orhuxmsrdnugpogvtnbg.supabase.co/rest/v1/rpc/sol_whats_pendentes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"p_limite\": 5}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Fila de mensagens",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "credSupabase0001",
+          "name": "Supabase (chave secreta)"
+        }
+      },
+      "id": null
+    },
+    {
+      "parameters": {
+        "jsCode": "// Uma mensagem por item da fila do quadro de demandas. Lista vazia = para aqui.\nconst r = $input.first().json || {};\nreturn (r.avisos || []).map(a => ({ json: a }));\n"
+      },
+      "name": "Separar avisos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "id": null
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://evolution:8080/message/sendText/__INSTANCIA__",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.numero, text: $json.texto, delay: 1200, linkPreview: false }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Mandar no WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "credEvolution001",
+          "name": "Evolution API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": null
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deu certo se a Evolution devolveu a chave da mensagem enviada.\nconst a = $('Separar avisos').item.json;\nconst r = $json || {};\nconst ok = !!(r.key && r.key.id);\nconst erro = ok ? null : String(r.error?.message || r.message || r.error || JSON.stringify(r)).slice(0, 500);\nreturn { json: { p_id: a.id, p_ok: ok, p_erro: erro } };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "name": "Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ],
+      "id": null
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://orhuxmsrdnugpogvtnbg.supabase.co/rest/v1/rpc/sol_whats_marcar",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Marcar enviado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "credSupabase0001",
+          "name": "Supabase (chave secreta)"
+        }
+      },
+      "id": null
+    }
+  ],
+  "connections": {
+    "A cada 1 minuto": {
+      "main": [
+        [
+          {
+            "node": "Fila de mensagens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar avisos": {
+      "main": [
+        [
+          {
+            "node": "Mandar no WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mandar no WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado": {
+      "main": [
+        [
+          {
+            "node": "Marcar enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fila de mensagens": {
+      "main": [
+        [
+          {
+            "node": "Separar avisos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

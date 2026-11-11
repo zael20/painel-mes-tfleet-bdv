@@ -787,6 +787,10 @@ begin
   end if;
   insert into sol_contatos (nome, email, fornecedor) values (p.nome, p.email, p.fornecedor)
     on conflict (email) do update set nome = coalesce(sol_contatos.nome, excluded.nome);
+  begin
+    if p.celular is not null then update sol_contatos set celular = coalesce(celular, p.celular) where email = p.email; end if;
+  exception when undefined_column then null;
+  end;
   select * into c from sol_cartoes where id = p.cartao_id;
   if c.id is not null then
     update sol_cartoes set emails = public._sol_emails_limpos(emails || p.email) where id = c.id;
@@ -811,6 +815,15 @@ begin
         q->>'nome', senha, true) returning id into eid;
   end if;
   perform public._central_log(null, q->>'nome', 'cadastro', 'solicitacoes', 'Aprovou acesso de fornecedor: ' || p.nome);
+  -- WhatsApp com o código, se a pessoa tiver celular (fila do fluxo da TV Box)
+  begin
+    perform public._sol_whats_fila(p.cartao_id, array(select celular from sol_contatos where email = p.email and celular is not null),
+      '📋 *Quadro de demandas*' || chr(10) || chr(10) || 'Olá, ' || p.nome || '! Seu acesso foi aprovado' ||
+      coalesce(' para acompanhar "' || c.assunto || '"', '') || '.' || chr(10) || chr(10) ||
+      'Link: ' || coalesce(public._sol_link(c), (select link_quadro from sol_config where id = 1)) || chr(10) ||
+      'Seu código de acesso: *{{SENHA}}*' || chr(10) || chr(10) || 'O código é pessoal, não compartilhe.', senha);
+  exception when undefined_function or undefined_table then null;   -- 1ª vez rodando: a parte do WhatsApp vem mais abaixo
+  end;
   return json_build_object('status', 'aprovado', 'senha', senha, 'email_enviado', eid is not null);
 end $$;
 
@@ -1242,7 +1255,10 @@ update public.sol_cartoes set link = null where criado_por like 'Importado%' and
 
 -- ---------------------------------------------------------------- pedir acesso pela tela de entrada
 alter table public.sol_emails alter column cartao_id drop not null;
-create or replace function public.sol_pedir_acesso(p_nome text, p_email text, p_empresa text, p_mensagem text default null) returns text
+alter table public.sol_pedidos_acesso add column if not exists celular text;
+drop function if exists public.sol_pedir_acesso(text, text, text, text);
+create or replace function public.sol_pedir_acesso(p_nome text, p_email text, p_empresa text, p_mensagem text default null,
+  p_celular text default null) returns text
 language plpgsql security definer set search_path = public as $$
 declare e text := lower(trim(coalesce(p_email, '')));
 begin
@@ -1254,11 +1270,12 @@ begin
   if exists (select 1 from sol_pedidos_acesso where lower(email) = e and status = 'pendente') then
     return 'Seu pedido já está com o responsável. Quando for aprovado, o código chega no seu e-mail.';
   end if;
-  insert into sol_pedidos_acesso (fornecedor, nome, email, mensagem, pedido_por)
-    values (left(trim(p_empresa), 80), left(trim(p_nome), 120), e, nullif(left(trim(coalesce(p_mensagem, '')), 500), ''), 'Pela tela de entrada');
+  insert into sol_pedidos_acesso (fornecedor, nome, email, mensagem, pedido_por, celular)
+    values (left(trim(p_empresa), 80), left(trim(p_nome), 120), e, nullif(left(trim(coalesce(p_mensagem, '')), 500), ''), 'Pela tela de entrada',
+            nullif(left(regexp_replace(coalesce(p_celular, ''), '\D', '', 'g'), 13), ''));
   return 'Pedido enviado. Quando for aprovado, o código de acesso chega no seu e-mail.';
 end $$;
-grant execute on function public.sol_pedir_acesso(text, text, text, text) to anon, authenticated;
+grant execute on function public.sol_pedir_acesso(text, text, text, text, text) to anon, authenticated;
 
 -- ---------------------------------------------------------------- celular nos contatos + convite com o código
 alter table public.sol_contatos add column if not exists celular text;
@@ -1317,5 +1334,171 @@ begin
   return 'ok';
 end $$;
 grant execute on function public.sol_convite_email(text, bigint, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------- WhatsApp automático (número da frota, pelo n8n da TV Box)
+-- A página e o banco só põem as mensagens numa fila; o fluxo "Demandas — WhatsApp" pega a cada minuto e manda.
+alter table public.sol_config add column if not exists whatsapp_dono text;   -- seu celular: recebe as atualizações também
+create table if not exists public.sol_whats (
+  id          bigserial primary key,
+  cartao_id   bigint references public.sol_cartoes(id) on delete cascade,
+  numero      text not null,                 -- só dígitos, com DDD (sem 55)
+  texto       text not null,
+  segredo     text,                          -- código de acesso: entra no lugar de {{SENHA}} e é apagado ao enviar
+  criado_em   timestamptz not null default now(),
+  enviado_em  timestamptz,
+  tentativas  int not null default 0,
+  erro        text
+);
+create index if not exists sol_whats_fila on public.sol_whats (enviado_em, id);
+alter table public.sol_whats enable row level security;
+revoke all on public.sol_whats from anon, authenticated;
+
+create or replace function public._sol_cel(p text) returns text language sql immutable as $$
+  select case when length(d) between 12 and 13 and d like '55%' then substr(d, 3)
+              when length(d) between 10 and 11 then d end
+  from (select regexp_replace(coalesce(p, ''), '\D', '', 'g') as d) x $$;
+
+-- põe na fila uma mensagem para cada celular (sem repetir)
+create or replace function public._sol_whats_fila(p_cartao bigint, p_numeros text[], p_texto text, p_segredo text default null) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int := 0; x text;
+begin
+  for x in select distinct public._sol_cel(y) from unnest(p_numeros) y where public._sol_cel(y) is not null loop
+    insert into sol_whats (cartao_id, numero, texto, segredo) values (p_cartao, x, p_texto, p_segredo);
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+-- quem recebe as atualizações de um cartão: contatos com celular nos e-mails de aviso, o responsável (pelo nome) e você
+create or replace function public._sol_whats_para(c public.sol_cartoes) returns text[]
+language sql stable security definer set search_path = public as $$
+  select array_remove(array(
+    select celular from sol_contatos where celular is not null and (email = any(c.emails)
+        or (c.responsavel is not null and lower(nome) = lower(trim(c.responsavel))))
+    union select whatsapp_dono from sol_config where id = 1 and whatsapp_dono is not null), null) $$;
+
+drop function if exists public._sol_whats_msg(public.sol_cartoes, text, text);
+create or replace function public._sol_whats_msg(c public.sol_cartoes, p_titulo text, p_corpo text, p_resumo boolean default true) returns text
+language sql stable as $$
+  select '📋 *Demandas · ' || c.fornecedor || '*' || chr(10) || '*' || c.assunto || '*' || chr(10) || chr(10) ||
+    p_titulo || coalesce(chr(10) || p_corpo, '') || chr(10) || chr(10) ||
+    case when p_resumo then 'Status: ' || c.status ||
+      coalesce(chr(10) || 'Responsável: ' || c.responsavel, '') ||
+      coalesce(chr(10) || 'Prazo: ' || to_char(c.prazo, 'DD/MM/YYYY'), '') || chr(10) || chr(10) else '' end ||
+    'Acompanhe: ' || public._sol_link(c) $$;
+
+-- mudou status, responsável ou prazo → avisa no WhatsApp
+create or replace function public._sol_whats_mudou() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare l text[] := '{}';
+begin
+  if new.status is distinct from old.status then l := l || ('Status: ' || old.status || ' → *' || new.status || '*'); end if;
+  if new.responsavel is distinct from old.responsavel then l := l || ('Responsável: *' || coalesce(new.responsavel, '—') || '*'); end if;
+  if new.prazo is distinct from old.prazo then l := l || ('Prazo: *' || coalesce(to_char(new.prazo, 'DD/MM/YYYY'), 'sem prazo') || '*'); end if;
+  if array_length(l, 1) is null then return new; end if;
+  perform public._sol_whats_fila(new.id, public._sol_whats_para(new),
+    public._sol_whats_msg(new, '🔔 *Atualização*', array_to_string(l, chr(10)), false));
+  return new;
+end $$;
+drop trigger if exists sol_cartoes_whats on public.sol_cartoes;
+create trigger sol_cartoes_whats after update of status, responsavel, prazo on public.sol_cartoes
+  for each row execute function public._sol_whats_mudou();
+
+-- comentário marcado como "cobrar resposta" e avisos de prazo das 8h também vão no WhatsApp
+create or replace function public._sol_whats_hist() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare c sol_cartoes;
+begin
+  if not (new.tipo = 'comentario' and new.texto like '📣 Cobrou resposta: %')
+     and not (new.tipo = 'aviso' and new.quem = 'Aviso automático') then return new; end if;
+  select * into c from sol_cartoes where id = new.cartao_id;
+  if c.id is null then return new; end if;
+  if new.tipo = 'comentario' then
+    perform public._sol_whats_fila(c.id, public._sol_whats_para(c),
+      public._sol_whats_msg(c, '📣 *Aguardando retorno* (' || coalesce(new.quem, '') || ')', substr(new.texto, length('📣 Cobrou resposta: ') + 1)));
+  else
+    perform public._sol_whats_fila(c.id, public._sol_whats_para(c),
+      public._sol_whats_msg(c, '⏰ *' || coalesce(c.ultimo_motivo, 'Aviso de prazo') || '*', null));
+  end if;
+  return new;
+end $$;
+drop trigger if exists sol_historico_whats on public.sol_historico;
+create trigger sol_historico_whats after insert on public.sol_historico
+  for each row execute function public._sol_whats_hist();
+
+-- convite com o código (botão "Enviar convite" em Contatos e acessos)
+create or replace function public.sol_convite_whats(p_token text, p_pessoa bigint, p_codigo text) returns text
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token, true); p sol_pessoas; cel text;
+begin
+  select * into p from sol_pessoas where id = p_pessoa and ativo;
+  if p.id is null then raise exception 'Acesso não encontrado.'; end if;
+  if p.senha_hash <> public._central_hash('solpin:' || trim(p_codigo)) then raise exception 'Esse não é o código atual dessa pessoa.'; end if;
+  select celular into cel from sol_contatos where email = lower(p.email);
+  if cel is null then raise exception 'Coloque o celular no contato para mandar no WhatsApp.'; end if;
+  perform public._sol_whats_fila(null, array[cel],
+    '📋 *Quadro de demandas*' || chr(10) || chr(10) || 'Olá, ' || p.nome || '! Você tem acesso para acompanhar as demandas' ||
+    case when p.fornecedor <> '*' then ' de ' || p.fornecedor else '' end || '.' || chr(10) || chr(10) ||
+    'Link: ' || (select link_quadro from sol_config where id = 1) || chr(10) || 'Seu código de acesso: *{{SENHA}}*' || chr(10) || chr(10) ||
+    'O código é pessoal, não compartilhe.', trim(p_codigo));
+  return 'ok';
+end $$;
+
+-- mensagem livre de um cartão (botão 💬 WhatsApp do cartão): sai sozinha para quem você marcar
+create or replace function public.sol_whats_cartao(p_token text, p_cartao bigint, p_numeros text[], p_texto text) returns int
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token); c sol_cartoes; n int;
+begin
+  if q->>'tipo' <> 'interno' or not (q->>'edita')::boolean then raise exception 'Sem permissão.'; end if;
+  select * into c from sol_cartoes where id = p_cartao;
+  if c.id is null then raise exception 'Cartão não encontrado.'; end if;
+  if coalesce(trim(p_texto), '') = '' then raise exception 'Escreva a mensagem.'; end if;
+  n := public._sol_whats_fila(c.id, p_numeros, left(trim(p_texto), 3000));
+  if n = 0 then raise exception 'Escolha pelo menos um celular.'; end if;
+  insert into sol_historico (cartao_id, quem, tipo, texto) values (c.id, q->>'nome', 'aviso', 'Mandou no WhatsApp para ' || n || ' pessoa(s)');
+  return n;
+end $$;
+
+-- seu celular (recebe as atualizações de todos os cartões)
+create or replace function public.sol_whats_dono_salvar(p_token text, p_numero text) returns text
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token, true); c text := public._sol_cel(p_numero);
+begin
+  if coalesce(trim(p_numero), '') <> '' and c is null then raise exception 'Celular com DDD, ex.: 91 98888-7777.'; end if;
+  update sol_config set whatsapp_dono = c where id = 1;
+  return coalesce(c, '');
+end $$;
+
+create or replace function public.sol_config_ver(p_token text) returns json
+language plpgsql security definer set search_path = public as $$
+declare q jsonb := public._sol_exige(p_token, true);
+begin
+  return (select json_build_object('chave_robo', chave_robo, 'dias_sem_resposta', dias_sem_resposta,
+    'link_quadro', link_quadro, 'whatsapp_dono', whatsapp_dono,
+    'whats_fila', (select count(*) from sol_whats where enviado_em is null and tentativas < 3 and criado_em > now() - interval '24 hours'),
+    'whats_ultimo', (select max(enviado_em) from sol_whats)) from sol_config where id = 1);
+end $$;
+
+-- o fluxo do n8n (chave secreta do Supabase) pega a fila e marca o que mandou
+create or replace function public.sol_whats_pendentes(p_limite integer default 5) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  return jsonb_build_object('avisos', coalesce((select jsonb_agg(jsonb_build_object('id', w.id, 'numero', '55' || w.numero,
+      'texto', replace(w.texto, '{{SENHA}}', coalesce(w.segredo, ''))) order by w.id)
+    from (select * from sol_whats where enviado_em is null and tentativas < 3 and criado_em > now() - interval '24 hours'
+          order by id limit greatest(1, least(coalesce(p_limite, 5), 20))) w), '[]'::jsonb));
+end $$;
+create or replace function public.sol_whats_marcar(p_id bigint, p_ok boolean, p_erro text default null) returns text
+language sql security definer set search_path = public as $$
+  update sol_whats set enviado_em = case when p_ok then now() end, tentativas = tentativas + 1,
+    erro = case when p_ok then null else left(p_erro, 500) end,
+    segredo = case when p_ok or tentativas + 1 >= 3 then null else segredo end where id = p_id;
+  select 'ok';
+$$;
+revoke all on function public.sol_whats_pendentes(integer), public.sol_whats_marcar(bigint, boolean, text) from public, anon, authenticated;
+grant execute on function public.sol_whats_pendentes(integer), public.sol_whats_marcar(bigint, boolean, text) to service_role;
+grant execute on function public.sol_convite_whats(text, bigint, text), public.sol_whats_cartao(text, bigint, text[], text),
+  public.sol_whats_dono_salvar(text, text) to anon, authenticated;
 
 select 'Quadro de solicitações pronto' as resultado, (select count(*) from public.sol_cartoes) as cartoes;
