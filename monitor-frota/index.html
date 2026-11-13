@@ -261,7 +261,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6p
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Monitor Frota <span class="buildtag">painel v0.6.8</span></h1>
+      <h1>Monitor Frota <span class="buildtag">painel v0.6.9</span></h1>
       <div class="meta" id="meta">Carregando…</div>
     </div>
     <div class="actions">
@@ -598,6 +598,28 @@ async function loadRoutePoints(id, start, end) {
   return pts;
 }
 
+// Remove "pulos" de GPS/rede celular: um ponto que fica a mais de 300 m dos vizinhos,
+// quando os vizinhos estão a menos de 300 m um do outro, e a velocidade implícita passa de 120 km/h.
+// Mesmo filtro usado no BI (gestao-integrada). Não altera os dados no banco.
+function limparPulos(pts) {
+  const out = [];
+  let last = null;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], nxt = pts[i + 1];
+    if (last && nxt) {
+      const dPrev = haversine(last, p), dNext = haversine(p, nxt), dNeigh = haversine(last, nxt);
+      const tPrev = (new Date(p.ts) - new Date(last.ts)) / 1000;
+      const tNext = (new Date(nxt.ts) - new Date(p.ts)) / 1000;
+      const vPrev = tPrev > 0 ? dPrev / tPrev * 3.6 : Infinity;
+      const vNext = tNext > 0 ? dNext / tNext * 3.6 : Infinity;
+      if (dPrev > 300 && dNext > 300 && dNeigh <= 300 && (vPrev > 120 || vNext > 120)) continue;
+    }
+    out.push(p);
+    last = p;
+  }
+  return out;
+}
+
 function groupRoutes(points) {
   const by = new Map();
   for (const p of points) {
@@ -605,7 +627,8 @@ function groupRoutes(points) {
     by.get(p.route_id).push(p);
   }
   const out = [];
-  for (const [rid, pts] of by) {
+  for (const [rid, pts0] of by) {
+    const pts = limparPulos(pts0);
     let dist = 0;
     for (let i = 1; i < pts.length; i++) dist += haversine(pts[i - 1], pts[i]);
     out.push({ id: rid, points: pts, start: pts[0].ts, end: pts[pts.length - 1].ts, distKm: dist / 1000 });
