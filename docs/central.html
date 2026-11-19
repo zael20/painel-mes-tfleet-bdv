@@ -174,30 +174,6 @@ table.log td{vertical-align:top}
     <div class="who" id="who"></div>
   </header>
 
-  <h2 class="sec" id="secVisao">Visão geral do dia</h2>
-  <div class="tiles" id="tiles">
-    <div class="tile clk" id="tileOcor" role="button" tabindex="0"><div class="n" id="tOcor">—</div><div class="l">Ocorrências abertas</div><div class="foot" id="tOcorFoot">&nbsp;</div><div class="drill">ver lista →</div></div>
-    <div class="tile clk" id="tileVist" role="button" tabindex="0"><div class="n" id="tVist">—</div><div class="l">Vistorias hoje</div><div class="foot" id="tVistFoot">&nbsp;</div><div class="drill">ver lista →</div></div>
-    <div class="tile clk" id="tileNok" role="button" tabindex="0"><div class="n" id="tNok">—</div><div class="l">Vistorias com NOK hoje</div><div class="foot">itens reprovados</div><div class="drill">ver lista →</div></div>
-    <div class="tile clk" id="tileAtivos" role="button" tabindex="0"><div class="n" id="tAtivos">—</div><div class="l">Aparelhos ativos hoje</div><div class="foot">enviaram dados</div><div class="drill">ver lista →</div></div>
-  </div>
-
-  <h2 class="sec" id="secAtencao">Precisam de atenção <span style="font-weight:400;text-transform:none;letter-spacing:0">— ocorrências abertas cruzadas pela TAG</span></h2>
-  <div class="panel" id="panelOcor">
-    <div class="ph">
-      <h3>Ocorrências abertas</h3>
-      <span class="hint">atualiza a cada 60s · <button class="linkish" id="reload">recarregar</button></span>
-    </div>
-    <div class="tbl-scroll">
-      <table id="ocorTbl">
-        <thead><tr>
-          <th>Carro</th><th>Problema</th><th>Prioridade</th><th>Última vistoria</th><th>Aberta há</th>
-        </tr></thead>
-        <tbody><tr><td colspan="5"><div class="loading" id="ocorLoad">Carregando…</div></td></tr></tbody>
-      </table>
-    </div>
-  </div>
-
   <h2 class="sec">Painéis</h2>
   <div class="cards" id="cards">
     <a class="card" href="https://gestao-integrada.github.io/hoje/" data-p="solicitacoes">
@@ -285,6 +261,31 @@ table.log td{vertical-align:top}
       <div class="go">Abrir →</div>
     </a>
   </div>
+
+  <h2 class="sec" id="secVisao">Visão geral do dia</h2>
+  <div class="tiles" id="tiles">
+    <div class="tile clk" id="tileOcor" role="button" tabindex="0"><div class="n" id="tOcor">—</div><div class="l">Ocorrências abertas</div><div class="foot" id="tOcorFoot">&nbsp;</div><div class="drill">ver lista →</div></div>
+    <div class="tile clk" id="tileVist" role="button" tabindex="0"><div class="n" id="tVist">—</div><div class="l">Vistorias hoje</div><div class="foot" id="tVistFoot">&nbsp;</div><div class="drill">ver lista →</div></div>
+    <div class="tile clk" id="tileNok" role="button" tabindex="0"><div class="n" id="tNok">—</div><div class="l">Vistorias com NOK hoje</div><div class="foot">itens reprovados</div><div class="drill">ver lista →</div></div>
+    <div class="tile clk" id="tileAtivos" role="button" tabindex="0"><div class="n" id="tAtivos">—</div><div class="l">Aparelhos ativos hoje</div><div class="foot">enviaram dados</div><div class="drill">ver lista →</div></div>
+  </div>
+
+  <h2 class="sec" id="secAtencao">Precisam de atenção <span style="font-weight:400;text-transform:none;letter-spacing:0">— ocorrências abertas cruzadas pela TAG</span></h2>
+  <div class="panel" id="panelOcor">
+    <div class="ph">
+      <h3>Ocorrências abertas</h3>
+      <span class="hint">atualiza a cada 60s · <button class="linkish" id="reload">recarregar</button></span>
+    </div>
+    <div class="tbl-scroll">
+      <table id="ocorTbl">
+        <thead><tr>
+          <th>Carro</th><th>Problema</th><th>Prioridade</th><th>Última vistoria</th><th>Aberta há</th>
+        </tr></thead>
+        <tbody><tr><td colspan="5"><div class="loading" id="ocorLoad">Carregando…</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
 
   <footer>
     <div>Central TFleet · dados do Supabase em tempo real</div>
