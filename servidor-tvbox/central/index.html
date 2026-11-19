@@ -16,7 +16,7 @@
       <header class="topo">
         <div>
           <h1>Central da Frota</h1>
-          <p class="sub">Servidor da TV Box: fluxos, WhatsApp, conexões e manutenção.</p>
+          <p class="sub">Servidor da TFleet: fluxos, WhatsApp, conexões e manutenção.</p>
         </div>
         <button class="btn" id="alternar-terminal">Esconder terminal</button>
       </header>
@@ -24,7 +24,7 @@
 
       <div id="aviso-admin" class="alerta" hidden>
         Para os botões funcionarem, clique no cadeado <b>Limited access</b> (Acesso limitado) no canto superior direito e em <b>Turn on administrative access</b>, que ativa o
-        acesso administrativo (pede a sua senha da box). Só precisa fazer isso uma vez por login.
+        acesso administrativo (pede a sua senha do servidor). Só precisa fazer isso uma vez por login.
       </div>
 
       <!-- FLUXOS -->
@@ -48,8 +48,8 @@
         <!-- WHATSAPP -->
         <section class="bloco">
           <h2>WhatsApp</h2>
-          <p class="dica">Número do servidor: <b id="wa-esperado">—</b>. Se aparecer <b>desconectado</b>, abra a tela do QR
-            e leia com o WhatsApp desse número (Aparelhos conectados).</p>
+          <p class="dica">Número conectado: <b id="wa-esperado">nenhum ainda</b>. Para conectar ou trocar, abra a tela do QR
+            e leia com o WhatsApp do número da operação (Aparelhos conectados). O número aparece aqui sozinho.</p>
           <div id="whatsapp" class="lista"><p class="vazio">carregando...</p></div>
           <div class="acoes">
             <a class="btn" id="abrir-evo" target="_blank" rel="noopener">Abrir tela do QR</a>
@@ -77,7 +77,7 @@
           <button class="btn" id="verificar-rede">Verificar de novo</button>
         </div>
         <p class="dica">O servidor usa o <b>cabo</b>. O <b>Tailscale</b> é o que deixa você entrar aqui de qualquer lugar.
-          Wi-Fi e Bluetooth ficam de reserva; em muitas TV Box o Linux não reconhece esses chips.</p>
+          Wi-Fi e Bluetooth não existem numa máquina virtual (é normal aparecerem como não disponíveis).</p>
         <div id="rede" class="checklist"><p class="vazio">carregando...</p></div>
       </section>
 
@@ -89,8 +89,6 @@
           <button class="btn primario" data-cmd="backup">Fazer backup agora</button>
           <button class="btn" id="atualizar-versoes">Atualizar n8n e Evolution</button>
           <button class="btn" data-cmd="atualizar-script">Atualizar esta Central</button>
-          <button class="btn" data-terminal="sudo servidor tela-ligar">Tela de status no HDMI</button>
-          <button class="btn perigo" id="reiniciar-box">Reiniciar a TV Box</button>
         </div>
         <div class="acoes">
           <select id="log-servico" aria-label="Programa">
@@ -121,7 +119,7 @@
 
     <aside class="terminal-lateral">
       <div class="terminal-topo">
-        <span><b>Terminal</b> · comandos da box (digite <code>servidor</code> para ajuda)</span>
+        <span><b>Terminal</b> · comandos do servidor (digite <code>servidor</code> para ajuda)</span>
         <button class="btn mini" id="reabrir-terminal">Reabrir</button>
       </div>
       <div id="terminal"></div>

@@ -79,12 +79,15 @@
       var discoPct = Math.round(100 * s.disco_usado_gb / s.disco_total_gb);
       var chips = [
         ["RAM livre " + s.ram_livre_mb + " de " + s.ram_total_mb + " MB", livrePct < 15 ? "erro" : livrePct < 30 ? "atencao" : "ok"],
-        ["Cartão " + s.disco_usado_gb + " de " + s.disco_total_gb + " GB", discoPct > 90 ? "erro" : discoPct > 75 ? "atencao" : "ok"],
-        ["Temperatura " + s.temp_c + " °C", s.temp_c > 80 ? "erro" : s.temp_c > 70 ? "atencao" : "ok"],
+        ["Disco " + s.disco_usado_gb + " de " + s.disco_total_gb + " GB", discoPct > 90 ? "erro" : discoPct > 75 ? "atencao" : "ok"],
+        ["CPU " + (s.carga_pct == null ? "?" : s.carga_pct + "%") + " (" + (s.cpus || "?") + " núcleos)", s.carga_pct > 90 ? "erro" : s.carga_pct > 70 ? "atencao" : "ok"],
+        ["Ligado há " + (s.ligado || "?"), ""],
+        s.temp_c == null ? null : ["Temperatura " + s.temp_c + " °C", s.temp_c > 80 ? "erro" : s.temp_c > 70 ? "atencao" : "ok"],
+        [s.equipamento ? "Equipamento: " + s.equipamento : "Equipamento: ?", ""],
         [s.ultimo_backup ? "Último backup: " + s.ultimo_backup.replace("backup-", "").replace(".tar.gz", "").replace("_", " ") : "Sem backup ainda", s.ultimo_backup ? "" : "atencao"]
       ];
       var r = limpar($("resumo"));
-      chips.forEach(function (c) { r.appendChild(el("span", { classe: "chip " + c[1], texto: c[0] })); });
+      chips.filter(Boolean).forEach(function (c) { r.appendChild(el("span", { classe: "chip " + c[1], texto: c[0] })); });
 
       var nomes = { n8n: "n8n (fluxos)", evolution: "Evolution (WhatsApp)", postgres: "Banco da Evolution", redis: "Cache da Evolution" };
       var box = limpar($("servicos"));
@@ -308,7 +311,8 @@
   /* ---------- whatsapp ---------- */
   function carregarWhatsapp() {
     return json([SERVIDOR, "whatsapp-json"]).then(function (w) {
-      $("wa-esperado").textContent = formatarNumero(w.esperado);
+      var conectados = (w.instancias || []).filter(function (i) { return i.estado === "open" && i.numero; });
+      $("wa-esperado").textContent = conectados.length ? conectados.map(function (i) { return formatarNumero(i.numero); }).join(", ") : "nenhum ainda";
       var box = limpar($("whatsapp"));
       if (!w.ok) { box.appendChild(el("p", { classe: "vazio", texto: "A Evolution não respondeu." })); return; }
       if (!w.instancias.length) {
@@ -317,10 +321,9 @@
       }
       w.instancias.forEach(function (i) {
         var on = i.estado === "open";
-        var outro = on && w.esperado && i.numero && i.numero !== w.esperado;
         box.appendChild(el("div", { classe: "item" }, [
-          el("div", {}, [el("div", { classe: "nome" }, [el("span", { classe: "ponto " + (on ? (outro ? "atencao" : "ok") : "erro") }), i.nome]),
-            el("div", { classe: "info", texto: formatarNumero(i.numero) + (outro ? " · não é o número do servidor" : "") })]),
+          el("div", {}, [el("div", { classe: "nome" }, [el("span", { classe: "ponto " + (on ? "ok" : "erro") }), i.nome]),
+            el("div", { classe: "info", texto: (i.numero ? formatarNumero(i.numero) : "sem número (QR ainda não lido)") })]),
           el("span", { classe: "chip " + (on ? "ok" : "erro"), texto: on ? "conectado" : "desconectado" })
         ]));
       });
@@ -337,7 +340,7 @@
   function carregarRede() {
     return json([SERVIDOR, "rede-json"]).then(function (r) {
       var box = limpar($("rede"));
-      box.appendChild(cartao(r.cabo.ok, "Cabo de rede", r.cabo.ok ? "Ligado · " + r.cabo.ip : "Desconectado: confira o cabo na box e no roteador"));
+      box.appendChild(cartao(r.cabo.ok, "Cabo de rede", r.cabo.ok ? "Ligado · " + r.cabo.ip : "Desconectado: confira a rede do servidor"));
       box.appendChild(cartao(r.internet.ok, "Internet", r.internet.ok ? "Funcionando" : "Sem internet: os fluxos não conseguem falar com a TFleet e o Supabase"));
       box.appendChild(cartao(r.tailscale.ok, "Tailscale (acesso de fora)",
         r.tailscale.ok ? "Ligado · " + r.tailscale.ip : "Desligado: de fora de casa você não entra aqui",
@@ -348,13 +351,13 @@
           el("button", { classe: "btn mini", texto: r.wifi.ligado ? "Desligar" : "Ligar", onclick: function (ev) {
             rodarComBotao(ev.target, ["nmcli", "radio", "wifi", r.wifi.ligado ? "off" : "on"], "Wi-Fi").then(carregarRede);
           } })])
-        : cartao(null, "Wi-Fi (reserva)", "Não disponível nesta box"));
+        : cartao(null, "Wi-Fi (reserva)", "Não disponível (máquina virtual)"));
       box.appendChild(r.bluetooth.existe
         ? cartao(r.bluetooth.ligado ? true : null, "Bluetooth", r.bluetooth.ligado ? "Ligado" : "Desligado", [
           el("button", { classe: "btn mini", texto: r.bluetooth.ligado ? "Desligar" : "Ligar", onclick: function (ev) {
             rodarComBotao(ev.target, ["bluetoothctl", "power", r.bluetooth.ligado ? "off" : "on"], "Bluetooth").then(carregarRede);
           } })])
-        : cartao(null, "Bluetooth", "Não disponível nesta box"));
+        : cartao(null, "Bluetooth", "Não disponível (máquina virtual)"));
     }).catch(function () {
       limpar($("rede")).appendChild(el("p", { classe: "vazio", texto: "Não consegui verificar as conexões." }));
     });
@@ -551,9 +554,6 @@
       if (n8n.trim()) args.push("n8n=" + n8n.trim());
       if (evo.trim()) args.push("evolution=" + evo.trim());
       rodarComBotao(ev.target, args, "Atualizar n8n e Evolution");
-    });
-    $("reiniciar-box").addEventListener("click", function () {
-      if (confirm("Reiniciar a TV Box? Tudo fica fora do ar por uns 2 minutos e volta sozinho.")) rodar(["systemctl", "reboot"]);
     });
     document.querySelectorAll("[data-cmd]").forEach(function (b) {
       b.addEventListener("click", function () {

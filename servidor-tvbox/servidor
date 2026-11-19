@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Comando de ajuda do servidor da TV Box. Digite "servidor" no terminal (do Cockpit ou SSH).
+# Comando de ajuda do servidor (versao TFleet). Digite "servidor" no terminal (do Cockpit ou SSH).
 set -uo pipefail
 
 DIR=/opt/servidor
-RAW="${RAW:-https://raw.githubusercontent.com/zael20/painel-mes-tfleet-bdv/main/servidor-tvbox}"
+RAW="${RAW:-https://raw.githubusercontent.com/zael20/painel-mes-tfleet-bdv/servidor-tfleet/servidor-tvbox}"
 DC="docker compose -f $DIR/docker-compose.yml --project-directory $DIR"
 
 ok()   { echo -e "\e[32m[OK]\e[0m $*"; }
@@ -13,7 +13,7 @@ root() { [ "$(id -u)" -eq 0 ] || { echo "Use com sudo:  sudo servidor $*"; exit 
 # onibus TFLEET + resumo em todo terminal que abrir (Central, Alt+F2, SSH); cache atualizado a cada 5 min
 instalar_boas_vindas() {
   cat > /etc/profile.d/zz-servidor-boas-vindas.sh <<'SH'
-# boas-vindas do servidor da TV Box (servidor boas-vindas). Para tirar: apague este arquivo.
+# boas-vindas do servidor (servidor boas-vindas). Para tirar: apague este arquivo.
 case $- in *i*) [ -t 1 ] && [ -x /usr/local/bin/servidor ] && /usr/local/bin/servidor boas-vindas 2>/dev/null ;; esac
 SH
   echo '*/5 * * * * root /usr/local/bin/servidor estado-cache >/dev/null 2>&1' > /etc/cron.d/servidor-estado
@@ -46,8 +46,8 @@ case "${1:-}" in
   status)
     $DC ps --format 'table {{.Service}}\t{{.Status}}'
     echo; free -h | head -2
-    echo; df -h / | tail -1 | awk '{print "Cartao SD: "$3" usados de "$2" ("$5")"}'
-    t=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0); echo "Temperatura: $((t/1000)) C"
+    echo; df -h / | tail -1 | awk '{print "Disco: "$3" usados de "$2" ("$5")"}'
+    t=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null) && echo "Temperatura: $((t/1000)) C" || echo "Temperatura: sem sensor (maquina virtual)"
     echo "Tailscale: $(tailscale ip -4 2>/dev/null | head -1 || echo 'desligado')"
     echo "Ultimo backup: $(ls -1t $DIR/backups/*.tar.gz 2>/dev/null | head -1 || echo 'nenhum ainda')"
     ;;
@@ -112,18 +112,33 @@ case "${1:-}" in
     export SV_PS=$($DC ps -a --format '{{.Service}}|{{.State}}|{{.Status}}' 2>/dev/null)
     export SV_TS=$(tailscale ip -4 2>/dev/null | head -1)
     export SV_BK=$(ls -1t $DIR/backups/*.tar.gz 2>/dev/null | head -1)
-    export SV_TEMP=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0)
+    export SV_TEMP=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
+    export SV_VIRT=$(systemd-detect-virt 2>/dev/null)
+    export SV_HW="$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null) $(cat /sys/class/dmi/id/product_name 2>/dev/null)"
     export SV_LAN=$(hostname -I | awk '{print $1}')
     python3 - <<'PY'
 import json, os, shutil
 mem = {l.split(':')[0]: int(l.split()[1]) for l in open('/proc/meminfo')}
 du = shutil.disk_usage('/')
 svc = [dict(zip(['nome', 'estado', 'detalhe'], l.split('|'))) for l in os.environ['SV_PS'].splitlines() if l]
+def equip():
+    v = os.environ.get('SV_VIRT', '').strip()
+    hw = ' '.join(os.environ.get('SV_HW', '').split())
+    if v and v != 'none':
+        return 'máquina virtual ' + {'kvm': 'KVM', 'qemu': 'QEMU', 'vmware': 'VMware', 'microsoft': 'Hyper-V', 'oracle': 'VirtualBox', 'xen': 'Xen'}.get(v, v)
+    try: return open('/proc/device-tree/model').read().strip('\x00 ') or hw
+    except OSError: return hw or 'físico'
+def ligado():
+    up = int(float(open('/proc/uptime').read().split()[0])); d, r = divmod(up, 86400)
+    return (f'{d} d ' if d else '') + f'{r // 3600} h {r % 3600 // 60} min'
 print(json.dumps({
   'servicos': svc,
   'ram_total_mb': mem['MemTotal'] // 1024, 'ram_livre_mb': mem['MemAvailable'] // 1024,
   'disco_total_gb': round(du.total / 1e9, 1), 'disco_usado_gb': round(du.used / 1e9, 1),
-  'temp_c': int(os.environ['SV_TEMP'] or 0) // 1000,
+  'temp_c': int(os.environ['SV_TEMP']) // 1000 if os.environ.get('SV_TEMP', '').strip().isdigit() else None,
+  'equipamento': equip(), 'cpus': os.cpu_count(),
+  'carga_pct': round(100 * os.getloadavg()[0] / (os.cpu_count() or 1)),
+  'ligado': ligado(),
   'ip_casa': os.environ['SV_LAN'], 'ip_tailscale': os.environ['SV_TS'],
   'ultimo_backup': os.path.basename(os.environ['SV_BK']) if os.environ['SV_BK'] else ''}))
 PY
@@ -351,20 +366,20 @@ mem = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo")}
 livre, total = mem.get("MemAvailable", 0) // 1024, mem.get("MemTotal", 0) // 1024
 du = shutil.disk_usage("/")
 try: temp = int(open("/sys/class/thermal/thermal_zone0/temp").read()) // 1000
-except (OSError, ValueError): temp = 0
+except (OSError, ValueError): temp = None
 up = int(float(open("/proc/uptime").read().split()[0]))
 dias, resto = divmod(up, 86400)
 ligado = (f"{dias} d " if dias else "") + f"{resto // 3600} h {resto % 3600 // 60} min"
 sq = lambda bom: (V if bom else R) + "■" + N
 rotulo = lambda t: C + B + f"{t:<10}" + N
 info = [f"{V}{B}{getpass.getuser()}{N}@{V}{B}{socket.gethostname()}{N}", CI + "─" * 34 + N,
-        f"{B}Bem-vindo, Mizael!{N}",
+        f"{B}Bem-vindo!{N}",
         rotulo("Data") + time.strftime("%d/%m/%Y %H:%M"),
         rotulo("Ligado há") + ligado]
 if e:
     ts = bool(st.get("ip_tailscale"))
     info.append(rotulo("Rede") + f"{sq(e.get('cabo'))} cabo  {sq(e.get('net'))} internet  {sq(ts)} tailscale")
-    info.append(rotulo("Casa") + f"https://{st.get('ip_casa', '?')}:9090")
+    info.append(rotulo("Rede local") + f"https://{st.get('ip_casa', '?')}:9090")
     info.append(rotulo("Fora") + (f"https://{st['ip_tailscale']}:9090" if ts else R + "Tailscale desligado" + N))
     try: info.append(rotulo("Internet") + open("/opt/servidor/acesso-publico.txt").read().strip())
     except OSError: pass
@@ -375,14 +390,15 @@ if e:
     info.append(rotulo("Fluxos") + f"{sq(fl and lig == len(fl))} {lig} ligado(s)" + (f", {R}{len(fl) - lig} desligado(s){N}" if lig < len(fl) else ""))
     inst = wa.get("instancias") or []
     aberto = any(i.get("estado") == "open" for i in inst)
-    info.append(rotulo("WhatsApp") + f"{sq(aberto)} " + (f"conectado (+{wa.get('esperado', '')})" if aberto else "DESCONECTADO"))
+    info.append(rotulo("WhatsApp") + f"{sq(aberto)} " + (("conectado (" + ", ".join("+" + i["numero"] for i in inst if i.get("estado") == "open" and i.get("numero")) + ")") if aberto else (A + "nenhum número conectado ainda" + N if not inst else "DESCONECTADO")))
 else:
     info.append(rotulo("Status") + A + "sem dados ainda (rode: sudo servidor tela)" + N)
 cor_m = R if livre < 200 else A if livre < 400 else V
-cor_t = R if temp >= 75 else A if temp >= 65 else V
+cor_t = V if temp is None else R if temp >= 75 else A if temp >= 65 else V
 info.append(rotulo("Memória") + f"{cor_m}{livre} MB{N} livres de {total} MB")
-info.append(rotulo("Cartão") + f"{du.used / 1e9:.1f} de {du.total / 1e9:.1f} GB usados")
-info.append(rotulo("Temp") + f"{cor_t}{temp} °C{N}")
+info.append(rotulo("Disco") + f"{du.used / 1e9:.1f} de {du.total / 1e9:.1f} GB usados")
+if temp is not None: info.append(rotulo("Temp") + f"{cor_t}{temp} °C{N}")
+info.append(rotulo("CPU") + f"{os.cpu_count()} núcleos, carga {round(100 * os.getloadavg()[0] / (os.cpu_count() or 1))}%")
 if e:
     bk = os.path.basename(st.get("ultimo_backup") or "").replace(".tar.gz", "")
     info.append(rotulo("Backup") + (bk or A + "nenhum ainda" + N))
