@@ -1655,15 +1655,17 @@ select public.resolver_contagem_pela_api() as fechadas_agora_pela_api;
 
 
 -- ================================================================ CARGA LENTA COM O CARRO ANDANDO -> OCORRENCIA AUTOMATICA (11/11)
--- O Monitor Frota guarda 1 amostra por minuto (samples: plugged, current_ma, speed_kmh). Num dia em que o carro ficou
--- 10+ minutos ANDANDO na tomada e 60%+ desse tempo carregou abaixo de 300 mA, o carregador DO CARRO esta fraco
+-- O Monitor Frota guarda amostras (samples: plugged, current_ma, speed_kmh). Num dia em que o carro ficou
+-- 30+ minutos ANDANDO na tomada e 60%+ desse tempo carregou abaixo de 300 mA, o carregador DO CARRO esta fraco
 -- (carga lenta parado = carregador da garagem, nao conta). Abre 1 ocorrencia 'carregamento' (origem 'monitor',
 -- responsavel Mizael) se o carro ainda nao tem uma aberta de carregamento, e nao abre de novo para o mesmo dia.
 -- Roda sozinho a cada 30 min (pg_cron). Na mao:  select public.abrir_ocorrencias_carga_lenta();
 alter table public.ocorrencias add column if not exists responsavel text check (length(responsavel) <= 80);
 
+-- 19/11 (regra nova, menos alarme falso): minutos distintos, andando >= 10 km/h, bateria < 95%, bateria nao subiu,
+-- minimo 30 min, e nao reabre se uma automatica do carro foi descartada/resolvida nos ultimos 7 dias.
 create or replace function public.abrir_ocorrencias_carga_lenta(p_dias integer default 2, p_min_ma numeric default 300,
-                                                               p_min_andando integer default 10, p_frac numeric default 0.6)
+                                                               p_min_andando integer default 30, p_frac numeric default 0.6)
 returns integer language plpgsql security definer set search_path = public as $$
 declare r record; n integer := 0; v_id bigint;
 begin
@@ -1673,28 +1675,45 @@ begin
     return 0;
   end if;
   for r in execute $q$
-    with d as (
-      select s.device_id, (s.ts at time zone 'America/Belem')::date as dia,
-             count(*) filter (where s.speed_kmh > 0) as andando,
-             count(*) filter (where s.speed_kmh > 0 and s.current_ma is not null and s.current_ma < $2) as fraca,
-             min(s.ts) filter (where s.speed_kmh > 0 and s.current_ma is not null and s.current_ma < $2) as desde
+    with p as (
+      select s.device_id, s.ts, s.battery_pct, s.current_ma,
+             (s.ts at time zone 'America/Belem')::date as dia,
+             date_trunc('minute', s.ts) as minuto
         from public.samples s
        where s.plugged and s.ts > now() - make_interval(days => greatest($1, 1))
+         and s.speed_kmh >= 10
+         and coalesce(s.battery_pct, 0) < 95),
+    d as (
+      select p.device_id, p.dia,
+             count(distinct p.minuto) as andando,
+             count(distinct p.minuto) filter (where p.current_ma is not null and p.current_ma < $2) as fraca,
+             min(p.ts) filter (where p.current_ma is not null and p.current_ma < $2) as desde,
+             (array_agg(p.battery_pct order by p.ts) filter (where p.battery_pct is not null))[1] as bat_ini,
+             (array_agg(p.battery_pct order by p.ts desc) filter (where p.battery_pct is not null))[1] as bat_fim
+        from p
        group by 1, 2)
     select public.normaliza_tag(l.device_name) as tag, d.dia, d.andando, d.fraca, d.desde
       from d join public.v_last_sample l on l.device_id = d.device_id
-     where d.andando >= $3 and d.fraca >= d.andando * $4 and public.normaliza_tag(l.device_name) is not null
+     where d.andando >= $3 and d.fraca >= d.andando * $4
+       and coalesce(d.bat_fim - d.bat_ini, 0) <= 0
+       and public.normaliza_tag(l.device_name) is not null
      order by d.dia $q$ using p_dias, p_min_ma, p_min_andando, p_frac
   loop
-    -- ja tem carregamento aberto nesse carro, ou ja abriu pelo monitor nesse dia (ou depois): nao duplica
+    -- ja tem carregamento aberto nesse carro: nao duplica
     continue when exists (select 1 from ocorrencias o where o.tag = r.tag and o.categoria = 'carregamento'
                             and o.status in ('aberta','em_andamento','aguardando_teste'));
+    -- ja abriu pelo monitor nesse dia (ou depois)
     continue when exists (select 1 from ocorrencias o where o.tag = r.tag and o.origem = 'monitor' and o.categoria = 'carregamento'
                             and (coalesce(o.primeira_msg_em, o.criado_em) at time zone 'America/Belem')::date >= r.dia);
+    -- voce descartou ou resolveu uma automatica desse carro nos ultimos 7 dias: respeita
+    continue when exists (select 1 from ocorrencias o where o.tag = r.tag and o.origem = 'monitor' and o.categoria = 'carregamento'
+                            and o.status in ('descartada','resolvida')
+                            and coalesce(o.resolvido_em, o.atualizado_em) > now() - interval '7 days');
     insert into ocorrencias (tag, categoria, problema, urgencia, origem, relatado_por, responsavel, primeira_msg_em, ultima_msg_em, confianca)
     values (r.tag, 'carregamento',
             left('Ocorrência gerada automaticamente para verificar o carregador do carro: carga lenta com o carro andando em ' ||
-                 to_char(r.dia, 'DD/MM') || ' (' || r.fraca || ' de ' || r.andando || ' min abaixo de ' || p_min_ma::int || ' mA)', 300),
+                 to_char(r.dia, 'DD/MM') || ' (' || r.fraca || ' de ' || r.andando || ' min abaixo de ' || p_min_ma::int ||
+                 ' mA, e a bateria não subiu)', 300),
             'media', 'monitor', 'Monitor Frota', 'Mizael', r.desde, r.desde, 1)
     returning id into v_id;
     n := n + 1;
